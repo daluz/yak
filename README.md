@@ -95,7 +95,8 @@ $ yak template app.yak -o rendered.json     # the extension chooses JSON
   `...name` the grandparent's, `$.name` the document root's, and `$$.name` the
   context's.
 - **Hidden fields.** Write `::` instead of `:` to keep a value available to
-  references but out of the output.
+  references but out of the output, or `::?` to drop an entry only when its
+  value is null.
 - **Local bindings.** `local name = "web"`, or a `local { ... }` block of
   them. They are named, scoped, and produce no output.
 - **Optional access and defaults.** `?.` and `?[` give `null` where a field or

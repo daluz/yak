@@ -18,8 +18,11 @@ func dump(n ast.Node) string {
 		parts = append(parts, dumpBinds(t.Binds)...)
 		for _, e := range t.Entries {
 			sep := ":"
-			if e.Hidden {
+			switch {
+			case e.Hidden:
 				sep = "::"
+			case e.HideNull:
+				sep = "::?"
 			}
 			key := dump(e.Key)
 			if e.Computed {
@@ -116,6 +119,7 @@ func TestParseBlockStructures(t *testing.T) {
 		{"booleans", "a: true\nb: false\n", `{"a":true "b":false}`},
 		{"floats", "a: 1.5\n", `{"a":1.5}`},
 		{"hidden field", "a:: 1\n", `{"a"::1}`},
+		{"hidden if null field", "a::? 1\n", `{"a"::?1}`},
 		{"quoted key", `"a b": 1`, `{"a b":1}`},
 		{"kebab key", "a-b: 1\n", `{"a-b":1}`},
 		{"computed key", "[$$.k]: 1\n", `{[context.k]:1}`},
@@ -128,6 +132,7 @@ func TestParseBlockStructures(t *testing.T) {
 		{"flow mapping", "a: {b: 1, c: 2}\n", `{"a":{"b":1 "c":2}}`},
 		{"flow trailing comma", "a: [1, 2,]\n", `{"a":[1 2]}`},
 		{"flow hidden field", "a: {b:: 1}\n", `{"a":{"b"::1}}`},
+		{"flow hidden if null field", "a: {b::? 1}\n", `{"a":{"b"::?1}}`},
 		{"scalar document", `"hello"`, `"hello"`},
 		{"comment only lines", "# c\na: 1 # d\n", `{"a":1}`},
 	}

@@ -160,7 +160,7 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 
 	slots := make([]*Field, len(node.Entries))
 	for i, e := range node.Entries {
-		slots[i] = obj.reserve(comments(e.Comments), e.Hidden,
+		slots[i] = obj.reserve(comments(e.Comments), e.Hidden, e.HideNull,
 			&Thunk{node: e.Value, env: child, pos: e.Value.Pos()})
 	}
 	for i, e := range node.Entries {

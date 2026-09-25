@@ -124,6 +124,26 @@ services:
     image: alpine:3.20
 ```
 
+### Optional fields
+
+Writing `::?` hides an entry only when its value turns out to be `null`, which
+is how an entry that comes from the context is left out when the context says
+nothing about it:
+
+```yaml
+replicas::? $$?.replicas
+selector::? $$?.selector
+```
+
+With a context of `{replicas: 3}` that renders as:
+
+```yaml
+replicas: 3
+```
+
+Only `null` hides the entry; `false`, `0`, `""`, `[]` and `{}` are values like
+any other. An entry that is left out takes its comments with it.
+
 ## References
 
 | Syntax | Meaning |
@@ -381,7 +401,7 @@ TOML is the one format that cannot hold everything yak can say:
 
 - A document must be a mapping, and there can only be one of them.
 - There is no null. A null value is an error naming the key it was found
-  at; `??` is how to supply something else.
+  at; `??` supplies something else, and `::?` drops the key instead.
 - Sub-tables have to follow the plain keys of the table they belong to, so
   keys come out grouped by whether they open a table. Within each group the
   source order holds.
@@ -392,14 +412,15 @@ TOML is the one format that cannot hold everything yak can say:
 stream      := document ("---" document)* "..."?
 document    := node
 node        := local* (blockMapping | blockSequence | value)
-blockMapping:= (local | key (":" | "::") value)+  -- aligned on one column
+blockMapping:= (local | key sep value)+           -- aligned on one column
 blockSequence := ("-" node)+                      -- aligned on one column
+sep         := ":" | "::" | "::?"
 local       := "local" binding | "local" "{" binding+ "}"
 binding     := identifier "=" value
 value       := operand ("??" operand)*
 operand     := literal | reference | flowSeq | flowMap | "(" value ")"
 flowSeq     := "[" (value ("," value)*)? ","? "]"
-flowMap     := "{" (key (":"|"::") value ("," ...)*)? "}"
+flowMap     := "{" (key sep value ("," ...)*)? "}"
 key         := identifier | string | "[" value "]"
 literal     := string | int | float | "true" | "false" | "null"
 reference   := (dots | "$" | "$context" | "$$" | identifier) postfix*

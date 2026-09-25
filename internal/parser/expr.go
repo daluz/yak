@@ -247,13 +247,15 @@ func (p *parser) parseFlowMapping() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		var hidden bool
+		var hidden, hideNull bool
 		switch p.cur().Kind {
 		case token.Colon:
 		case token.DoubleColon:
 			hidden = true
+		case token.DoubleColonQuestion:
+			hideNull = true
 		default:
-			return nil, p.errorf(p.cur().Pos, "expected %q or %q after mapping key, found %s", ":", "::", p.cur())
+			return nil, p.errorf(p.cur().Pos, "expected %q, %q or %q after mapping key, found %s", ":", "::", "::?", p.cur())
 		}
 		p.next()
 		value, err := p.parseExpr()
@@ -261,7 +263,7 @@ func (p *parser) parseFlowMapping() (ast.Node, error) {
 			return nil, err
 		}
 		m.Entries = append(m.Entries, &ast.Entry{
-			Key: key, Computed: computed, Hidden: hidden, Value: value, KeyPos: keyPos,
+			Key: key, Computed: computed, Hidden: hidden, HideNull: hideNull, Value: value, KeyPos: keyPos,
 		})
 		if p.at(token.Comma) {
 			p.next()

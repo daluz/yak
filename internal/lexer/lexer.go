@@ -245,6 +245,13 @@ func (l *lexer) scanToken() error {
 		l.advance()
 		if l.peek() == ':' {
 			l.advance()
+			// No value starts with "?", so a "?" here can only be the
+			// tail of the "::?" separator.
+			if l.peek() == '?' {
+				l.advance()
+				l.emit(token.Token{Kind: token.DoubleColonQuestion, Lit: "::?", Pos: start})
+				return nil
+			}
 			l.emit(token.Token{Kind: token.DoubleColon, Lit: "::", Pos: start})
 			return nil
 		}

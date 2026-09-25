@@ -253,13 +253,15 @@ func (p *parser) parseMappingEntry(col int) (*ast.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	var hidden bool
+	var hidden, hideNull bool
 	switch p.cur().Kind {
 	case token.Colon:
 	case token.DoubleColon:
 		hidden = true
+	case token.DoubleColonQuestion:
+		hideNull = true
 	default:
-		return nil, p.errorf(p.cur().Pos, "expected %q or %q after mapping key, found %s", ":", "::", p.cur())
+		return nil, p.errorf(p.cur().Pos, "expected %q, %q or %q after mapping key, found %s", ":", "::", "::?", p.cur())
 	}
 	colon := p.next()
 	value, err := p.parseEntryValue(col, colon)
@@ -271,6 +273,7 @@ func (p *parser) parseMappingEntry(col int) (*ast.Entry, error) {
 		Key:      key,
 		Computed: computed,
 		Hidden:   hidden,
+		HideNull: hideNull,
 		Value:    value,
 		KeyPos:   keyPos,
 	}, nil
@@ -327,7 +330,7 @@ func (p *parser) parseLocalBinding(col int) ([]*ast.Binding, error) {
 	kw := p.next()
 	// A colon here means the line was meant to be an entry keyed "local".
 	switch p.cur().Kind {
-	case token.Colon, token.DoubleColon:
+	case token.Colon, token.DoubleColon, token.DoubleColonQuestion:
 		return nil, p.errorf(kw.Pos, "%q is a reserved word and must be quoted to be used as a key", kw.Lit)
 	}
 	if p.at(token.LBrace) {
@@ -459,7 +462,7 @@ func (p *parser) looksLikeEntry() bool {
 		return false
 	}
 	k := p.toks[j].Kind
-	return k == token.Colon || k == token.DoubleColon
+	return k == token.Colon || k == token.DoubleColon || k == token.DoubleColonQuestion
 }
 
 // keyEnd returns the index just past a key-shaped run of tokens starting at i,

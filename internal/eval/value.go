@@ -57,7 +57,28 @@ type Field struct {
 	// Hidden fields are written with "::". References can read them but the
 	// renderer leaves them out of the output.
 	Hidden bool
-	Value  *Thunk
+	// HideNull fields are written with "::?", which leaves the field out of
+	// the output only when its value is null.
+	HideNull bool
+	Value    *Thunk
+}
+
+// Omitted reports whether the renderer leaves the field out of its output.
+// Deciding that for a "::?" field means resolving its value, which is why
+// this can fail.
+func (f *Field) Omitted() (bool, error) {
+	if f.Hidden {
+		return true, nil
+	}
+	if !f.HideNull {
+		return false, nil
+	}
+	v, err := f.Value.Value()
+	if err != nil {
+		return false, err
+	}
+	_, null := v.(Null)
+	return null, nil
 }
 
 // Object is an ordered mapping.
@@ -112,8 +133,8 @@ func (o *Object) Set(name string, hidden bool, v *Thunk) {
 
 // reserve appends an unnamed slot, preserving source order while the key is
 // still being evaluated.
-func (o *Object) reserve(c Comments, hidden bool, v *Thunk) *Field {
-	f := &Field{Comments: c, Hidden: hidden, Value: v}
+func (o *Object) reserve(c Comments, hidden, hideNull bool, v *Thunk) *Field {
+	f := &Field{Comments: c, Hidden: hidden, HideNull: hideNull, Value: v}
 	o.fields = append(o.fields, f)
 	return f
 }

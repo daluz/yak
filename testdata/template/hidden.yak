@@ -9,6 +9,12 @@ services:
     port: $.defaults.port
     internal-id:: "web-1"
     label: "service ${.internal-id}"
+    # "::?" keeps the entry unless its value turns out null.
+    replicas::? $$?.replicas
+    # This one goes, and takes its comment with it.
+    node-selector::? $$?.node-selector
+    limits: {cpu::? $$?.cpu, memory: "512Mi"}
   worker:
     image: "${$.defaults.image}:${$.defaults.tag}"
     port: $.defaults.port
+    replicas::? $$?.replicas

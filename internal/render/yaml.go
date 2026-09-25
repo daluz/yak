@@ -63,7 +63,11 @@ func toNode(v eval.Value) (*yaml.Node, error) {
 	case *eval.Object:
 		node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 		for _, f := range t.Fields() {
-			if f.Hidden {
+			omitted, err := f.Omitted()
+			if err != nil {
+				return nil, err
+			}
+			if omitted {
 				continue
 			}
 			inner, err := f.Value.Value()

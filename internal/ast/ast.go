@@ -84,8 +84,11 @@ type Entry struct {
 	// Hidden records that the entry was written with "::" and must be omitted
 	// from rendered output while remaining visible to references.
 	Hidden bool
-	Value  Node
-	KeyPos token.Pos
+	// HideNull records that the entry was written with "::?", which omits it
+	// from rendered output only when its value turns out to be null.
+	HideNull bool
+	Value    Node
+	KeyPos   token.Pos
 }
 
 // Sequence is an ordered list of items.

@@ -132,7 +132,11 @@ func (w *bracketWriter) value(v eval.Value, depth int) error {
 func (w *bracketWriter) object(o *eval.Object, depth int) error {
 	fields := make([]*eval.Field, 0, o.Len())
 	for _, f := range o.Fields() {
-		if !f.Hidden {
+		omitted, err := f.Omitted()
+		if err != nil {
+			return err
+		}
+		if !omitted {
 			fields = append(fields, f)
 		}
 	}

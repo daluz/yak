@@ -150,7 +150,11 @@ func (w *tomlWriter) inline(v eval.Value, path string) error {
 		w.buf.WriteByte('{')
 		first := true
 		for _, f := range t.Fields() {
-			if f.Hidden {
+			omitted, err := f.Omitted()
+			if err != nil {
+				return err
+			}
+			if omitted {
 				continue
 			}
 			inner, err := f.Value.Value()
@@ -222,7 +226,11 @@ func (w *tomlWriter) blankLine() {
 // "key = value" and the ones written as a table of their own.
 func partition(o *eval.Object) (keys, tables []tomlEntry, err error) {
 	for _, f := range o.Fields() {
-		if f.Hidden {
+		omitted, err := f.Omitted()
+		if err != nil {
+			return nil, nil, err
+		}
+		if omitted {
 			continue
 		}
 		v, err := f.Value.Value()

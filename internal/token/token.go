@@ -39,6 +39,9 @@ const (
 	String
 	Colon
 	DoubleColon
+	// DoubleColonQuestion is the "::?" of an entry hidden only when its
+	// value is null.
+	DoubleColonQuestion
 	Dash
 	Comma
 	LBracket
@@ -60,30 +63,31 @@ const (
 )
 
 var kindNames = map[Kind]string{
-	EOF:          "end of file",
-	DocStart:     `"---"`,
-	DocEnd:       `"..."`,
-	Ident:        "identifier",
-	DollarIdent:  "special variable",
-	Int:          "integer",
-	Float:        "float",
-	String:       "string",
-	Colon:        `":"`,
-	DoubleColon:  `"::"`,
-	Dash:         `"-"`,
-	Comma:        `","`,
-	LBracket:     `"["`,
-	RBracket:     `"]"`,
-	LBrace:       `"{"`,
-	RBrace:       `"}"`,
-	LParen:       `"("`,
-	RParen:       `")"`,
-	Dots:         `"."`,
-	Dollar:       `"$"`,
-	DoubleDollar: `"$$"`,
-	Assign:       `"="`,
-	Coalesce:     `"??"`,
-	Question:     `"?"`,
+	EOF:                 "end of file",
+	DocStart:            `"---"`,
+	DocEnd:              `"..."`,
+	Ident:               "identifier",
+	DollarIdent:         "special variable",
+	Int:                 "integer",
+	Float:               "float",
+	String:              "string",
+	Colon:               `":"`,
+	DoubleColon:         `"::"`,
+	DoubleColonQuestion: `"::?"`,
+	Dash:                `"-"`,
+	Comma:               `","`,
+	LBracket:            `"["`,
+	RBracket:            `"]"`,
+	LBrace:              `"{"`,
+	RBrace:              `"}"`,
+	LParen:              `"("`,
+	RParen:              `")"`,
+	Dots:                `"."`,
+	Dollar:              `"$"`,
+	DoubleDollar:        `"$$"`,
+	Assign:              `"="`,
+	Coalesce:            `"??"`,
+	Question:            `"?"`,
 }
 
 func (k Kind) String() string {
