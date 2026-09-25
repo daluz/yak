@@ -145,6 +145,187 @@ func TestInterpolation(t *testing.T) {
 	}
 }
 
+func TestLocals(t *testing.T) {
+	tests := []struct {
+		name    string
+		src     string
+		context string
+		want    string
+	}{
+		{
+			name: "binding used by an entry",
+			src:  "local name = \"web\"\nservice: name\n",
+			want: "service: web\n",
+		},
+		{
+			name: "bindings leave no output of their own",
+			src:  "local unused = \"x\"\na: 1\n",
+			want: "a: 1\n",
+		},
+		{
+			name: "a binding may hold a mapping",
+			src:  "local d =\n  image: \"alpine\"\nimage: d.image\n",
+			want: "image: alpine\n",
+		},
+		{
+			name: "bindings see each other",
+			src:  "local a = \"x\"\nlocal b = \"${a}y\"\nv: b\n",
+			want: "v: xy\n",
+		},
+		{
+			name: "a binding declared after its use",
+			src:  "v: name\nlocal name = \"web\"\n",
+			want: "v: web\n",
+		},
+		{
+			name: "block form",
+			src:  "local {\n  region = \"us-east-1\"\n  zone = \"${region}a\"\n}\nwhere: zone\n",
+			want: "where: us-east-1a\n",
+		},
+		{
+			name: "block form on one line",
+			src:  "local { a = 1, b = 2 }\nv: [a, b]\n",
+			want: "v:\n  - 1\n  - 2\n",
+		},
+		{
+			name: "a binding can read the enclosing mapping",
+			src:  "local label = \"${.name}-web\"\nname: \"shop\"\nlabel: label\n",
+			want: "name: shop\nlabel: shop-web\n",
+		},
+		{
+			name: "an inner binding shadows an outer one",
+			src:  "local n = \"outer\"\nouter: n\nchild:\n  local n = \"inner\"\n  inner: n\n",
+			want: "outer: outer\nchild:\n  inner: inner\n",
+		},
+		{
+			name: "a nested scope still sees the outer bindings",
+			src:  "local n = \"outer\"\nchild:\n  local m = \"inner\"\n  v: \"${n}-${m}\"\n",
+			want: "child:\n  v: outer-inner\n",
+		},
+		{
+			name: "bindings reach into sequences",
+			src:  "local n = \"web\"\nitems:\n  - name: n\n",
+			want: "items:\n  - name: web\n",
+		},
+		{
+			name: "a sequence item may bind",
+			src:  "items:\n  - local n = 2\n    count: n\n",
+			want: "items:\n  - count: 2\n",
+		},
+		{
+			name: "bindings in a computed key",
+			src:  "local k = \"dyn\"\n[k]: 1\n",
+			want: "dyn: 1\n",
+		},
+		{
+			name:    "a binding over the context",
+			src:     "local app = $$.app\nname: app.name\n",
+			context: "app:\n  name: shop\n",
+			want:    "name: shop\n",
+		},
+		{
+			name: "a scope around a sequence document",
+			src:  "local n = 1\n- n\n- 2\n",
+			want: "- 1\n- 2\n",
+		},
+		{
+			name: "each document has its own bindings",
+			src:  "local n = 1\na: n\n---\nlocal n = 2\nb: n\n",
+			want: "a: 1\n---\nb: 2\n",
+		},
+		{
+			name: "a binding may name a yaml boolean word",
+			src:  "local n = 5\nv: n\n",
+			want: "v: 5\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mustRender(t, tc.src, tc.context); got != tc.want {
+				t.Errorf("rendered:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCoalesceAndOptionalAccess(t *testing.T) {
+	tests := []struct {
+		name    string
+		src     string
+		context string
+		want    string
+	}{
+		{
+			name: "null falls back",
+			src:  "a: null\nv: .a ?? \"default\"\n",
+			want: "a: null\nv: default\n",
+		},
+		{
+			name: "a present value wins",
+			src:  "a: \"set\"\nv: .a ?? \"default\"\n",
+			want: "a: set\nv: set\n",
+		},
+		{
+			name: "false and zero are not null",
+			src:  "a: false\nb: 0\nv: [.a ?? \"d\", .b ?? \"d\"]\n",
+			want: "a: false\nb: 0\nv:\n  - false\n  - 0\n",
+		},
+		{
+			name: "the fallback chains",
+			src:  "a: null\nv: .a ?? null ?? \"last\"\n",
+			want: "a: null\nv: last\n",
+		},
+		{
+			name: "the fallback is not evaluated when unused",
+			src:  "a: \"set\"\nv: .a ?? .missing\n",
+			want: "a: set\nv: set\n",
+		},
+		{
+			name:    "an optional field that is absent",
+			src:     "v: $$?.absent ?? \"default\"\n",
+			context: "present: 1\n",
+			want:    "v: default\n",
+		},
+		{
+			name:    "an optional field that is present",
+			src:     "v: $$?.present ?? \"default\"\n",
+			context: "present: 1\n",
+			want:    "v: 1\n",
+		},
+		{
+			name:    "an optional access on null",
+			src:     "v: $$?.absent?.deeper ?? \"default\"\n",
+			context: "present: 1\n",
+			want:    "v: default\n",
+		},
+		{
+			name: "an optional index past the end",
+			src:  "list:\n  - 1\nv: $.list?[5] ?? \"none\"\n",
+			want: "list:\n  - 1\nv: none\n",
+		},
+		{
+			name:    "an optional index on a missing key",
+			src:     "v: $$?[\"absent\"] ?? \"none\"\n",
+			context: "present: 1\n",
+			want:    "v: none\n",
+		},
+		{
+			name: "an optional access inside interpolation",
+			src:  "v: \"port ${$$?.port ?? 80}\"\n",
+			want: "v: port 80\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mustRender(t, tc.src, tc.context); got != tc.want {
+				t.Errorf("rendered:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHiddenFields(t *testing.T) {
 	got := mustRender(t, "secret:: \"s3cret\"\nvisible: \"${.secret}!\"\n", "")
 	want := "visible: s3cret!\n"
@@ -214,9 +395,18 @@ func TestEvalErrors(t *testing.T) {
 		{"index with wrong type", "a:\n  - 1\nb: $.a[\"x\"]\n", "", "index must be an integer"},
 		{"interpolate a mapping", "a:\n  b: 1\ns: \"${.a}\"\n", "", "cannot interpolate a mapping"},
 		{"unknown identifier", "a: hello\n", "", `unknown identifier "hello"`},
+		{"yaml yes", "a: yes\n", "", `"yes" is not a boolean in yak`},
+		{"yaml off", "a: off\n", "", `"off" is not a boolean in yak`},
 		{"duplicate key", "a: 1\na: 2\n", "", `duplicate key "a"`},
 		{"duplicate computed key", "a: 1\n[\"a\"]: 2\n", "", `duplicate key "a"`},
 		{"self referential mapping", "a: .\n", "", "contains itself"},
+		{"unknown identifier lists bindings", "local host = \"h\"\na: hosts\n", "", `bindings in scope: "host"`},
+		{"duplicate binding", "local x = 1\nlocal x = 2\na: x\n", "", `duplicate binding "x"`},
+		{"binding cycle", "local a = b\nlocal b = a\nv: a\n", "", "circular reference"},
+		{"a binding out of scope", "a:\n  local x = 1\n  b: x\nc: x\n", "", `unknown identifier "x"`},
+		{"coalesce does not hide a missing field", "a: $$.nope ?? 1\n", "", `no field "nope"`},
+		{"optional access does not hide a type error", "a: 1\nb: .a?.c\n", "", "cannot read field"},
+		{"optional index does not hide a type error", "a:\n  - 1\nb: $.a?[\"x\"]\n", "", "index must be an integer"},
 	}
 
 	for _, tc := range tests {

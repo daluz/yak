@@ -1,40 +1,34 @@
 # Roadmap
 
-Phase one is done: the restricted YAML parser, string interpolation, relative
-references, hidden fields, context files, and the `template` command. What
-follows is the planned order of the remaining work.
+Done so far: the restricted YAML parser, string interpolation, relative
+references, hidden fields, context files, the `template` command, `local`
+bindings, and the `??` and `?.` operators. What follows is the planned order
+of the remaining work.
 
 Everything listed here is already reserved in the language. Using one of these
 keywords today produces an explicit "not implemented yet" error pointing at the
 right position, so no program silently means something different once the
 feature lands.
 
-## 1. `local` bindings
+## 1. Functions
 
-Variables, functions, and blocks, all introduced by `local`.
+Bindings that take arguments, using the syntax `local` already reserves for
+them:
 
 ```yaml
-local name = "web"
 local url(host, port) = "https://${host}:${port}"
 
-local {
-  region = "us-east-1"
-  zone = "${region}a"
-}
-
-service: name
 endpoint: url($$.host, 8080)
 ```
 
 Notes for the implementation:
 
-- `ast.Ident` already exists and is the single place where a bare identifier
-  fails to resolve, so binding lookup slots in there.
-- `Env` already threads a lexical environment through evaluation; bindings add
-  a scope chain alongside the existing `self` chain.
-- Function calls need a `Call` node and a postfix `(` rule in
+- Binding names already resolve through the scope chain on `eval.Env`, so a
+  function value only needs a closure over the environment it was declared in.
+- Calls need a `Call` node and a postfix `(` rule in
   `internal/parser/expr.go`, next to the existing field and index rules.
-- The `=` token is already lexed for this purpose.
+- `parser.expectAssign` is where the `(` after a binding name is currently
+  turned into a "not implemented yet" error.
 
 ## 2. Standard library
 
@@ -80,9 +74,10 @@ Both slot into `internal/cli` beside `template`, and both can reuse
 
 ## Smaller items
 
-- Operators. Arithmetic and comparison need a precedence table in the Pratt
-  parser. Note that `-` is currently allowed inside identifiers, so binary
-  operators will require surrounding whitespace.
+- Operators. `??` is the only one so far, and `parser.parseExpr` handles it
+  without a precedence table; arithmetic and comparison will need one. Note
+  that `-` is allowed inside identifiers, so binary operators will require
+  surrounding whitespace.
 - `--format json`. `render.Options` already carries a format enum and
   `render.Documents` already branches on it.
 - Preserving flow style. Flow collections currently render as block

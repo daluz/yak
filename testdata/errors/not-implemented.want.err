@@ -1,1 +1,1 @@
-not-implemented.yak:1:1: "local" bindings are not implemented yet
+not-implemented.yak:1:16: "import" is not implemented yet

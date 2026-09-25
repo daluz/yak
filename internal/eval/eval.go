@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/daluz/yak/internal/ast"
@@ -23,13 +24,70 @@ type Env struct {
 	// self holds the enclosing mappings, innermost first. Sequences do not
 	// add a level, so ".." always names the nearest enclosing mapping.
 	self []*Object
+	// scope is the innermost frame of local bindings, or nil at the top of
+	// a document.
+	scope *scope
+}
+
+// scope is one frame of local bindings. Frames link outwards, so an inner
+// binding shadows an outer one of the same name.
+type scope struct {
+	outer *scope
+	binds map[string]*Thunk
 }
 
 func (e *Env) pushSelf(o *Object) *Env {
 	self := make([]*Object, 0, len(e.self)+1)
 	self = append(self, o)
 	self = append(self, e.self...)
-	return &Env{doc: e.doc, self: self}
+	return &Env{doc: e.doc, self: self, scope: e.scope}
+}
+
+// pushBindings returns an environment that adds a frame holding binds. The
+// bindings are evaluated in that same environment, so they may refer to each
+// other; a binding that ends up needing itself is reported as a cycle.
+func (e *Env) pushBindings(binds []*ast.Binding) (*Env, error) {
+	if len(binds) == 0 {
+		return e, nil
+	}
+	s := &scope{outer: e.scope, binds: make(map[string]*Thunk, len(binds))}
+	inner := &Env{doc: e.doc, self: e.self, scope: s}
+	for _, b := range binds {
+		if _, ok := s.binds[b.Name]; ok {
+			return nil, errorf(b.Pos(), "duplicate binding %q in the same scope", b.Name)
+		}
+		s.binds[b.Name] = &Thunk{node: b.Value, env: inner, pos: b.Value.Pos()}
+	}
+	return inner, nil
+}
+
+// lookup finds a binding, searching outwards from the innermost frame.
+func (e *Env) lookup(name string) (*Thunk, bool) {
+	for s := e.scope; s != nil; s = s.outer {
+		if t, ok := s.binds[name]; ok {
+			return t, true
+		}
+	}
+	return nil, false
+}
+
+// bindingNames lists every binding visible here, innermost first and without
+// the names an inner frame has shadowed.
+func (e *Env) bindingNames() []string {
+	var names []string
+	seen := map[string]bool{}
+	for s := e.scope; s != nil; s = s.outer {
+		frame := make([]string, 0, len(s.binds))
+		for name := range s.binds {
+			if !seen[name] {
+				seen[name] = true
+				frame = append(frame, name)
+			}
+		}
+		sort.Strings(frame)
+		names = append(names, frame...)
+	}
+	return names
 }
 
 // Document evaluates a single document against the given context value. The
@@ -72,10 +130,12 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 		return evalField(node, env)
 	case *ast.Index:
 		return evalIndex(node, env)
+	case *ast.Coalesce:
+		return evalCoalesce(node, env)
+	case *ast.Local:
+		return evalLocal(node, env)
 	case *ast.Ident:
-		return nil, errorf(node.Pos(),
-			"unknown identifier %q; strings must be quoted, and %q bindings are not implemented yet",
-			node.Name, "local")
+		return evalIdent(node, env)
 	default:
 		return nil, errorf(n.Pos(), "internal error: cannot evaluate %T", n)
 	}
@@ -91,6 +151,12 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 	obj := NewObject()
 	child := env.pushSelf(obj)
+	// Bindings sit inside the mapping's own self frame, so a binding may
+	// read a field with ".name" just as an entry can.
+	child, err := child.pushBindings(node.Binds)
+	if err != nil {
+		return nil, err
+	}
 
 	slots := make([]*Field, len(node.Entries))
 	for i, e := range node.Entries {
@@ -173,10 +239,64 @@ func evalSelf(node *ast.Self, env *Env) (Value, error) {
 	return env.self[node.Up], nil
 }
 
+func evalLocal(node *ast.Local, env *Env) (Value, error) {
+	child, err := env.pushBindings(node.Binds)
+	if err != nil {
+		return nil, err
+	}
+	return evalNode(node.Body, child)
+}
+
+// yamlBooleans are the extra boolean spellings YAML accepts and yak does not.
+var yamlBooleans = map[string]string{
+	"yes": "true", "no": "false",
+	"on": "true", "off": "false",
+	"y": "true", "n": "false",
+}
+
+func evalIdent(node *ast.Ident, env *Env) (Value, error) {
+	if t, ok := env.lookup(node.Name); ok {
+		return t.Value()
+	}
+	if want, ok := yamlBooleans[strings.ToLower(node.Name)]; ok {
+		return nil, errorf(node.Pos(),
+			"%q is not a boolean in yak; write %s, or quote it to make it a string", node.Name, want)
+	}
+	names := env.bindingNames()
+	if len(names) == 0 {
+		return nil, errorf(node.Pos(),
+			"unknown identifier %q; strings must be quoted, and no %q binding is in scope here",
+			node.Name, "local")
+	}
+	return nil, errorf(node.Pos(),
+		"unknown identifier %q; strings must be quoted; bindings in scope: %s",
+		node.Name, quoteNames(names))
+}
+
+// evalCoalesce leaves the right hand side unevaluated unless it is needed, so
+// that a fallback may itself be an expression that only makes sense when the
+// value it replaces is missing.
+func evalCoalesce(node *ast.Coalesce, env *Env) (Value, error) {
+	x, err := evalNode(node.X, env)
+	if err != nil {
+		return nil, err
+	}
+	if _, isNull := x.(Null); !isNull {
+		return x, nil
+	}
+	return evalNode(node.Y, env)
+}
+
+// evalField reads "x.name". The optional form "x?.name" answers null when
+// there is nothing to read, but a value of the wrong type is still an error:
+// "?." forgives an absent field, not a misunderstanding about what x is.
 func evalField(node *ast.Field, env *Env) (Value, error) {
 	x, err := evalNode(node.X, env)
 	if err != nil {
 		return nil, err
+	}
+	if _, isNull := x.(Null); isNull && node.Optional {
+		return Null{}, nil
 	}
 	obj, ok := x.(*Object)
 	if !ok {
@@ -184,6 +304,9 @@ func evalField(node *ast.Field, env *Env) (Value, error) {
 	}
 	f, ok := obj.Lookup(node.Name)
 	if !ok {
+		if node.Optional {
+			return Null{}, nil
+		}
 		return nil, errorf(node.Pos(), "no field %q in mapping%s", node.Name, availableFields(obj))
 	}
 	return f.Value.Value()
@@ -193,6 +316,9 @@ func evalIndex(node *ast.Index, env *Env) (Value, error) {
 	x, err := evalNode(node.X, env)
 	if err != nil {
 		return nil, err
+	}
+	if _, isNull := x.(Null); isNull && node.Optional {
+		return Null{}, nil
 	}
 	idx, err := evalNode(node.Index, env)
 	if err != nil {
@@ -209,6 +335,9 @@ func evalIndex(node *ast.Index, env *Env) (Value, error) {
 			i += container.Len()
 		}
 		if i < 0 || i >= container.Len() {
+			if node.Optional {
+				return Null{}, nil
+			}
 			return nil, errorf(node.Index.Pos(), "index %d is out of range for a sequence of length %d", int(n), container.Len())
 		}
 		return container.Items()[i].Value()
@@ -219,6 +348,9 @@ func evalIndex(node *ast.Index, env *Env) (Value, error) {
 		}
 		f, ok := container.Lookup(string(name))
 		if !ok {
+			if node.Optional {
+				return Null{}, nil
+			}
 			return nil, errorf(node.Index.Pos(), "no field %q in mapping%s", string(name), availableFields(container))
 		}
 		return f.Value.Value()
@@ -234,6 +366,12 @@ func availableFields(o *Object) string {
 	if len(names) == 0 {
 		return " (the mapping is empty)"
 	}
+	return "; available fields: " + quoteNames(names)
+}
+
+// quoteNames renders a list of names for a diagnostic, stopping before it
+// becomes a wall of text.
+func quoteNames(names []string) string {
 	if len(names) > 8 {
 		names = names[:8]
 	}
@@ -241,5 +379,5 @@ func availableFields(o *Object) string {
 	for i, n := range names {
 		quoted[i] = `"` + n + `"`
 	}
-	return "; available fields: " + strings.Join(quoted, ", ")
+	return strings.Join(quoted, ", ")
 }

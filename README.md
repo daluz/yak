@@ -6,9 +6,8 @@ expression language added.
 
 ```yaml
 # app.yak
-defaults::
-  image: "alpine"
-  tag: "3.20"
+local image = "alpine"
+local tag = "3.20"
 
 apiVersion: "apps/v1"
 kind: "Deployment"
@@ -17,11 +16,11 @@ metadata:
   labels:
     app: ..name
 spec:
-  replicas: $$.app.replicas
+  replicas: $$.app?.replicas ?? 1
   selector:
     matchLabels: $.metadata.labels
   containers:
-    - image: "${$.defaults.image}:${$.defaults.tag}"
+    - image: "${image}:${tag}"
       env:
         - name: "APP_NAME"
           value: $$.app.name
@@ -61,23 +60,27 @@ the JSON parser. Pass `-` as the file to read a template from standard input.
 - **Every string interpolates.** `"hello ${.name}"`. Prefix with `r` to turn
   that off: `r"hello ${literal}"`.
 - **Only `true` and `false` are booleans.** No `yes`, `no`, `on`, or `off`.
-- **No anchors and no tags.** References replace anchors; tags return with
-  schemas.
+- **No anchors and no tags.** References and `local` bindings replace anchors;
+  tags return with schemas.
 - **Relative references.** `.name` is a sibling, `..name` the parent's,
   `...name` the grandparent's, `$.name` the document root's, and `$$.name` the
   context's.
 - **Hidden fields.** Write `::` instead of `:` to keep a value available to
   references but out of the output.
+- **Local bindings.** `local name = "web"`, or a `local { ... }` block of
+  them. They are named, scoped, and produce no output.
+- **Optional access and defaults.** `?.` and `?[` give `null` where a field or
+  an index is missing, and `??` supplies the value to use instead.
 
 [docs/SPEC.md](docs/SPEC.md) is the full language description.
 
 ## Status
 
-The `template` command is implemented. `local` bindings, a standard library,
-`import`, `schema`, and the `build` and `validate` commands are planned; see
-[docs/ROADMAP.md](docs/ROADMAP.md). Their keywords are already reserved, so
-using one today fails with a clear message rather than parsing as something
-else.
+The `template` command is implemented, along with `local` bindings. Functions,
+a standard library, `import`, `schema`, and the `build` and `validate`
+commands are planned; see [docs/ROADMAP.md](docs/ROADMAP.md). Their keywords
+are already reserved, so using one today fails with a clear message rather
+than parsing as something else.
 
 ## Development
 

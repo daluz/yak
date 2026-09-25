@@ -1,0 +1,1 @@
+dangling-local.yak:3:3: a "local" binding must be followed by a value in the same block

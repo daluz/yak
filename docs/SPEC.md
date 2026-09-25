@@ -86,7 +86,7 @@ error that tells you to use `true`/`false` or add quotes.
 ### Anchors and tags are gone
 
 `&anchor`, `*alias`, `!tag`, and `!!tag` are all rejected. Anchors are replaced
-by references and, later, by `local` bindings. Tags will return with schemas.
+by references and `local` bindings. Tags will return with schemas.
 
 ### Keys
 
@@ -167,6 +167,113 @@ name: "web"
 A value that ends up depending on itself is reported as a circular reference,
 with the chain of positions that formed the cycle.
 
+## Local bindings
+
+`local` names a value. The name is an ordinary identifier, and writing it
+where a value is expected reads the binding back:
+
+```yaml
+local name = "web"
+local port = 8080
+
+service: name
+url: "http://${name}:${port}"
+```
+
+Bindings produce no output of their own. They are the replacement for YAML
+anchors, and unlike a hidden field they do not have to live inside the mapping
+that uses them.
+
+Several bindings can share a `local { ... }` block. Write one per line, or
+separate them with commas to fit them on one:
+
+```yaml
+local {
+  region = "us-east-1"
+  zone = "${region}a"
+}
+local { retries = 3, timeout = 30 }
+```
+
+A binding's value may be an indented block, exactly like a mapping value:
+
+```yaml
+local defaults =
+  image: "alpine"
+  tag: "3.20"
+
+image: "${defaults.image}:${defaults.tag}"
+```
+
+### Scope
+
+A binding covers the block it is written in, including everything nested
+inside it, and it may be used before the line that declares it:
+
+```yaml
+url: endpoint          # fine: bindings are resolved lazily too
+local endpoint = "https://example.com"
+```
+
+Bindings written among the entries of a mapping belong to that whole mapping,
+so they can read its fields with `.name`:
+
+```yaml
+name: "shop"
+local label = "${.name}-web"
+labels:
+  app: label
+```
+
+A binding in an inner block shadows an outer one of the same name. Two
+bindings of the same name in one block are an error:
+
+```yaml
+local tier = "shared"
+web:
+  local tier = "frontend"
+  tier: tier           # "frontend"
+api:
+  tier: tier           # "shared"
+```
+
+Every document has its own bindings; nothing carries across a `---`.
+
+Because they resolve lazily, bindings may refer to each other in any order,
+and a binding that ends up needing itself is reported as a circular reference.
+A binding that is never used is never evaluated.
+
+## Missing values
+
+`?.` and `?[` read a field or an index that may not be there, and produce
+`null` instead of failing:
+
+```yaml
+a: $$?.replicas      # null when the context has no "replicas"
+b: $$.tags?[3]       # null when the sequence is shorter than that
+c: $$?.tls?.enabled  # null at either step
+```
+
+The `?` forgives a missing field and a null on the left of the access. It does
+not forgive a misunderstanding: reading a field of a number is still an error,
+and so is indexing a sequence with a string. Each `?` covers one step only, so
+a chain that may break anywhere needs one at every step.
+
+`??` supplies a value to use when the left side is `null`:
+
+```yaml
+replicas: $$?.replicas ?? 1
+region: $$?.region ?? "us-east-1"
+```
+
+Only `null` triggers the fallback; `false`, `0`, and `""` are values like any
+other. The right hand side is left unevaluated when it is not needed.
+
+`??` never hides an error, which is why the two operators are usually written
+together. `$$.replicas ?? 1` still fails when the context has no `replicas`
+field, because the failure happens before `??` is reached; `$$?.replicas ?? 1`
+is the way to say that the field is optional.
+
 ## Context files
 
 `yak template -c a.yaml -c b.yaml` merges context files left to right. Mappings
@@ -191,15 +298,18 @@ document evaluates successfully.
 ```
 stream      := document ("---" document)* "..."?
 document    := node
-node        := blockMapping | blockSequence | value
-blockMapping:= (key (":" | "::") value)+          -- aligned on one column
+node        := local* (blockMapping | blockSequence | value)
+blockMapping:= (local | key (":" | "::") value)+  -- aligned on one column
 blockSequence := ("-" node)+                      -- aligned on one column
-value       := literal | reference | flowSeq | flowMap
+local       := "local" binding | "local" "{" binding+ "}"
+binding     := identifier "=" value
+value       := operand ("??" operand)*
+operand     := literal | reference | flowSeq | flowMap | "(" value ")"
 flowSeq     := "[" (value ("," value)*)? ","? "]"
 flowMap     := "{" (key (":"|"::") value ("," ...)*)? "}"
 key         := identifier | string | "[" value "]"
 literal     := string | int | float | "true" | "false" | "null"
-reference   := (dots | "$" | "$context" | "$$") postfix*
-postfix     := "." identifier | "[" value "]"
+reference   := (dots | "$" | "$context" | "$$" | identifier) postfix*
+postfix     := "?"? ("." identifier | "[" value "]")
 dots        := "." | ".." | "..."  ...
 ```

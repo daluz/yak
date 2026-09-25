@@ -14,7 +14,8 @@ import (
 func dump(n ast.Node) string {
 	switch t := n.(type) {
 	case *ast.Mapping:
-		parts := make([]string, 0, len(t.Entries))
+		parts := make([]string, 0, len(t.Binds)+len(t.Entries))
+		parts = append(parts, dumpBinds(t.Binds)...)
 		for _, e := range t.Entries {
 			sep := ":"
 			if e.Hidden {
@@ -61,14 +62,33 @@ func dump(n ast.Node) string {
 	case *ast.Context:
 		return "context"
 	case *ast.Field:
-		return dump(t.X) + "." + t.Name
+		return dump(t.X) + optional(t.Optional) + "." + t.Name
 	case *ast.Index:
-		return dump(t.X) + "[" + dump(t.Index) + "]"
+		return dump(t.X) + optional(t.Optional) + "[" + dump(t.Index) + "]"
+	case *ast.Coalesce:
+		return "(" + dump(t.X) + "??" + dump(t.Y) + ")"
+	case *ast.Local:
+		return "local(" + strings.Join(dumpBinds(t.Binds), " ") + ";" + dump(t.Body) + ")"
 	case *ast.Ident:
 		return "ident(" + t.Name + ")"
 	default:
 		return fmt.Sprintf("?%T", n)
 	}
+}
+
+func dumpBinds(binds []*ast.Binding) []string {
+	parts := make([]string, 0, len(binds))
+	for _, b := range binds {
+		parts = append(parts, b.Name+"="+dump(b.Value))
+	}
+	return parts
+}
+
+func optional(v bool) string {
+	if v {
+		return "?"
+	}
+	return ""
 }
 
 func parseOne(t *testing.T, src string) string {
@@ -141,6 +161,64 @@ func TestParseReferences(t *testing.T) {
 		{"string index", `a: $.b["c"]`, `{"a":root.b["c"]}`},
 		{"chained index", "a: $.b[0].c\n", `{"a":root.b[0].c}`},
 		{"parenthesized", "a: ($.b).c\n", `{"a":root.b.c}`},
+		{"optional field", "a: $$?.b\n", `{"a":context?.b}`},
+		{"optional index", "a: $$?[0]\n", `{"a":context?[0]}`},
+		{"optional chain", "a: $$?.b?.c\n", `{"a":context?.b?.c}`},
+		{"mixed chain", "a: $$?.b.c\n", `{"a":context?.b.c}`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseOne(t, tc.src); got != tc.want {
+				t.Errorf("Parse(%q) = %s, want %s", tc.src, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseLocals(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"binding before a mapping", "local x = 1\na: x\n", `{x=1 "a":ident(x)}`},
+		{"binding between entries", "a: x\nlocal x = 1\nb: 2\n", `{x=1 "a":ident(x) "b":2}`},
+		{"several bindings", "local x = 1\nlocal y = 2\na: x\n", `{x=1 y=2 "a":ident(x)}`},
+		{"block form", "local {\n  x = 1\n  y = 2\n}\na: x\n", `{x=1 y=2 "a":ident(x)}`},
+		{"block form on one line", "local { x = 1, y = 2 }\na: x\n", `{x=1 y=2 "a":ident(x)}`},
+		{"block value", "local x =\n  a: 1\nb: x\n", `{x={"a":1} "b":ident(x)}`},
+		{"sequence value", "local x =\n  - 1\nb: x\n", `{x=[1] "b":ident(x)}`},
+		{"nested scope", "a:\n  local x = 1\n  b: x\n", `{"a":{x=1 "b":ident(x)}}`},
+		{"in a sequence item", "- local x = 1\n  a: x\n", `[{x=1 "a":ident(x)}]`},
+		{"before a sequence", "local x = 1\n- x\n", `local(x=1;[ident(x)])`},
+		{"before a scalar", "local x = 1\nx\n", `local(x=1;ident(x))`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseOne(t, tc.src); got != tc.want {
+				t.Errorf("Parse(%q) = %s, want %s", tc.src, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseCoalesce(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"simple", "a: .b ?? 1\n", `{"a":(self+0.b??1)}`},
+		{"without spaces", "a: .b??1\n", `{"a":(self+0.b??1)}`},
+		{"chained", "a: .b ?? .c ?? 1\n", `{"a":((self+0.b??self+0.c)??1)}`},
+		{"with optional access", "a: $$?.b ?? 1\n", `{"a":(context?.b??1)}`},
+		{"inside a flow sequence", "a: [.b ?? 1]\n", `{"a":[(self+0.b??1)]}`},
+		{"inside an index", "a: $.b[.c ?? 0]\n", `{"a":root.b[(self+0.c??0)]}`},
+		{"postfix binds tighter", "a: .b ?? .c.d\n", `{"a":(self+0.b??self+0.c.d)}`},
+		{"parentheses regroup", "a: (.b ?? .c).d\n", `{"a":(self+0.b??self+0.c).d}`},
+		{"right hand side may wrap", "a: .b ??\n  1\n", `{"a":(self+0.b??1)}`},
 	}
 
 	for _, tc := range tests {
@@ -213,12 +291,21 @@ func TestParseErrors(t *testing.T) {
 		want string
 	}{
 		{"unquoted multiword string", "a: hello world\n", "strings must be quoted"},
-		{"yaml yes", "a: yes\n", `"yes" is not a boolean in yak`},
-		{"yaml off", "a: off\n", `"off" is not a boolean in yak`},
-		{"local keyword", "a: local\n", `"local" bindings are not implemented yet`},
+		{"local as a value", "a: local\n", `a "local" binding is a statement of its own`},
 		{"import keyword", "a: import\n", `"import" is not implemented yet`},
 		{"schema keyword", "a: schema\n", `"schema" is not implemented yet`},
 		{"reserved key", "local: 1\n", "reserved word"},
+		{"local without a body", "local x = 1\n", "must be followed by a value"},
+		{"local without a name", "local = 1\na: 1\n", "expected the name of a binding"},
+		{"local without an assignment", "local x 1\na: 1\n", `expected "=" after the name of a binding`},
+		{"local naming a keyword", "local null = 1\na: 1\n", "cannot name a binding"},
+		{"local function", "local f(x) = x\na: 1\n", `"local" functions are not implemented yet`},
+		{"over-indented local", "local x = 1\n  local y = 2\na: x\n", "unexpected indentation"},
+		{"empty local block", "local {}\na: 1\n", "at least one binding"},
+		{"unterminated local block", "local {\n  x = 1\n", "unterminated"},
+		{"unseparated bindings", "local { x = 1 y = 2 }\na: x\n", "between bindings"},
+		{"lone question mark", "a: 1 ? 2\n", "explicit key indicators"},
+		{"coalesce on its own line", "a: .b\n?? 1\n", "expected a mapping key"},
 		{"numeric key", "1: a\n", "numeric keys must be quoted"},
 		{"bad indentation", "a: 1\n  b: 2\n", "unexpected indentation"},
 		{"stray token after value", "a: 1 2\n", "unexpected"},

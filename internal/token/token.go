@@ -50,10 +50,13 @@ const (
 	Dots
 	Dollar
 	DoubleDollar
-	// Assign is reserved for "local name = value" bindings. Accepting it in
-	// the lexer lets the parser explain that they are not implemented yet
-	// instead of failing on an unexpected character.
+	// Assign separates the name and the value of a "local" binding.
 	Assign
+	// Coalesce is the "??" operator.
+	Coalesce
+	// Question is the "?" of an optional access, always followed directly by
+	// "." or "[".
+	Question
 )
 
 var kindNames = map[Kind]string{
@@ -79,6 +82,8 @@ var kindNames = map[Kind]string{
 	Dollar:       `"$"`,
 	DoubleDollar: `"$$"`,
 	Assign:       `"="`,
+	Coalesce:     `"??"`,
+	Question:     `"?"`,
 }
 
 func (k Kind) String() string {

@@ -1,0 +1,33 @@
+# Bindings, defaults, and optional context lookups.
+local name = $$.app.name
+local {
+  region = $$?.region ?? "us-east-1"
+  zone = "${region}a"
+}
+local labels =
+  app: name
+  region: region
+
+service:
+  name: "${name}-web"
+  labels: labels
+  replicas: $$.app?.replicas ?? 1
+  zone: zone
+  # A binding may read the mapping it sits in, and may be declared after use.
+  endpoint: url
+  local url = "https://${.name}.${.zone}.example.com"
+  tls: $$?.tls?.enabled ?? false
+
+workers:
+  - local role = "queue"
+    name: "${name}-${role}"
+    labels: labels
+  - local role = "cron"
+    name: "${name}-${role}"
+    labels: labels
+
+fallbacks:
+  missing-mapping: $$?.absent?.deeper ?? "none"
+  missing-index: $$.app.tags?[5] ?? "none"
+  present-index: $$.app.tags?[0] ?? "none"
+  explicit-null: $$.app.owner ?? "unassigned"

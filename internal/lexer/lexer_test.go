@@ -180,6 +180,45 @@ func TestTokenKinds(t *testing.T) {
 	}
 }
 
+func TestOptionalAndCoalesceTokens(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want []token.Kind
+	}{
+		{"optional field", "a: $$?.b\n", []token.Kind{
+			token.Ident, token.Colon, token.DoubleDollar, token.Question, token.Dots, token.Ident, token.EOF,
+		}},
+		{"optional index", "a: $$?[0]\n", []token.Kind{
+			token.Ident, token.Colon, token.DoubleDollar, token.Question, token.LBracket,
+			token.Int, token.RBracket, token.EOF,
+		}},
+		{"coalesce", "a: .b ?? 1\n", []token.Kind{
+			token.Ident, token.Colon, token.Dots, token.Ident, token.Coalesce, token.Int, token.EOF,
+		}},
+		{"coalesce without spaces", "a: .b??1\n", []token.Kind{
+			token.Ident, token.Colon, token.Dots, token.Ident, token.Coalesce, token.Int, token.EOF,
+		}},
+		{"binding", "local x = 1\n", []token.Kind{
+			token.Ident, token.Ident, token.Assign, token.Int, token.EOF,
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			toks := lex(t, tc.src)
+			if len(toks) != len(tc.want) {
+				t.Fatalf("got %d tokens, want %d: %v", len(toks), len(tc.want), toks)
+			}
+			for i, k := range tc.want {
+				if toks[i].Kind != k {
+					t.Errorf("token %d = %v, want %v", i, toks[i].Kind, k)
+				}
+			}
+		})
+	}
+}
+
 func TestDotRuns(t *testing.T) {
 	toks := lex(t, "x: ...name\n")
 	if toks[2].Kind != token.Dots || toks[2].Lit != "..." {

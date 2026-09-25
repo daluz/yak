@@ -1,0 +1,23 @@
+service:
+  name: shop-web
+  labels:
+    app: shop
+    region: us-east-1
+  replicas: 1
+  zone: us-east-1a
+  endpoint: https://shop-web.us-east-1a.example.com
+  tls: false
+workers:
+  - name: shop-queue
+    labels:
+      app: shop
+      region: us-east-1
+  - name: shop-cron
+    labels:
+      app: shop
+      region: us-east-1
+fallbacks:
+  missing-mapping: none
+  missing-index: none
+  present-index: stable
+  explicit-null: unassigned

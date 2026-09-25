@@ -2,7 +2,6 @@ package parser
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/lexer"
@@ -13,7 +12,29 @@ import (
 // reference, or a flow collection.
 func (p *parser) parseInlineValue() (ast.Node, error) { return p.parseExpr() }
 
+// parseExpr parses an expression. "??" is the only operator, so there is no
+// precedence table to consult yet; it binds looser than any access.
+//
+// The right hand side may spill onto later lines, but the "??" itself must
+// stay on the line its left operand ended on, so that a block mapping is
+// never silently continued by the line below it.
 func (p *parser) parseExpr() (ast.Node, error) {
+	x, err := p.parseOperand()
+	if err != nil {
+		return nil, err
+	}
+	for p.at(token.Coalesce) && p.cur().Line() == p.prevEnd.Line {
+		p.next()
+		y, err := p.parseOperand()
+		if err != nil {
+			return nil, err
+		}
+		x = &ast.Coalesce{Base: ast.At(x.Pos()), X: x, Y: y}
+	}
+	return x, nil
+}
+
+func (p *parser) parseOperand() (ast.Node, error) {
 	x, err := p.parsePrimary()
 	if err != nil {
 		return nil, err
@@ -91,16 +112,8 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 // unsupportedKeywords maps reserved words that are planned but not yet
 // implemented to the message shown when they are used.
 var unsupportedKeywords = map[string]string{
-	token.KeywordLocal:  `"local" bindings are not implemented yet`,
 	token.KeywordImport: `"import" is not implemented yet`,
 	token.KeywordSchema: `"schema" is not implemented yet`,
-}
-
-// yamlBooleans are the extra boolean spellings YAML accepts and yak does not.
-var yamlBooleans = map[string]string{
-	"yes": "true", "no": "false",
-	"on": "true", "off": "false",
-	"y": "true", "n": "false",
 }
 
 func (p *parser) parseIdent() (ast.Node, error) {
@@ -112,13 +125,14 @@ func (p *parser) parseIdent() (ast.Node, error) {
 		return &ast.Bool{Base: ast.At(t.Pos), Value: false}, nil
 	case token.KeywordNull:
 		return &ast.Null{Base: ast.At(t.Pos)}, nil
+	case token.KeywordLocal:
+		return nil, p.errorf(t.Pos, "a %q binding is a statement of its own, not a value", "local")
 	}
 	if msg, ok := unsupportedKeywords[t.Lit]; ok {
 		return nil, p.errorf(t.Pos, "%s", msg)
 	}
-	if want, ok := yamlBooleans[strings.ToLower(t.Lit)]; ok {
-		return nil, p.errorf(t.Pos, "%q is not a boolean in yak; write %s, or quote it to make it a string", t.Lit, want)
-	}
+	// Whether a name such as "no" is a mistyped boolean or a binding cannot
+	// be decided here; the evaluator knows what is in scope and says so.
 	return &ast.Ident{Base: ast.At(t.Pos), Name: t.Lit}, nil
 }
 
@@ -150,12 +164,16 @@ func (p *parser) adjacentFieldName(dots token.Token) (string, bool) {
 // a silently accepted "$.b.c".
 func (p *parser) parsePostfix(x ast.Node) (ast.Node, error) {
 	for {
-		t := p.cur()
 		if !p.adjacent() {
 			return x, nil
 		}
-		switch t.Kind {
-		case token.Dots:
+		optional := p.at(token.Question)
+		if optional {
+			p.next()
+		}
+		t := p.cur()
+		switch {
+		case t.Kind == token.Dots:
 			if len(t.Lit) > 1 {
 				return nil, p.errorf(t.Pos, "%q may only begin a reference, not continue one", t.Lit)
 			}
@@ -164,8 +182,8 @@ func (p *parser) parsePostfix(x ast.Node) (ast.Node, error) {
 			if !ok {
 				return nil, p.errorf(p.cur().Pos, "expected a field name after %q", ".")
 			}
-			x = &ast.Field{Base: ast.At(x.Pos()), X: x, Name: name}
-		case token.LBracket:
+			x = &ast.Field{Base: ast.At(x.Pos()), X: x, Name: name, Optional: optional}
+		case t.Kind == token.LBracket:
 			p.next()
 			idx, err := p.parseExpr()
 			if err != nil {
@@ -175,7 +193,9 @@ func (p *parser) parsePostfix(x ast.Node) (ast.Node, error) {
 				return nil, p.errorf(p.cur().Pos, "expected %q to close an index, found %s", "]", p.cur())
 			}
 			p.next()
-			x = &ast.Index{Base: ast.At(x.Pos()), X: x, Index: idx}
+			x = &ast.Index{Base: ast.At(x.Pos()), X: x, Index: idx, Optional: optional}
+		case optional:
+			return nil, p.errorf(t.Pos, "expected %q or %q after %q, found %s", ".", "[", "?", t)
 		default:
 			return x, nil
 		}

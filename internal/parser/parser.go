@@ -115,13 +115,51 @@ func (p *parser) parseBlockNode() (ast.Node, error) {
 	if t.Kind == token.Dash {
 		return p.parseBlockSequence(t.Col())
 	}
+	if p.atLocal() {
+		return p.parseLocalScope(t.Col())
+	}
 	if p.looksLikeEntry() {
 		return p.parseBlockMapping(t.Col())
 	}
 	return p.parseInlineValue()
 }
 
-func (p *parser) parseBlockMapping(col int) (ast.Node, error) {
+// parseLocalScope parses a block that opens with one or more local
+// statements. Bindings in front of a mapping become that mapping's own, so
+// that they read the same as bindings written between its entries; anything
+// else is wrapped in a scope of its own.
+func (p *parser) parseLocalScope(col int) (ast.Node, error) {
+	pos := p.cur().Pos
+	var binds []*ast.Binding
+	for p.atLocal() && p.cur().Col() == col {
+		declared, err := p.parseLocalStatement(col)
+		if err != nil {
+			return nil, err
+		}
+		binds = append(binds, declared...)
+	}
+	if p.atDocBoundary() || p.cur().Col() < col {
+		return nil, p.errorf(pos, "a %q binding must be followed by a value in the same block", "local")
+	}
+	if p.cur().Col() > col {
+		return nil, p.errorf(p.cur().Pos, "unexpected indentation: expected a value at column %d", col)
+	}
+	if p.looksLikeEntry() {
+		m, err := p.parseBlockMapping(col)
+		if err != nil {
+			return nil, err
+		}
+		m.Binds = append(binds, m.Binds...)
+		return m, nil
+	}
+	body, err := p.parseBlockNode()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.Local{Base: ast.At(pos), Binds: binds, Body: body}, nil
+}
+
+func (p *parser) parseBlockMapping(col int) (*ast.Mapping, error) {
 	m := &ast.Mapping{Base: ast.At(p.cur().Pos)}
 	for {
 		if p.atDocBoundary() {
@@ -133,6 +171,14 @@ func (p *parser) parseBlockMapping(col int) (ast.Node, error) {
 		}
 		if t.Col() > col {
 			return nil, p.errorf(t.Pos, "unexpected indentation: expected a mapping key at column %d", col)
+		}
+		if p.atLocal() {
+			declared, err := p.parseLocalStatement(col)
+			if err != nil {
+				return nil, err
+			}
+			m.Binds = append(m.Binds, declared...)
+			continue
 		}
 		if !p.looksLikeEntry() {
 			return nil, p.errorf(t.Pos, "expected a mapping key, found %s", t)
@@ -192,6 +238,105 @@ func (p *parser) parseEntryValue(parentCol int, colon token.Token) (ast.Node, er
 		return p.parseBlockNode()
 	}
 	return &ast.Null{Base: ast.At(colon.Pos)}, nil
+}
+
+// atLocal reports whether a local statement starts at the current token.
+// "local" is reserved, so it can never be anything else here.
+func (p *parser) atLocal() bool {
+	return p.at(token.Ident) && p.cur().Lit == token.KeywordLocal
+}
+
+// parseLocalStatement parses one "local name = value" binding or a
+// "local { ... }" block of them.
+func (p *parser) parseLocalStatement(col int) ([]*ast.Binding, error) {
+	kw := p.next()
+	// A colon here means the line was meant to be an entry keyed "local".
+	switch p.cur().Kind {
+	case token.Colon, token.DoubleColon:
+		return nil, p.errorf(kw.Pos, "%q is a reserved word and must be quoted to be used as a key", kw.Lit)
+	}
+	if p.at(token.LBrace) {
+		return p.parseLocalBlock()
+	}
+	name, err := p.parseBindingName()
+	if err != nil {
+		return nil, err
+	}
+	assign, err := p.expectAssign()
+	if err != nil {
+		return nil, err
+	}
+	// The value follows the "=" exactly as a mapping value follows its
+	// colon, so a binding may hold an indented block.
+	value, err := p.parseEntryValue(col, assign)
+	if err != nil {
+		return nil, err
+	}
+	return []*ast.Binding{{Base: ast.At(name.Pos), Name: name.Lit, Value: value}}, nil
+}
+
+// parseLocalBlock parses the braced form. Bindings are written one per line,
+// or separated by commas when several share a line.
+func (p *parser) parseLocalBlock() ([]*ast.Binding, error) {
+	open := p.next()
+	var binds []*ast.Binding
+	// separated records that the previous binding ran to the end of its line
+	// and so needs a comma before another one may follow it.
+	separated := true
+	for {
+		if p.at(token.EOF) {
+			return nil, p.errorf(open.Pos, "unterminated %q block: missing %q", "local", "}")
+		}
+		if p.at(token.RBrace) {
+			p.next()
+			if len(binds) == 0 {
+				return nil, p.errorf(open.Pos, "a %q block must declare at least one binding", "local")
+			}
+			return binds, nil
+		}
+		if !separated {
+			return nil, p.errorf(p.cur().Pos, "expected %q or a line break between bindings, found %s", ",", p.cur())
+		}
+		name, err := p.parseBindingName()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expectAssign(); err != nil {
+			return nil, err
+		}
+		value, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		binds = append(binds, &ast.Binding{Base: ast.At(name.Pos), Name: name.Lit, Value: value})
+		if p.at(token.Comma) {
+			p.next()
+			continue
+		}
+		separated = p.cur().Line() != p.prevEnd.Line
+	}
+}
+
+func (p *parser) parseBindingName() (token.Token, error) {
+	t := p.cur()
+	if t.Kind != token.Ident {
+		return t, p.errorf(t.Pos, "expected the name of a binding, found %s", t)
+	}
+	if token.IsReserved(t.Lit) {
+		return t, p.errorf(t.Pos, "%q is a reserved word and cannot name a binding", t.Lit)
+	}
+	p.next()
+	return t, nil
+}
+
+func (p *parser) expectAssign() (token.Token, error) {
+	if p.at(token.LParen) {
+		return p.cur(), p.errorf(p.cur().Pos, "%q functions are not implemented yet", "local")
+	}
+	if !p.at(token.Assign) {
+		return p.cur(), p.errorf(p.cur().Pos, "expected %q after the name of a binding, found %s", "=", p.cur())
+	}
+	return p.next(), nil
 }
 
 func (p *parser) parseBlockSequence(col int) (ast.Node, error) {

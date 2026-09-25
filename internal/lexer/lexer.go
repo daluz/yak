@@ -262,12 +262,25 @@ func (l *lexer) scanToken() error {
 		l.advance()
 		l.emit(token.Token{Kind: token.RParen, Lit: ")", Pos: start})
 		return nil
+	case c == '?':
+		switch l.peekAt(1) {
+		case '?':
+			l.advance()
+			l.advance()
+			l.emit(token.Token{Kind: token.Coalesce, Lit: "??", Pos: start})
+			return nil
+		case '.', '[':
+			l.advance()
+			l.emit(token.Token{Kind: token.Question, Lit: "?", Pos: start})
+			return nil
+		}
+		return l.errorf(start,
+			"explicit key indicators (%q) are not supported; use [expr] for a computed key, %q for an optional access, or %q for a default",
+			"?", "?.", "??")
 	case c == '&' || c == '*':
 		return l.errorf(start, "anchors and aliases are not supported in yak; use a local variable instead")
 	case c == '!':
 		return l.errorf(start, "tags are not supported in yak yet; they will arrive with schemas")
-	case c == '?':
-		return l.errorf(start, "explicit key indicators (%q) are not supported; use [expr] for computed keys", "?")
 	case c == '%':
 		return l.errorf(start, "directives (%q) are not supported", "%")
 	default:

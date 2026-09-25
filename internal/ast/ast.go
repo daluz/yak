@@ -36,8 +36,28 @@ type Document struct {
 // or in flow form with braces.
 type Mapping struct {
 	Base
+	// Binds holds the "local" bindings written among the entries. They cover
+	// the whole mapping, wherever in it they appear, and they can see the
+	// mapping itself, so a binding may refer to a field with ".name".
+	Binds   []*Binding
 	Entries []*Entry
 	Flow    bool
+}
+
+// Binding is one "name = value" pair introduced by "local".
+type Binding struct {
+	Base
+	Name  string
+	Value Node
+}
+
+// Local scopes bindings over a body that is not a mapping. Bindings written
+// in a mapping belong to the Mapping instead, so that they can refer to its
+// fields.
+type Local struct {
+	Base
+	Binds []*Binding
+	Body  Node
 }
 
 // Entry is one key/value pair of a Mapping.
@@ -127,6 +147,9 @@ type Field struct {
 	Base
 	X    Node
 	Name string
+	// Optional records the "?." form, which yields null instead of failing
+	// when x is null or has no such field.
+	Optional bool
 }
 
 // Index is an "x[i]" access.
@@ -134,11 +157,19 @@ type Index struct {
 	Base
 	X     Node
 	Index Node
+	// Optional records the "?[" form, which yields null instead of failing
+	// when x is null or has nothing at that index.
+	Optional bool
 }
 
-// Ident is a bare identifier. Until "local" bindings exist there is nothing
-// for one to resolve to, but the node gives the evaluator a place to produce a
-// precise error.
+// Coalesce is "x ?? y", which evaluates to y when x is null.
+type Coalesce struct {
+	Base
+	X Node
+	Y Node
+}
+
+// Ident is a bare identifier, which names a "local" binding.
 type Ident struct {
 	Base
 	Name string

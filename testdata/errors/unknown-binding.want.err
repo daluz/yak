@@ -1,0 +1,1 @@
+unknown-binding.yak:3:8: unknown identifier "regions"; strings must be quoted; bindings in scope: "region", "zone"
