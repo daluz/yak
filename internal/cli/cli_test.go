@@ -163,6 +163,32 @@ func TestTemplateFormatFlag(t *testing.T) {
 	}
 }
 
+func TestTemplateDropsNullDocuments(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "local unused = 1\n---\nname: \"web\"\n")
+
+	out, err := run(t, "template", tmpl)
+	if err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	if out != "name: web\n" {
+		t.Errorf("stdout = %q, want the null document to be left out", out)
+	}
+}
+
+func TestTemplateKeepsNullDocumentsOnRequest(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "local unused = 1\n---\nname: \"web\"\n")
+
+	out, err := run(t, "template", tmpl, "--keep-null-documents")
+	if err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	if out != "null\n---\nname: web\n" {
+		t.Errorf("stdout = %q, want the null document to be kept", out)
+	}
+}
+
 func TestTemplateRejectsUnknownFormat(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")

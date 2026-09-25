@@ -12,26 +12,144 @@ import (
 // reference, or a flow collection.
 func (p *parser) parseInlineValue() (ast.Node, error) { return p.parseExpr() }
 
-// parseExpr parses an expression. "??" is the only operator, so there is no
-// precedence table to consult yet; it binds looser than any access.
-//
-// The right hand side may spill onto later lines, but the "??" itself must
-// stay on the line its left operand ended on, so that a block mapping is
-// never silently continued by the line below it.
+// parseExpr parses an expression. A conditional binds looser than every
+// operator, so it is recognised before anything else.
 func (p *parser) parseExpr() (ast.Node, error) {
-	x, err := p.parseOperand()
+	if p.atKeyword(token.KeywordIf) {
+		return p.parseIf()
+	}
+	return p.parseCoalesce()
+}
+
+// parseCoalesce parses the "??" level, which binds looser than the boolean
+// and comparison operators.
+//
+// The right hand side may spill onto later lines, but the operator itself
+// must stay on the line its left operand ended on, so that a block mapping is
+// never silently continued by the line below it. Every binary operator
+// follows that rule.
+func (p *parser) parseCoalesce() (ast.Node, error) {
+	x, err := p.parseBinary(0)
 	if err != nil {
 		return nil, err
 	}
 	for p.at(token.Coalesce) && p.cur().Line() == p.prevEnd.Line {
 		p.next()
-		y, err := p.parseOperand()
+		y, err := p.parseBinary(0)
 		if err != nil {
 			return nil, err
 		}
 		x = &ast.Coalesce{Base: ast.At(x.Pos()), X: x, Y: y}
 	}
 	return x, nil
+}
+
+// precedence lists the binary operators by level, loosest first. Every level
+// is left associative.
+var precedence = [][]token.Kind{
+	{token.Or},
+	{token.And},
+	{token.Eq, token.Ne},
+	{token.Lt, token.Le, token.Gt, token.Ge},
+}
+
+func (p *parser) parseBinary(level int) (ast.Node, error) {
+	if level == len(precedence) {
+		return p.parseUnary()
+	}
+	x, err := p.parseBinary(level + 1)
+	if err != nil {
+		return nil, err
+	}
+	for p.atAny(precedence[level]) && p.cur().Line() == p.prevEnd.Line {
+		op := p.next()
+		y, err := p.parseBinary(level + 1)
+		if err != nil {
+			return nil, err
+		}
+		x = &ast.Binary{Base: ast.At(x.Pos()), Op: op.Kind, OpPos: op.Pos, X: x, Y: y}
+	}
+	return x, nil
+}
+
+func (p *parser) atAny(kinds []token.Kind) bool {
+	for _, k := range kinds {
+		if p.at(k) {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *parser) parseUnary() (ast.Node, error) {
+	if p.at(token.Not) {
+		t := p.next()
+		x, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.Unary{Base: ast.At(t.Pos), Op: token.Not, X: x}, nil
+	}
+	return p.parseOperand()
+}
+
+// parseIf parses "if cond then x else y". The branches are full expressions,
+// so "else if" chains without parentheses and a trailing "else" belongs to
+// the innermost conditional that is still open.
+func (p *parser) parseIf() (ast.Node, error) {
+	kw := p.next()
+	cond, err := p.parseCoalesce()
+	if err != nil {
+		return nil, err
+	}
+	if !p.atKeyword(token.KeywordThen) {
+		return nil, p.errorf(p.cur().Pos, "expected %q after the condition of an %q, found %s",
+			"then", "if", p.cur())
+	}
+	p.next()
+	then, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	n := &ast.If{Base: ast.At(kw.Pos), Cond: cond, Then: then}
+	if p.atKeyword(token.KeywordElse) {
+		p.next()
+		if n.Else, err = p.parseExpr(); err != nil {
+			return nil, err
+		}
+	}
+	return n, nil
+}
+
+// parseLoop parses the "for name in source" clause that turns a flow
+// collection into a comprehension, along with its optional "if" filter.
+func (p *parser) parseLoop(pos token.Pos) (ast.Loop, error) {
+	var loop ast.Loop
+	p.next()
+	name := p.cur()
+	switch {
+	case name.Kind != token.Ident:
+		return loop, p.errorf(name.Pos, "expected the name of the loop variable after %q, found %s", "for", name)
+	case token.IsReserved(name.Lit) || token.IsKeyword(name.Lit):
+		return loop, p.errorf(name.Pos, "%q is a keyword and cannot name a loop variable", name.Lit)
+	}
+	p.next()
+	if !p.atKeyword(token.KeywordIn) {
+		return loop, p.errorf(p.cur().Pos, "expected %q after the loop variable, found %s", "in", p.cur())
+	}
+	p.next()
+	source, err := p.parseExpr()
+	if err != nil {
+		return loop, err
+	}
+	loop = ast.Loop{Base: ast.At(pos), Var: name.Lit, VarPos: name.Pos, Source: source}
+	if p.atKeyword(token.KeywordIf) {
+		p.next()
+		if loop.Filter, err = p.parseExpr(); err != nil {
+			return loop, err
+		}
+	}
+	return loop, nil
 }
 
 func (p *parser) parseOperand() (ast.Node, error) {
@@ -127,9 +245,16 @@ func (p *parser) parseIdent() (ast.Node, error) {
 		return &ast.Null{Base: ast.At(t.Pos)}, nil
 	case token.KeywordLocal:
 		return nil, p.errorf(t.Pos, "a %q binding is a statement of its own, not a value", "local")
+	case token.KeywordIf:
+		// An "if" is looser than every operator, so one written where an
+		// operand belongs has to say which way it groups.
+		return nil, p.errorf(t.Pos, "an %q cannot be used as an operand here; wrap it in parentheses", "if")
 	}
 	if msg, ok := unsupportedKeywords[t.Lit]; ok {
 		return nil, p.errorf(t.Pos, "%s", msg)
+	}
+	if token.IsKeyword(t.Lit) {
+		return nil, p.errorf(t.Pos, "%q is a keyword and cannot be used as a value; quote it to make it a string", t.Lit)
 	}
 	// Whether a name such as "no" is a mistyped boolean or a binding cannot
 	// be decided here; the evaluator knows what is in scope and says so.
@@ -217,6 +342,9 @@ func (p *parser) parseFlowSequence() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		if len(s.Items) == 0 && p.atKeyword(token.KeywordFor) {
+			return p.parseSeqComp(open, item)
+		}
 		s.Items = append(s.Items, &ast.Item{Value: item})
 		if p.at(token.Comma) {
 			p.next()
@@ -252,19 +380,23 @@ func (p *parser) parseFlowMapping() (ast.Node, error) {
 		case token.Colon:
 		case token.DoubleColon:
 			hidden = true
-		case token.DoubleColonQuestion:
+		case token.ColonQuestion:
 			hideNull = true
 		default:
-			return nil, p.errorf(p.cur().Pos, "expected %q, %q or %q after mapping key, found %s", ":", "::", "::?", p.cur())
+			return nil, p.errorf(p.cur().Pos, "expected %q, %q or %q after mapping key, found %s", ":", "::", ":?", p.cur())
 		}
 		p.next()
 		value, err := p.parseExpr()
 		if err != nil {
 			return nil, err
 		}
-		m.Entries = append(m.Entries, &ast.Entry{
+		entry := &ast.Entry{
 			Key: key, Computed: computed, Hidden: hidden, HideNull: hideNull, Value: value, KeyPos: keyPos,
-		})
+		}
+		if len(m.Entries) == 0 && p.atKeyword(token.KeywordFor) {
+			return p.parseMapComp(open, entry)
+		}
+		m.Entries = append(m.Entries, entry)
 		if p.at(token.Comma) {
 			p.next()
 			continue
@@ -276,6 +408,34 @@ func (p *parser) parseFlowMapping() (ast.Node, error) {
 			return nil, p.errorf(p.cur().Pos, "expected %q or %q in flow mapping, found %s", ",", "}", p.cur())
 		}
 	}
+}
+
+// parseSeqComp parses the rest of "[item for name in source]", with item
+// already parsed and the current token being "for".
+func (p *parser) parseSeqComp(open token.Token, item ast.Node) (ast.Node, error) {
+	loop, err := p.parseLoop(open.Pos)
+	if err != nil {
+		return nil, err
+	}
+	if !p.at(token.RBracket) {
+		return nil, p.errorf(p.cur().Pos, "expected %q to close a comprehension, found %s", "]", p.cur())
+	}
+	p.next()
+	return &ast.SeqComp{Loop: loop, Item: item}, nil
+}
+
+// parseMapComp parses the rest of "{key: value for name in source}", with the
+// entry already parsed and the current token being "for".
+func (p *parser) parseMapComp(open token.Token, entry *ast.Entry) (ast.Node, error) {
+	loop, err := p.parseLoop(open.Pos)
+	if err != nil {
+		return nil, err
+	}
+	if !p.at(token.RBrace) {
+		return nil, p.errorf(p.cur().Pos, "expected %q to close a comprehension, found %s", "}", p.cur())
+	}
+	p.next()
+	return &ast.MapComp{Loop: loop, Entry: entry}, nil
 }
 
 // buildString converts a string token into an ast.String, parsing each

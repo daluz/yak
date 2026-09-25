@@ -1,0 +1,13 @@
+ports:
+  - name: http
+    number: 80
+    tls: false
+  - name: https
+    number: 443
+    tls: true
+  - name: admin
+    number: 8080
+    tls: true
+grid:
+  - [1, 2]
+  - [3, 4]

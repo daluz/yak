@@ -2,9 +2,10 @@
 
 Done so far: the restricted YAML parser, string interpolation, relative
 references, hidden fields, context files, the `template` command, `local`
-bindings, the `??` and `?.` operators, and the YAML, KYAML, JSON, TOML and
-line-delimited output formats. What follows is the planned order of the
-remaining work.
+bindings, the `??` and `?.` operators, comparison and boolean operators,
+`if`/`then`/`else`, sequence and mapping comprehensions, and the YAML, KYAML,
+JSON, TOML and line-delimited output formats. What follows is the planned
+order of the remaining work.
 
 Everything listed here is already reserved in the language. Using one of these
 keywords today produces an explicit "not implemented yet" error pointing at the
@@ -75,10 +76,13 @@ Both slot into `internal/cli` beside `template`, and both can reuse
 
 ## Smaller items
 
-- Operators. `??` is the only one so far, and `parser.parseExpr` handles it
-  without a precedence table; arithmetic and comparison will need one. Note
-  that `-` is allowed inside identifiers, so binary operators will require
+- Arithmetic. The comparison and boolean operators are in, and
+  `parser.precedence` is the table to add `+`, `-`, `*`, `/` and `%` to.
+  Note that `-` is allowed inside identifiers, so binary operators require
   surrounding whitespace.
+- Chained comprehension clauses. One `for` with an optional `if` is
+  supported; jsonnet allows any number of them, which `parser.parseLoop`
+  would have to return a slice of.
 - Preserving flow style. Flow collections currently render as block
   collections; `ast.Mapping.Flow` and `ast.Sequence.Flow` record the original
   style if that becomes worth honouring.

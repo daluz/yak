@@ -84,7 +84,7 @@ type Entry struct {
 	// Hidden records that the entry was written with "::" and must be omitted
 	// from rendered output while remaining visible to references.
 	Hidden bool
-	// HideNull records that the entry was written with "::?", which omits it
+	// HideNull records that the entry was written with ":?", which omits it
 	// from rendered output only when its value turns out to be null.
 	HideNull bool
 	Value    Node
@@ -191,6 +191,55 @@ type Coalesce struct {
 	Base
 	X Node
 	Y Node
+}
+
+// Unary is "!x".
+type Unary struct {
+	Base
+	Op token.Kind
+	X  Node
+}
+
+// Binary is a comparison or a logical operator applied to two operands.
+type Binary struct {
+	Base
+	Op token.Kind
+	// OpPos points at the operator, which is where a diagnostic about
+	// mismatched operands belongs.
+	OpPos token.Pos
+	X     Node
+	Y     Node
+}
+
+// If is "if cond then x else y". Else is nil when the branch was left out,
+// which makes the conditional yield null instead.
+type If struct {
+	Base
+	Cond Node
+	Then Node
+	Else Node
+}
+
+// Loop is the "for name in source" clause of a comprehension, together with
+// the optional "if" filter that decides which items it keeps.
+type Loop struct {
+	Base
+	Var    string
+	VarPos token.Pos
+	Source Node
+	Filter Node
+}
+
+// SeqComp is a sequence comprehension, "[item for name in source]".
+type SeqComp struct {
+	Loop
+	Item Node
+}
+
+// MapComp is a mapping comprehension, "{key: value for name in source}".
+type MapComp struct {
+	Loop
+	Entry *Entry
 }
 
 // Ident is a bare identifier, which names a "local" binding.

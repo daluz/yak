@@ -17,18 +17,7 @@ func dump(n ast.Node) string {
 		parts := make([]string, 0, len(t.Binds)+len(t.Entries))
 		parts = append(parts, dumpBinds(t.Binds)...)
 		for _, e := range t.Entries {
-			sep := ":"
-			switch {
-			case e.Hidden:
-				sep = "::"
-			case e.HideNull:
-				sep = "::?"
-			}
-			key := dump(e.Key)
-			if e.Computed {
-				key = "[" + key + "]"
-			}
-			parts = append(parts, key+sep+dump(e.Value))
+			parts = append(parts, dumpEntry(e))
 		}
 		return "{" + strings.Join(parts, " ") + "}"
 	case *ast.Sequence:
@@ -70,6 +59,20 @@ func dump(n ast.Node) string {
 		return dump(t.X) + optional(t.Optional) + "[" + dump(t.Index) + "]"
 	case *ast.Coalesce:
 		return "(" + dump(t.X) + "??" + dump(t.Y) + ")"
+	case *ast.Unary:
+		return "!" + dump(t.X)
+	case *ast.Binary:
+		return "(" + dump(t.X) + strings.Trim(t.Op.String(), `"`) + dump(t.Y) + ")"
+	case *ast.If:
+		out := "if(" + dump(t.Cond) + ";" + dump(t.Then)
+		if t.Else != nil {
+			out += ";" + dump(t.Else)
+		}
+		return out + ")"
+	case *ast.SeqComp:
+		return "[" + dump(t.Item) + dumpLoop(t.Loop) + "]"
+	case *ast.MapComp:
+		return "{" + dumpEntry(t.Entry) + dumpLoop(t.Loop) + "}"
 	case *ast.Local:
 		return "local(" + strings.Join(dumpBinds(t.Binds), " ") + ";" + dump(t.Body) + ")"
 	case *ast.Ident:
@@ -77,6 +80,29 @@ func dump(n ast.Node) string {
 	default:
 		return fmt.Sprintf("?%T", n)
 	}
+}
+
+func dumpEntry(e *ast.Entry) string {
+	sep := ":"
+	switch {
+	case e.Hidden:
+		sep = "::"
+	case e.HideNull:
+		sep = ":?"
+	}
+	key := dump(e.Key)
+	if e.Computed {
+		key = "[" + key + "]"
+	}
+	return key + sep + dump(e.Value)
+}
+
+func dumpLoop(l ast.Loop) string {
+	out := " for " + l.Var + " in " + dump(l.Source)
+	if l.Filter != nil {
+		out += " if " + dump(l.Filter)
+	}
+	return out
 }
 
 func dumpBinds(binds []*ast.Binding) []string {
@@ -119,7 +145,7 @@ func TestParseBlockStructures(t *testing.T) {
 		{"booleans", "a: true\nb: false\n", `{"a":true "b":false}`},
 		{"floats", "a: 1.5\n", `{"a":1.5}`},
 		{"hidden field", "a:: 1\n", `{"a"::1}`},
-		{"hidden if null field", "a::? 1\n", `{"a"::?1}`},
+		{"hidden if null field", "a:? 1\n", `{"a":?1}`},
 		{"quoted key", `"a b": 1`, `{"a b":1}`},
 		{"kebab key", "a-b: 1\n", `{"a-b":1}`},
 		{"computed key", "[$$.k]: 1\n", `{[context.k]:1}`},
@@ -132,7 +158,7 @@ func TestParseBlockStructures(t *testing.T) {
 		{"flow mapping", "a: {b: 1, c: 2}\n", `{"a":{"b":1 "c":2}}`},
 		{"flow trailing comma", "a: [1, 2,]\n", `{"a":[1 2]}`},
 		{"flow hidden field", "a: {b:: 1}\n", `{"a":{"b"::1}}`},
-		{"flow hidden if null field", "a: {b::? 1}\n", `{"a":{"b"::?1}}`},
+		{"flow hidden if null field", "a: {b:? 1}\n", `{"a":{"b":?1}}`},
 		{"scalar document", `"hello"`, `"hello"`},
 		{"comment only lines", "# c\na: 1 # d\n", `{"a":1}`},
 	}
@@ -235,6 +261,93 @@ func TestParseCoalesce(t *testing.T) {
 	}
 }
 
+func TestParseOperators(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"equality", "a: 1 == 2\n", `{"a":(1==2)}`},
+		{"inequality", "a: 1 != 2\n", `{"a":(1!=2)}`},
+		{"ordering", "a: 1 < 2\nb: 1 <= 2\nc: 1 > 2\nd: 1 >= 2\n", `{"a":(1<2) "b":(1<=2) "c":(1>2) "d":(1>=2)}`},
+		{"negation", "a: !true\n", `{"a":!true}`},
+		{"double negation needs a space", "a: ! !true\n", `{"a":!!true}`},
+		{"conjunction", "a: true && false\n", `{"a":(true&&false)}`},
+		{"comparison binds tighter than and", "a: 1 < 2 && 3 < 4\n", `{"a":((1<2)&&(3<4))}`},
+		{"and binds tighter than or", "a: true || true && false\n", `{"a":(true||(true&&false))}`},
+		{"equality binds looser than ordering", "a: 1 < 2 == true\n", `{"a":((1<2)==true)}`},
+		{"negation binds tighter than comparison", "a: !true == false\n", `{"a":(!true==false)}`},
+		{"coalesce binds looser than or", "a: .x ?? true || false\n", `{"a":(self+0.x??(true||false))}`},
+		{"parentheses regroup", "a: (1 < 2) == (3 < 4)\n", `{"a":((1<2)==(3<4))}`},
+		{"left associative", "a: 1 == 2 == true\n", `{"a":((1==2)==true)}`},
+		{"in an interpolation", `a: "${1 < 2}"`, `{"a":concat((1<2))}`},
+		{"greater than beats a folded scalar", "a: .x > 2\n", `{"a":(self+0.x>2)}`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseOne(t, tc.src); got != tc.want {
+				t.Errorf("Parse(%q) = %s, want %s", tc.src, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseConditionals(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"full form", "a: if true then 1 else 2\n", `{"a":if(true;1;2)}`},
+		{"without else", "a: if true then 1\n", `{"a":if(true;1)}`},
+		{"chained", "a: if true then 1 else if false then 2 else 3\n", `{"a":if(true;1;if(false;2;3))}`},
+		{"with a comparison", "a: if .n > 1 then 1 else 2\n", `{"a":if((self+0.n>1);1;2)}`},
+		{"wrapped over lines", "a:\n  if true\n  then 1\n  else 2\n", `{"a":if(true;1;2)}`},
+		{"branches may be collections", "a: if true then [1] else {b: 2}\n", `{"a":if(true;[1];{"b":2})}`},
+		{"inside an interpolation", `a: "${if true then "y" else "n"}"`, `{"a":concat(if(true;"y";"n"))}`},
+		{"in a flow sequence", "a: [if true then 1 else 2]\n", `{"a":[if(true;1;2)]}`},
+		{"parenthesized as an operand", "a: (if true then 1 else 2) == 1\n", `{"a":(if(true;1;2)==1)}`},
+		{"a key named else ends it", "a: if true then 1\nelse: 2\n", `{"a":if(true;1) "else":2}`},
+		{"keywords stay usable as keys", "if: 1\nthen: 2\nfor: 3\nin: 4\n", `{"if":1 "then":2 "for":3 "in":4}`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseOne(t, tc.src); got != tc.want {
+				t.Errorf("Parse(%q) = %s, want %s", tc.src, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseComprehensions(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"sequence", "a: [x for x in $$.list]\n", `{"a":[ident(x) for x in context.list]}`},
+		{"sequence with a filter", "a: [x for x in $$.list if x > 1]\n", `{"a":[ident(x) for x in context.list if (ident(x)>1)]}`},
+		{"sequence over a literal", "a: [x for x in [1, 2]]\n", `{"a":[ident(x) for x in [1 2]]}`},
+		{"mapping with a computed key", "a: {[x]: 1 for x in $$.list}\n", `{"a":{[ident(x)]:1 for x in context.list}}`},
+		{"mapping with an interpolated key", `a: {"k${x}": x for x in $$.list}`, `{"a":{concat("k",ident(x)):ident(x) for x in context.list}}`},
+		{"mapping with a filter", "a: {[x]: 1 for x in $$.list if true}\n", `{"a":{[ident(x)]:1 for x in context.list if true}}`},
+		{"mapping of hidden entries", "a: {[x]:: 1 for x in $$.list}\n", `{"a":{[ident(x)]::1 for x in context.list}}`},
+		{"a conditional item", "a: [if x then 1 else 2 for x in $$.list]\n", `{"a":[if(ident(x);1;2) for x in context.list]}`},
+		{"a conditional source", "a: [x for x in if true then [1] else [2]]\n", `{"a":[ident(x) for x in if(true;[1];[2])]}`},
+		{"wrapped over lines", "a: [\n  x\n  for x in $$.list\n]\n", `{"a":[ident(x) for x in context.list]}`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseOne(t, tc.src); got != tc.want {
+				t.Errorf("Parse(%q) = %s, want %s", tc.src, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseInterpolation(t *testing.T) {
 	tests := []struct {
 		name string
@@ -269,6 +382,8 @@ func TestParseDocuments(t *testing.T) {
 		{"trailing end marker", "a: 1\n...\n", []string{`{"a":1}`}},
 		{"empty file", "", []string{"null"}},
 		{"comment only file", "# nothing\n", []string{"null"}},
+		{"bindings only document", "local x = 1\n", []string{"local(x=1;null)"}},
+		{"bindings only first document", "local x = 1\n---\na: 1\n", []string{"local(x=1;null)", `{"a":1}`}},
 	}
 
 	for _, tc := range tests {
@@ -381,7 +496,7 @@ func TestParseErrors(t *testing.T) {
 		{"import keyword", "a: import\n", `"import" is not implemented yet`},
 		{"schema keyword", "a: schema\n", `"schema" is not implemented yet`},
 		{"reserved key", "local: 1\n", "reserved word"},
-		{"local without a body", "local x = 1\n", "must be followed by a value"},
+		{"local without a body", "a:\n  local x = 1\n", "must be followed by a value"},
 		{"local without a name", "local = 1\na: 1\n", "expected the name of a binding"},
 		{"local without an assignment", "local x 1\na: 1\n", `expected "=" after the name of a binding`},
 		{"local naming a keyword", "local null = 1\na: 1\n", "cannot name a binding"},
@@ -402,6 +517,17 @@ func TestParseErrors(t *testing.T) {
 		{"unknown special variable", "a: $ctx\n", "unknown special variable"},
 		{"empty interpolation", `a: "${}"`, "empty string interpolation"},
 		{"junk in interpolation", `a: "${.b .c}"`, "unexpected"},
+		{"double bang is still a tag", "a: !!true\n", "tags are not supported"},
+		{"if without then", "a: if true 1\n", `expected "then"`},
+		{"if as an operand", "a: 1 == if true then 1 else 2\n", "wrap it in parentheses"},
+		{"a keyword as a value", "a: then\n", `"then" is a keyword`},
+		{"local named for", "local for = 1\na: 1\n", `"for" is a keyword and cannot name a binding`},
+		{"comprehension without in", "a: [x for x of $$.l]\n", `expected "in"`},
+		{"comprehension without a variable", "a: [x for 1 in $$.l]\n", "expected the name of the loop variable"},
+		{"comprehension naming a keyword", "a: [x for in in $$.l]\n", "cannot name a loop variable"},
+		{"comprehension after several items", "a: [1, 2 for x in $$.l]\n", `expected "," or "]"`},
+		{"unterminated comprehension", "a: [x for x in $$.l\n", `expected "]" to close a comprehension`},
+		{"unterminated mapping comprehension", "a: {[x]: 1 for x in $$.l\n", `expected "}" to close a comprehension`},
 	}
 
 	for _, tc := range tests {

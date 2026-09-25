@@ -73,6 +73,20 @@ func (p *parser) cur() token.Token { return p.toks[p.i] }
 
 func (p *parser) at(k token.Kind) bool { return p.cur().Kind == k }
 
+// atKeyword reports whether the current token is the given contextual
+// keyword. One followed by a colon is a mapping key instead, which is what
+// keeps names such as "for" and "else" usable as keys.
+func (p *parser) atKeyword(word string) bool {
+	if !p.at(token.Ident) || p.cur().Lit != word {
+		return false
+	}
+	switch p.toks[p.i+1].Kind {
+	case token.Colon, token.DoubleColon, token.ColonQuestion:
+		return false
+	}
+	return true
+}
+
 func (p *parser) next() token.Token {
 	t := p.toks[p.i]
 	p.prevEnd = t.End
@@ -120,7 +134,7 @@ func (p *parser) parseStream() (*ast.Stream, error) {
 			}
 			continue
 		}
-		body, err := p.parseBlockNode()
+		body, err := p.parseDocumentBody()
 		if err != nil {
 			return nil, err
 		}
@@ -160,6 +174,15 @@ func attachFoot(body ast.Node, foot []string) {
 	}
 }
 
+// parseDocumentBody parses the node a document holds. Unlike a block nested
+// inside one, a document may hold nothing but bindings, and is then null.
+func (p *parser) parseDocumentBody() (ast.Node, error) {
+	if p.atLocal() {
+		return p.parseLocalScope(p.cur().Col(), true)
+	}
+	return p.parseBlockNode()
+}
+
 // parseBlockNode parses a node in block context. The node's own extent is
 // fixed by the column of its first token: a mapping ends at the first key that
 // is less indented, and a sequence at the first dash that is.
@@ -169,7 +192,7 @@ func (p *parser) parseBlockNode() (ast.Node, error) {
 		return p.parseBlockSequence(t.Col())
 	}
 	if p.atLocal() {
-		return p.parseLocalScope(t.Col())
+		return p.parseLocalScope(t.Col(), false)
 	}
 	if p.looksLikeEntry() {
 		return p.parseBlockMapping(t.Col())
@@ -181,7 +204,10 @@ func (p *parser) parseBlockNode() (ast.Node, error) {
 // statements. Bindings in front of a mapping become that mapping's own, so
 // that they read the same as bindings written between its entries; anything
 // else is wrapped in a scope of its own.
-func (p *parser) parseLocalScope(col int) (ast.Node, error) {
+//
+// bare allows the bindings to stand on their own, with no value after them,
+// which is how a document made of nothing but bindings becomes null.
+func (p *parser) parseLocalScope(col int, bare bool) (ast.Node, error) {
 	pos := p.cur().Pos
 	var binds []*ast.Binding
 	for p.atLocal() && p.cur().Col() == col {
@@ -190,6 +216,9 @@ func (p *parser) parseLocalScope(col int) (ast.Node, error) {
 			return nil, err
 		}
 		binds = append(binds, declared...)
+	}
+	if bare && p.atDocBoundary() {
+		return &ast.Local{Base: ast.At(pos), Binds: binds, Body: &ast.Null{Base: ast.At(pos)}}, nil
 	}
 	if p.atDocBoundary() || p.cur().Col() < col {
 		return nil, p.errorf(pos, "a %q binding must be followed by a value in the same block", "local")
@@ -258,10 +287,10 @@ func (p *parser) parseMappingEntry(col int) (*ast.Entry, error) {
 	case token.Colon:
 	case token.DoubleColon:
 		hidden = true
-	case token.DoubleColonQuestion:
+	case token.ColonQuestion:
 		hideNull = true
 	default:
-		return nil, p.errorf(p.cur().Pos, "expected %q, %q or %q after mapping key, found %s", ":", "::", "::?", p.cur())
+		return nil, p.errorf(p.cur().Pos, "expected %q, %q or %q after mapping key, found %s", ":", "::", ":?", p.cur())
 	}
 	colon := p.next()
 	value, err := p.parseEntryValue(col, colon)
@@ -330,7 +359,7 @@ func (p *parser) parseLocalBinding(col int) ([]*ast.Binding, error) {
 	kw := p.next()
 	// A colon here means the line was meant to be an entry keyed "local".
 	switch p.cur().Kind {
-	case token.Colon, token.DoubleColon, token.DoubleColonQuestion:
+	case token.Colon, token.DoubleColon, token.ColonQuestion:
 		return nil, p.errorf(kw.Pos, "%q is a reserved word and must be quoted to be used as a key", kw.Lit)
 	}
 	if p.at(token.LBrace) {
@@ -403,6 +432,9 @@ func (p *parser) parseBindingName() (token.Token, error) {
 	if token.IsReserved(t.Lit) {
 		return t, p.errorf(t.Pos, "%q is a reserved word and cannot name a binding", t.Lit)
 	}
+	if token.IsKeyword(t.Lit) {
+		return t, p.errorf(t.Pos, "%q is a keyword and cannot name a binding", t.Lit)
+	}
 	p.next()
 	return t, nil
 }
@@ -462,7 +494,7 @@ func (p *parser) looksLikeEntry() bool {
 		return false
 	}
 	k := p.toks[j].Kind
-	return k == token.Colon || k == token.DoubleColon || k == token.DoubleColonQuestion
+	return k == token.Colon || k == token.DoubleColon || k == token.ColonQuestion
 }
 
 // keyEnd returns the index just past a key-shaped run of tokens starting at i,

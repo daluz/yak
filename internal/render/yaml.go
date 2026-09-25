@@ -21,6 +21,11 @@ func encodeYAML(docs []eval.Value, opts Options) ([]byte, error) {
 		}
 		nodes = append(nodes, node)
 	}
+	// An empty stream is written as nothing; the encoder refuses to close
+	// without having been given a document.
+	if len(nodes) == 0 {
+		return nil, nil
+	}
 
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)

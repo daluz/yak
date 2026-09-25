@@ -1,0 +1,38 @@
+# A sequence comprehension evaluates its item once per item of the source.
+names:
+  - port-http
+  - port-https
+  - port-admin
+# The item may be any value, including a mapping.
+containers:
+  - name: http
+    containerPort: 80
+  - name: https
+    containerPort: 443
+  - name: admin
+    containerPort: 8080
+# An "if" clause filters the source.
+public:
+  - http
+  - https
+# A mapping comprehension names each entry as it goes.
+byName:
+  http: 80
+  https: 443
+  admin: 8080
+labels:
+  port-https: "443"
+  port-admin: "8080"
+# The loop variable is an ordinary binding, so comprehensions nest.
+grid:
+  - - 1
+    - 2
+  - - 3
+    - 4
+# A comprehension opens no mapping of its own, so "." still names the one it
+# is written in.
+service: web
+endpoints:
+  - web:80
+  - web:443
+  - web:8080

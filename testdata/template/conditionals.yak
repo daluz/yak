@@ -1,0 +1,38 @@
+local env = $$.env
+local production = env == "prod"
+
+environment: env
+production: production
+
+# A conditional picks between two values.
+replicas: if production then $$.scale.max else $$.scale.min
+tier: if production then "gold" else if env == "staging" then "silver" else "bronze"
+
+# Without an "else" the conditional is null, which ":?" drops entirely.
+debug:? if !production then true
+profiler:? if production then true
+
+# Conditions are built from the comparison and boolean operators.
+checks:
+  equal: env == "staging"
+  unequal: env != "prod"
+  less: $$.scale.min < $$.scale.max
+  atMost: $$.scale.min <= 1
+  greater: $$.scale.max > 1
+  atLeast: $$.scale.max >= 4
+  negated: !production
+  both: env == "staging" && $$.scale.max > 1
+  either: production || $$.scale.min == 1
+
+# The branch that is not taken is never evaluated, so this one is safe even
+# though the context has no "replicas" field.
+override: if $$?.replicas != null then $$.replicas else "default"
+
+# A conditional may be written across several lines.
+banner:
+  if production
+  then "serving live traffic"
+  else "not for production use"
+
+# An "if" is looser than every operator, so it needs parentheses to be one.
+inverted: !(if production then false else true)

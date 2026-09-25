@@ -1,0 +1,50 @@
+{
+  "names": [
+    "port-http",
+    "port-https",
+    "port-admin"
+  ],
+  "containers": [
+    {
+      "name": "http",
+      "containerPort": 80
+    },
+    {
+      "name": "https",
+      "containerPort": 443
+    },
+    {
+      "name": "admin",
+      "containerPort": 8080
+    }
+  ],
+  "public": [
+    "http",
+    "https"
+  ],
+  "byName": {
+    "http": 80,
+    "https": 443,
+    "admin": 8080
+  },
+  "labels": {
+    "port-https": "443",
+    "port-admin": "8080"
+  },
+  "grid": [
+    [
+      1,
+      2
+    ],
+    [
+      3,
+      4
+    ]
+  ],
+  "service": "web",
+  "endpoints": [
+    "web:80",
+    "web:443",
+    "web:8080"
+  ]
+}

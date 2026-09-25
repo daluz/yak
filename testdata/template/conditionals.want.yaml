@@ -1,0 +1,25 @@
+environment: staging
+production: false
+# A conditional picks between two values.
+replicas: 1
+tier: silver
+# Without an "else" the conditional is null, which ":?" drops entirely.
+debug: true
+# Conditions are built from the comparison and boolean operators.
+checks:
+  equal: true
+  unequal: true
+  less: true
+  atMost: true
+  greater: true
+  atLeast: true
+  negated: true
+  both: true
+  either: true
+# The branch that is not taken is never evaluated, so this one is safe even
+# though the context has no "replicas" field.
+override: default
+# A conditional may be written across several lines.
+banner: not for production use
+# An "if" is looser than every operator, so it needs parentheses to be one.
+inverted: false

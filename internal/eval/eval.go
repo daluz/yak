@@ -61,6 +61,13 @@ func (e *Env) pushBindings(binds []*ast.Binding) (*Env, error) {
 	return inner, nil
 }
 
+// bindOne returns an environment that adds a frame holding a single binding,
+// which is how a comprehension names the item it is looking at.
+func (e *Env) bindOne(name string, t *Thunk) *Env {
+	s := &scope{outer: e.scope, binds: map[string]*Thunk{name: t}}
+	return &Env{doc: e.doc, self: e.self, scope: s}
+}
+
 // lookup finds a binding, searching outwards from the innermost frame.
 func (e *Env) lookup(name string) (*Thunk, bool) {
 	for s := e.scope; s != nil; s = s.outer {
@@ -132,6 +139,16 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 		return evalIndex(node, env)
 	case *ast.Coalesce:
 		return evalCoalesce(node, env)
+	case *ast.Unary:
+		return evalUnary(node, env)
+	case *ast.Binary:
+		return evalBinary(node, env)
+	case *ast.If:
+		return evalIf(node, env)
+	case *ast.SeqComp:
+		return evalSeqComp(node, env)
+	case *ast.MapComp:
+		return evalMapComp(node, env)
 	case *ast.Local:
 		return evalLocal(node, env)
 	case *ast.Ident:
@@ -210,6 +227,79 @@ func evalSequence(node *ast.Sequence, env *Env) (Value, error) {
 		}
 	}
 	return NewArray(items), nil
+}
+
+// evalSeqComp builds a sequence by evaluating the comprehension's item once
+// per item of its source.
+func evalSeqComp(node *ast.SeqComp, env *Env) (Value, error) {
+	var items []*Elem
+	err := iterate(&node.Loop, env, func(child *Env) error {
+		items = append(items, &Elem{Value: &Thunk{node: node.Item, env: child, pos: node.Item.Pos()}})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return NewArray(items), nil
+}
+
+// evalMapComp builds a mapping the same way. Keys have to be resolved as the
+// loop runs, because two items that name the same key are a duplicate rather
+// than an overwrite, exactly as in a written-out mapping.
+func evalMapComp(node *ast.MapComp, env *Env) (Value, error) {
+	obj := NewObject()
+	e := node.Entry
+	err := iterate(&node.Loop, env, func(child *Env) error {
+		key, err := evalNode(e.Key, child)
+		if err != nil {
+			return err
+		}
+		name, ok := key.(String)
+		if !ok {
+			return errorf(e.KeyPos, "mapping keys must be strings, found %s", key.TypeName())
+		}
+		slot := obj.reserve(comments(e.Comments), e.Hidden, e.HideNull,
+			&Thunk{node: e.Value, env: child, pos: e.Value.Pos()})
+		if err := obj.bind(slot, string(name)); err != nil {
+			return errorf(e.KeyPos, "two items of the comprehension produced the key %q", string(name))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return obj, nil
+}
+
+// iterate walks the source sequence of a comprehension, calling yield with an
+// environment that names the current item. The filter has to be resolved as
+// the loop runs, so it forces each item it looks at; the body it guards stays
+// lazy like any other value.
+func iterate(loop *ast.Loop, env *Env, yield func(*Env) error) error {
+	src, err := evalNode(loop.Source, env)
+	if err != nil {
+		return err
+	}
+	arr, ok := src.(*Array)
+	if !ok {
+		return errorf(loop.Source.Pos(), "%q needs a sequence to walk over, found %s", "for", src.TypeName())
+	}
+	for _, item := range arr.Items() {
+		child := env.bindOne(loop.Var, item.Value)
+		if loop.Filter != nil {
+			keep, err := condition(loop.Filter, child, `the filter of a "for"`)
+			if err != nil {
+				return err
+			}
+			if !keep {
+				continue
+			}
+		}
+		if err := yield(child); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // comments carries the comments of a syntax node through to the renderer.

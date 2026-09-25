@@ -39,9 +39,9 @@ const (
 	String
 	Colon
 	DoubleColon
-	// DoubleColonQuestion is the "::?" of an entry hidden only when its
-	// value is null.
-	DoubleColonQuestion
+	// ColonQuestion is the ":?" of an entry hidden only when its value is
+	// null.
+	ColonQuestion
 	Dash
 	Comma
 	LBracket
@@ -60,34 +60,53 @@ const (
 	// Question is the "?" of an optional access, always followed directly by
 	// "." or "[".
 	Question
+	// Not is the "!" of a negated boolean.
+	Not
+	And
+	Or
+	Eq
+	Ne
+	Lt
+	Le
+	Gt
+	Ge
 )
 
 var kindNames = map[Kind]string{
-	EOF:                 "end of file",
-	DocStart:            `"---"`,
-	DocEnd:              `"..."`,
-	Ident:               "identifier",
-	DollarIdent:         "special variable",
-	Int:                 "integer",
-	Float:               "float",
-	String:              "string",
-	Colon:               `":"`,
-	DoubleColon:         `"::"`,
-	DoubleColonQuestion: `"::?"`,
-	Dash:                `"-"`,
-	Comma:               `","`,
-	LBracket:            `"["`,
-	RBracket:            `"]"`,
-	LBrace:              `"{"`,
-	RBrace:              `"}"`,
-	LParen:              `"("`,
-	RParen:              `")"`,
-	Dots:                `"."`,
-	Dollar:              `"$"`,
-	DoubleDollar:        `"$$"`,
-	Assign:              `"="`,
-	Coalesce:            `"??"`,
-	Question:            `"?"`,
+	EOF:           "end of file",
+	DocStart:      `"---"`,
+	DocEnd:        `"..."`,
+	Ident:         "identifier",
+	DollarIdent:   "special variable",
+	Int:           "integer",
+	Float:         "float",
+	String:        "string",
+	Colon:         `":"`,
+	DoubleColon:   `"::"`,
+	ColonQuestion: `":?"`,
+	Dash:          `"-"`,
+	Comma:         `","`,
+	LBracket:      `"["`,
+	RBracket:      `"]"`,
+	LBrace:        `"{"`,
+	RBrace:        `"}"`,
+	LParen:        `"("`,
+	RParen:        `")"`,
+	Dots:          `"."`,
+	Dollar:        `"$"`,
+	DoubleDollar:  `"$$"`,
+	Assign:        `"="`,
+	Coalesce:      `"??"`,
+	Question:      `"?"`,
+	Not:           `"!"`,
+	And:           `"&&"`,
+	Or:            `"||"`,
+	Eq:            `"=="`,
+	Ne:            `"!="`,
+	Lt:            `"<"`,
+	Le:            `"<="`,
+	Gt:            `">"`,
+	Ge:            `">="`,
 }
 
 func (k Kind) String() string {
@@ -173,11 +192,32 @@ const (
 	KeywordSchema = "schema"
 )
 
+// Keywords that mean something only where a value is expected. They are not
+// reserved, so "for" and "else" remain usable as mapping keys.
+const (
+	KeywordIf   = "if"
+	KeywordThen = "then"
+	KeywordElse = "else"
+	KeywordFor  = "for"
+	KeywordIn   = "in"
+)
+
 // IsReserved reports whether name is a reserved word that may not be used as a
 // plain value identifier.
 func IsReserved(name string) bool {
 	switch name {
 	case KeywordTrue, KeywordFalse, KeywordNull, KeywordLocal, KeywordImport, KeywordSchema:
+		return true
+	}
+	return false
+}
+
+// IsKeyword reports whether name is one of the contextual keywords. They may
+// be written as keys but cannot name a binding or a loop variable, because
+// reading such a name back would be read as the keyword instead.
+func IsKeyword(name string) bool {
+	switch name {
+	case KeywordIf, KeywordThen, KeywordElse, KeywordFor, KeywordIn:
 		return true
 	}
 	return false

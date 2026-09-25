@@ -85,8 +85,9 @@ error that tells you to use `true`/`false` or add quotes.
 
 ### Anchors and tags are gone
 
-`&anchor`, `*alias`, `!tag`, and `!!tag` are all rejected. Anchors are replaced
-by references and `local` bindings. Tags will return with schemas.
+`&anchor`, `*alias`, and `!!tag` are all rejected. Anchors are replaced by
+references and `local` bindings. Tags will return with schemas; `!` on its
+own is the boolean `not` operator, so only the `!!` form still names a tag.
 
 ### Keys
 
@@ -100,6 +101,11 @@ plain-key: 1              # any identifier: letters, digits, _, and interior -
 
 Numbers and reserved words must be quoted to be used as keys. Duplicate keys
 are an error rather than a silent overwrite.
+
+`if`, `then`, `else`, `for` and `in` mean something only where a value is
+expected, so they stay usable as bare keys: `for: 3` is an ordinary entry.
+They cannot name a binding or a loop variable, because reading such a name
+back would be read as the keyword instead.
 
 ### Hidden fields
 
@@ -126,13 +132,13 @@ services:
 
 ### Optional fields
 
-Writing `::?` hides an entry only when its value turns out to be `null`, which
+Writing `:?` hides an entry only when its value turns out to be `null`, which
 is how an entry that comes from the context is left out when the context says
 nothing about it:
 
 ```yaml
-replicas::? $$?.replicas
-selector::? $$?.selector
+replicas:? $$?.replicas
+selector:? $$?.selector
 ```
 
 With a context of `{replicas: 3}` that renders as:
@@ -259,6 +265,16 @@ api:
 
 Every document has its own bindings; nothing carries across a `---`.
 
+A document may hold nothing but bindings, in which case it is null and is
+left out of the output. Anywhere else a binding still has to be followed by a
+value in the same block:
+
+```yaml
+local unused = "nothing comes of this"
+---
+name: "web"
+```
+
 Because they resolve lazily, bindings may refer to each other in any order,
 and a binding that ends up needing itself is reported as a circular reference.
 A binding that is never used is never evaluated.
@@ -293,6 +309,116 @@ other. The right hand side is left unevaluated when it is not needed.
 together. `$$.replicas ?? 1` still fails when the context has no `replicas`
 field, because the failure happens before `??` is reached; `$$?.replicas ?? 1`
 is the way to say that the field is optional.
+
+## Operators
+
+Comparisons answer a boolean:
+
+| Syntax | Meaning |
+| --- | --- |
+| `x == y` / `x != y` | Equality. |
+| `x < y` / `x <= y` | Ordering. |
+| `x > y` / `x >= y` | Ordering the other way. |
+
+Equality compares two scalars. Values of different types are never equal,
+except that an integer and a float compare as the numbers they are, so
+`1 == 1.0`. Mappings and sequences have no useful answer and are an error
+rather than a silent `false`. Ordering is defined for two numbers or two
+strings; anything else is an error naming both types.
+
+`&&`, `||` and `!` combine booleans, and only booleans: yak has no
+truthiness, so `if 1` is an error rather than a guess. `&&` and `||`
+short-circuit, leaving the right hand side unevaluated whenever the left one
+already decides the answer.
+
+Operators bind tighter the further down this list they appear, and every
+level is left associative:
+
+```
+??
+||
+&&
+==  !=
+<  <=  >  >=
+!
+```
+
+Because `-` may appear inside an identifier, a binary operator needs
+whitespace around it: `a-b` is one name and `a - b` would be two.
+
+## Conditionals
+
+`if c then x else y` chooses between two values. The condition must be a
+boolean, and the branch that is not taken is never evaluated:
+
+```yaml
+replicas: if $$.env == "prod" then 5 else 1
+port: if $$?.port != null then $$.port else 8080
+```
+
+`else` may be left out, in which case a false condition yields `null`. Paired
+with `:?` that is how an entry appears only under some condition:
+
+```yaml
+debug:? if $$.env != "prod" then true
+```
+
+An `else` may hold another conditional, which is how a chain is written:
+
+```yaml
+tier: if .replicas > 3 then "gold" else if .replicas > 1 then "silver" else "bronze"
+```
+
+A conditional binds looser than every operator, so one used as an operand has
+to say how it groups: `!(if c then a else b)`. It may be spread over several
+lines, since `then` and `else` continue the expression they belong to:
+
+```yaml
+banner:
+  if $$.env == "prod"
+  then "serving live traffic"
+  else "not for production use"
+```
+
+## Comprehensions
+
+A flow collection whose single element is followed by `for name in source`
+builds itself by walking a sequence, evaluating the element once per item
+with `name` bound to it:
+
+```yaml
+names: ["port-${p.name}" for p in $$.ports]
+byName: {[p.name]: p.number for p in $$.ports}
+```
+
+With a context of `{ports: [{name: http, number: 80}]}` that renders as:
+
+```yaml
+names:
+  - port-http
+byName:
+  http: 80
+```
+
+The key of a mapping comprehension has to differ from item to item, because
+two items that produce the same key are a duplicate rather than an
+overwrite. Any key form works, so an interpolated string is as good as the
+bracketed one.
+
+An `if` clause after the source keeps only the items it accepts:
+
+```yaml
+public: [p.name for p in $$.ports if p.number < 1024]
+```
+
+The name is an ordinary binding, so it shadows an outer one, it is visible to
+anything nested inside the element, and a comprehension may appear inside
+another one. A comprehension opens no mapping of its own, so `.` still names
+the mapping the comprehension is written in.
+
+The source is walked as the comprehension is built, and so is the filter,
+which means both are resolved eagerly; the element itself stays as lazy as
+any other value.
 
 ## Context files
 
@@ -366,6 +492,11 @@ context files are not carried over at all.
 comments are kept, hidden fields are dropped, and documents are separated by
 `---`. Nothing is written unless every document evaluates successfully.
 
+A document that evaluates to `null`, whether it held nothing but bindings,
+nothing at all, or a body written as `null`, is left out.
+`--keep-null-documents` writes it instead. Dropping every document leaves the
+output empty, which the single-document formats report as an error.
+
 `--format` selects another encoding, and naming an output file with a known
 extension selects the matching one:
 
@@ -401,7 +532,7 @@ TOML is the one format that cannot hold everything yak can say:
 
 - A document must be a mapping, and there can only be one of them.
 - There is no null. A null value is an error naming the key it was found
-  at; `??` supplies something else, and `::?` drops the key instead.
+  at; `??` supplies something else, and `:?` drops the key instead.
 - Sub-tables have to follow the plain keys of the table they belong to, so
   keys come out grouped by whether they open a table. Within each group the
   source order holds.
@@ -410,17 +541,23 @@ TOML is the one format that cannot hold everything yak can say:
 
 ```
 stream      := document ("---" document)* "..."?
-document    := node
+document    := node | local+
 node        := local* (blockMapping | blockSequence | value)
 blockMapping:= (local | key sep value)+           -- aligned on one column
 blockSequence := ("-" node)+                      -- aligned on one column
-sep         := ":" | "::" | "::?"
+sep         := ":" | "::" | ":?"
 local       := "local" binding | "local" "{" binding+ "}"
 binding     := identifier "=" value
-value       := operand ("??" operand)*
+value       := conditional | coalesce
+conditional := "if" coalesce "then" value ("else" value)?
+coalesce    := binary ("??" binary)*
+binary      := unary (op unary)*                  -- see the precedence list
+unary       := "!"* operand
 operand     := literal | reference | flowSeq | flowMap | "(" value ")"
-flowSeq     := "[" (value ("," value)*)? ","? "]"
-flowMap     := "{" (key sep value ("," ...)*)? "}"
+flowSeq     := "[" ((value loop) | (value ("," value)*)? ","?) "]"
+flowMap     := "{" ((entry loop) | (entry ("," entry)*)?) "}"
+entry       := key sep value
+loop        := "for" identifier "in" value ("if" value)?
 key         := identifier | string | "[" value "]"
 literal     := string | int | float | "true" | "false" | "null"
 reference   := (dots | "$" | "$context" | "$$" | identifier) postfix*

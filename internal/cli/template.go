@@ -16,6 +16,7 @@ func newTemplateCommand() *cobra.Command {
 		contexts []string
 		output   string
 		format   string
+		keepNull bool
 	)
 
 	cmd := &cobra.Command{
@@ -26,13 +27,16 @@ func newTemplateCommand() *cobra.Command {
 			"with later files taking precedence, and are available to the template as\n" +
 			"$context (or $$).\n\n" +
 			"The output format defaults to YAML. Naming an output file with a known\n" +
-			"extension selects the matching format, and --format overrides both.",
+			"extension selects the matching format, and --format overrides both.\n\n" +
+			"A document that evaluates to null, such as one holding nothing but\n" +
+			"bindings, is left out unless --keep-null-documents is given.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts, err := renderOptions(format, output)
 			if err != nil {
 				return err
 			}
+			opts.KeepNullDocuments = keepNull
 			// Buffer the output so a failure midway through evaluation never
 			// leaves a half-written file behind.
 			var buf bytes.Buffer
@@ -62,6 +66,8 @@ func newTemplateCommand() *cobra.Command {
 		"write the rendered output to this file instead of standard output")
 	cmd.Flags().StringVarP(&format, "format", "f", "",
 		"output format: "+render.FormatList()+" (default yaml, or the extension of --output)")
+	cmd.Flags().BoolVar(&keepNull, "keep-null-documents", false,
+		"write the documents that evaluated to null instead of leaving them out")
 
 	return cmd
 }

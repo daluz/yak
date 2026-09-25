@@ -57,14 +57,14 @@ type Field struct {
 	// Hidden fields are written with "::". References can read them but the
 	// renderer leaves them out of the output.
 	Hidden bool
-	// HideNull fields are written with "::?", which leaves the field out of
+	// HideNull fields are written with ":?", which leaves the field out of
 	// the output only when its value is null.
 	HideNull bool
 	Value    *Thunk
 }
 
 // Omitted reports whether the renderer leaves the field out of its output.
-// Deciding that for a "::?" field means resolving its value, which is why
+// Deciding that for a ":?" field means resolving its value, which is why
 // this can fail.
 func (f *Field) Omitted() (bool, error) {
 	if f.Hidden {

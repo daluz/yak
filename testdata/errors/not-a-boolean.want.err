@@ -1,0 +1,1 @@
+not-a-boolean.yak:1:14: the condition of an "if" must be a boolean, found integer

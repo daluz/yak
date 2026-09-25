@@ -1,0 +1,10 @@
+# A document made of nothing but bindings is null, and so is an empty one or
+# one written as null. None of them are written out.
+local scaffold = "unused"
+---
+local name = "web"
+name: name
+port: 8080
+---
+null
+---

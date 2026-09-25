@@ -90,17 +90,22 @@ $ yak template app.yak -o rendered.json     # the extension chooses JSON
   that off: `r"hello ${literal}"`.
 - **Only `true` and `false` are booleans.** No `yes`, `no`, `on`, or `off`.
 - **No anchors and no tags.** References and `local` bindings replace anchors;
-  tags return with schemas.
+  tags return with schemas, and `!` means boolean `not` in the meantime.
 - **Relative references.** `.name` is a sibling, `..name` the parent's,
   `...name` the grandparent's, `$.name` the document root's, and `$$.name` the
   context's.
 - **Hidden fields.** Write `::` instead of `:` to keep a value available to
-  references but out of the output, or `::?` to drop an entry only when its
+  references but out of the output, or `:?` to drop an entry only when its
   value is null.
 - **Local bindings.** `local name = "web"`, or a `local { ... }` block of
   them. They are named, scoped, and produce no output.
 - **Optional access and defaults.** `?.` and `?[` give `null` where a field or
   an index is missing, and `??` supplies the value to use instead.
+- **Conditionals.** `if $$.env == "prod" then 5 else 1`, built on the usual
+  `==`, `<`, `&&` and `!` operators. Leave the `else` out and a false
+  condition yields `null`, which `:?` drops.
+- **Comprehensions.** `[p.name for p in $$.ports if p.tls]` builds a
+  sequence, and `{[p.name]: p.number for p in $$.ports}` a mapping.
 - **Comments survive.** They are carried into the output, except the ones
   written inside a `local` and the ones starting with `#local`, which are
   notes about the template. Every output format that can hold a comment
@@ -110,11 +115,12 @@ $ yak template app.yak -o rendered.json     # the extension chooses JSON
 
 ## Status
 
-The `template` command is implemented, along with `local` bindings. Functions,
-a standard library, `import`, `schema`, and the `build` and `validate`
-commands are planned; see [docs/ROADMAP.md](docs/ROADMAP.md). Their keywords
-are already reserved, so using one today fails with a clear message rather
-than parsing as something else.
+The `template` command is implemented, along with `local` bindings,
+conditionals and comprehensions. Functions, a standard library, `import`,
+`schema`, and the `build` and `validate` commands are planned; see
+[docs/ROADMAP.md](docs/ROADMAP.md). Their keywords are already reserved, so
+using one today fails with a clear message rather than parsing as something
+else.
 
 ## Development
 

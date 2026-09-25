@@ -228,6 +228,74 @@ func TestOptionalAndCoalesceTokens(t *testing.T) {
 	}
 }
 
+// TestOperatorTokens pins down the characters that yak reads two ways: ">"
+// and "|" also open block scalars, "!" also opens a tag, and "=" and "&"
+// already meant something else.
+func TestOperatorTokens(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want []token.Kind
+	}{
+		{"comparisons", "a: 1 < 2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Lt, token.Int, token.EOF,
+		}},
+		{"less or equal", "a: 1 <= 2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Le, token.Int, token.EOF,
+		}},
+		{"greater than", "a: 1 > 2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Gt, token.Int, token.EOF,
+		}},
+		{"greater or equal", "a: 1 >= 2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Ge, token.Int, token.EOF,
+		}},
+		{"equality", "a: 1 == 2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Eq, token.Int, token.EOF,
+		}},
+		{"assignment is still one character", "local x = 1\n", []token.Kind{
+			token.Ident, token.Ident, token.Assign, token.Int, token.EOF,
+		}},
+		{"inequality", "a: 1 != 2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Ne, token.Int, token.EOF,
+		}},
+		{"negation", "a: !b\n", []token.Kind{
+			token.Ident, token.Colon, token.Not, token.Ident, token.EOF,
+		}},
+		{"conjunction", "a: b && c\n", []token.Kind{
+			token.Ident, token.Colon, token.Ident, token.And, token.Ident, token.EOF,
+		}},
+		{"disjunction", "a: b || c\n", []token.Kind{
+			token.Ident, token.Colon, token.Ident, token.Or, token.Ident, token.EOF,
+		}},
+		{"a folded scalar is still a string", "a: >\n  text\n", []token.Kind{
+			token.Ident, token.Colon, token.String, token.EOF,
+		}},
+		{"a folded scalar with indicators", "a: >-\n  text\n", []token.Kind{
+			token.Ident, token.Colon, token.String, token.EOF,
+		}},
+		{"a folded scalar with a comment", "a: > # why\n  text\n", []token.Kind{
+			token.Ident, token.Colon, token.String, token.EOF,
+		}},
+		{"a literal scalar is still a string", "a: |\n  text\n", []token.Kind{
+			token.Ident, token.Colon, token.String, token.EOF,
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			toks := lex(t, tc.src)
+			if len(toks) != len(tc.want) {
+				t.Fatalf("got %d tokens, want %d: %v", len(toks), len(tc.want), toks)
+			}
+			for i, k := range tc.want {
+				if toks[i].Kind != k {
+					t.Errorf("token %d = %v, want %v", i, toks[i].Kind, k)
+				}
+			}
+		})
+	}
+}
+
 func TestDotRuns(t *testing.T) {
 	toks := lex(t, "x: ...name\n")
 	if toks[2].Kind != token.Dots || toks[2].Lit != "..." {

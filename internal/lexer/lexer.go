@@ -202,11 +202,39 @@ func (l *lexer) scanToken() error {
 			return l.scanBlockScalar(start, true)
 		}
 		return l.scanQuotedAt(start, true)
-	case c == '|' || c == '>':
+	case c == '|':
+		if l.peekAt(1) == '|' {
+			l.advance()
+			l.advance()
+			l.emit(token.Token{Kind: token.Or, Lit: "||", Pos: start})
+			return nil
+		}
 		if !l.block {
 			return l.errorf(start, "unexpected %q", string(c))
 		}
 		return l.scanBlockScalar(start, false)
+	case c == '>':
+		if l.peekAt(1) == '=' {
+			l.advance()
+			l.advance()
+			l.emit(token.Token{Kind: token.Ge, Lit: ">=", Pos: start})
+			return nil
+		}
+		if l.block && l.blockScalarHeader() {
+			return l.scanBlockScalar(start, false)
+		}
+		l.advance()
+		l.emit(token.Token{Kind: token.Gt, Lit: ">", Pos: start})
+		return nil
+	case c == '<':
+		l.advance()
+		if l.peek() == '=' {
+			l.advance()
+			l.emit(token.Token{Kind: token.Le, Lit: "<=", Pos: start})
+			return nil
+		}
+		l.emit(token.Token{Kind: token.Lt, Lit: "<", Pos: start})
+		return nil
 	case isIdentStart(c):
 		return l.scanIdent()
 	case isDigit(c):
@@ -245,20 +273,25 @@ func (l *lexer) scanToken() error {
 		l.advance()
 		if l.peek() == ':' {
 			l.advance()
-			// No value starts with "?", so a "?" here can only be the
-			// tail of the "::?" separator.
-			if l.peek() == '?' {
-				l.advance()
-				l.emit(token.Token{Kind: token.DoubleColonQuestion, Lit: "::?", Pos: start})
-				return nil
-			}
 			l.emit(token.Token{Kind: token.DoubleColon, Lit: "::", Pos: start})
+			return nil
+		}
+		// No value starts with "?", so a "?" here can only be the tail of
+		// the ":?" separator.
+		if l.peek() == '?' {
+			l.advance()
+			l.emit(token.Token{Kind: token.ColonQuestion, Lit: ":?", Pos: start})
 			return nil
 		}
 		l.emit(token.Token{Kind: token.Colon, Lit: ":", Pos: start})
 		return nil
 	case c == '=':
 		l.advance()
+		if l.peek() == '=' {
+			l.advance()
+			l.emit(token.Token{Kind: token.Eq, Lit: "==", Pos: start})
+			return nil
+		}
 		l.emit(token.Token{Kind: token.Assign, Lit: "=", Pos: start})
 		return nil
 	case c == ',':
@@ -304,15 +337,60 @@ func (l *lexer) scanToken() error {
 		return l.errorf(start,
 			"explicit key indicators (%q) are not supported; use [expr] for a computed key, %q for an optional access, or %q for a default",
 			"?", "?.", "??")
-	case c == '&' || c == '*':
+	case c == '&':
+		if l.peekAt(1) == '&' {
+			l.advance()
+			l.advance()
+			l.emit(token.Token{Kind: token.And, Lit: "&&", Pos: start})
+			return nil
+		}
+		return l.errorf(start, "anchors and aliases are not supported in yak; use a local variable instead")
+	case c == '*':
 		return l.errorf(start, "anchors and aliases are not supported in yak; use a local variable instead")
 	case c == '!':
-		return l.errorf(start, "tags are not supported in yak yet; they will arrive with schemas")
+		// "!!" can only be a tag: negating a boolean twice says nothing.
+		if l.peekAt(1) == '!' {
+			return l.errorf(start, "tags are not supported in yak yet; they will arrive with schemas")
+		}
+		l.advance()
+		if l.peek() == '=' {
+			l.advance()
+			l.emit(token.Token{Kind: token.Ne, Lit: "!=", Pos: start})
+			return nil
+		}
+		l.emit(token.Token{Kind: token.Not, Lit: "!", Pos: start})
+		return nil
 	case c == '%':
 		return l.errorf(start, "directives (%q) are not supported", "%")
 	default:
 		return l.errorf(start, "unexpected character %q", string(rune(c)))
 	}
+}
+
+// blockScalarHeader reports whether the ">" at the current position opens a
+// folded block scalar rather than being the greater-than operator. A header
+// carries nothing but its indicators and an optional comment, so anything
+// else on the line means the character was written as an operator.
+func (l *lexer) blockScalarHeader() bool {
+	i := l.off + 1
+	for n := 0; n < 2 && i < len(l.src); n++ {
+		c := l.src[i]
+		if c != '-' && c != '+' && !(c >= '1' && c <= '9') {
+			break
+		}
+		i++
+	}
+	for i < len(l.src) {
+		switch l.src[i] {
+		case ' ', '\t', '\r':
+			i++
+		case '\n', '#':
+			return true
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // docMarker reports a "---" or "..." marker at the start of a line.

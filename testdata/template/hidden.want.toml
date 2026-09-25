@@ -2,7 +2,7 @@
 image = "alpine:3.20"
 port = 8080
 label = "service web-1"
-# "::?" keeps the entry unless its value turns out null.
+# ":?" keeps the entry unless its value turns out null.
 replicas = 3
 
 [services.web.limits]

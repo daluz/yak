@@ -326,6 +326,177 @@ func TestCoalesceAndOptionalAccess(t *testing.T) {
 	}
 }
 
+func TestOperators(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"integer equality", "v: 1 == 1\n", "v: true\n"},
+		{"an integer equals the same float", "v: 1 == 1.0\n", "v: true\n"},
+		{"different types are not equal", `v: 1 == "1"` + "\n", "v: false\n"},
+		{"null equality", "v: null == null\n", "v: true\n"},
+		{"inequality", "v: 1 != 2\n", "v: true\n"},
+		{"string ordering", `v: "a" < "b"` + "\n", "v: true\n"},
+		{"mixed number ordering", "v: 1 < 1.5\n", "v: true\n"},
+		{"negation", "v: !false\n", "v: true\n"},
+		{"conjunction", "v: true && false\n", "v: false\n"},
+		{"disjunction", "v: false || true\n", "v: true\n"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mustRender(t, tc.src, ""); got != tc.want {
+				t.Errorf("rendered %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestLogicalOperatorsShortCircuit uses an operand that fails when it is
+// reached, so a rendered result proves it was never evaluated.
+func TestLogicalOperatorsShortCircuit(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"and stops at false", "v: false && .missing\n", "v: false\n"},
+		{"or stops at true", "v: true || .missing\n", "v: true\n"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mustRender(t, tc.src, ""); got != tc.want {
+				t.Errorf("rendered %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestConditionals(t *testing.T) {
+	tests := []struct {
+		name    string
+		src     string
+		context string
+		want    string
+	}{
+		{
+			name: "takes the then branch",
+			src:  "v: if true then \"y\" else \"n\"\n",
+			want: "v: y\n",
+		},
+		{
+			name: "takes the else branch",
+			src:  "v: if false then \"y\" else \"n\"\n",
+			want: "v: n\n",
+		},
+		{
+			name: "without an else it yields null",
+			src:  "v: if false then \"y\"\n",
+			want: "v: null\n",
+		},
+		{
+			name: "a null branch drops an optional entry",
+			src:  "v:? if false then \"y\"\nw: 1\n",
+			want: "w: 1\n",
+		},
+		{
+			name:    "chained conditions",
+			src:     "v: if $$.n > 2 then \"big\" else if $$.n > 1 then \"mid\" else \"small\"\n",
+			context: "n: 2\n",
+			want:    "v: mid\n",
+		},
+		{
+			name: "the untaken branch is not evaluated",
+			src:  "v: if true then 1 else .missing\n",
+			want: "v: 1\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mustRender(t, tc.src, tc.context); got != tc.want {
+				t.Errorf("rendered:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestComprehensions(t *testing.T) {
+	tests := []struct {
+		name    string
+		src     string
+		context string
+		want    string
+	}{
+		{
+			name: "sequence over a literal",
+			src:  "v: [x for x in [1, 2]]\n",
+			want: "v:\n  - 1\n  - 2\n",
+		},
+		{
+			name:    "sequence over the context",
+			src:     "v: [\"n-${x}\" for x in $$.list]\n",
+			context: "list: [1, 2]\n",
+			want:    "v:\n  - n-1\n  - n-2\n",
+		},
+		{
+			name:    "a filter drops items",
+			src:     "v: [x for x in $$.list if x > 1]\n",
+			context: "list: [1, 2, 3]\n",
+			want:    "v:\n  - 2\n  - 3\n",
+		},
+		{
+			name: "an empty source gives an empty sequence",
+			src:  "v: [x for x in []]\n",
+			want: "v: []\n",
+		},
+		{
+			name:    "mapping keyed by a computed key",
+			src:     "v: {[x]: 1 for x in $$.list}\n",
+			context: `list: ["a", "b"]` + "\n",
+			want:    "v:\n  a: 1\n  b: 1\n",
+		},
+		{
+			name:    "mapping keyed by interpolation",
+			src:     "v: {\"k${x}\": x for x in $$.list}\n",
+			context: "list: [1, 2]\n",
+			want:    "v:\n  k1: 1\n  k2: 2\n",
+		},
+		{
+			name:    "a hidden entry produces nothing",
+			src:     "v: {[x]:: 1 for x in $$.list}\nw: $.v.a\n",
+			context: `list: ["a"]` + "\n",
+			want:    "v: {}\nw: 1\n",
+		},
+		{
+			name:    "comprehensions nest through a binding",
+			src:     "local rows = $$.rows\nv: [[c for c in r] for r in rows]\n",
+			context: "rows:\n  - [1, 2]\n  - [3]\n",
+			want:    "v:\n  - - 1\n    - 2\n  - - 3\n",
+		},
+		{
+			name: "the loop variable shadows an outer binding",
+			src:  "local x = \"outer\"\nv: [x for x in [1]]\nw: x\n",
+			want: "v:\n  - 1\nw: outer\n",
+		},
+		{
+			name: "the enclosing mapping is still reachable",
+			src:  "n: 2\nv: [.n for x in [1]]\n",
+			want: "n: 2\nv:\n  - 2\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mustRender(t, tc.src, tc.context); got != tc.want {
+				t.Errorf("rendered:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHiddenFields(t *testing.T) {
 	got := mustRender(t, "secret:: \"s3cret\"\nvisible: \"${.secret}!\"\n", "")
 	want := "visible: s3cret!\n"
@@ -407,6 +578,15 @@ func TestEvalErrors(t *testing.T) {
 		{"coalesce does not hide a missing field", "a: $$.nope ?? 1\n", "", `no field "nope"`},
 		{"optional access does not hide a type error", "a: 1\nb: .a?.c\n", "", "cannot read field"},
 		{"optional index does not hide a type error", "a:\n  - 1\nb: $.a?[\"x\"]\n", "", "index must be an integer"},
+		{"a non-boolean condition", "a: if 1 then 2 else 3\n", "", `the condition of an "if" must be a boolean`},
+		{"a non-boolean operand of and", "a: 1 && true\n", "", `the left side of "&&" must be a boolean`},
+		{"a non-boolean operand of not", "a: !1\n", "", `the operand of "!" must be a boolean`},
+		{"ordering mismatched types", `a: "x" < 1` + "\n", "", "cannot compare string with integer"},
+		{"comparing collections", "a: [1] == [1]\n", "", "cannot compare a sequence"},
+		{"looping over a scalar", "a: [x for x in 1]\n", "", `"for" needs a sequence to walk over`},
+		{"a non-boolean filter", "a: [x for x in [1] if x]\n", "", `the filter of a "for" must be a boolean`},
+		{"a constant comprehension key", `a: {"k": x for x in [1, 2]}` + "\n", "", "two items of the comprehension produced"},
+		{"a non-string comprehension key", "a: {[x]: 1 for x in [1]}\n", "", "mapping keys must be strings"},
 	}
 
 	for _, tc := range tests {
