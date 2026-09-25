@@ -1,0 +1,5 @@
+# Merged on top of ctx1: replicas and tag win, the rest is inherited.
+app:
+  replicas: 3
+image:
+  tag: v1.2.3

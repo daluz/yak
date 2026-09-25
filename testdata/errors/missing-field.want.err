@@ -1,0 +1,1 @@
+missing-field.yak:3:8: no field "nmae" in mapping; available fields: "name", "tier", "alias"

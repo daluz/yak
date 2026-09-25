@@ -1,0 +1,35 @@
+# Every string form, with and without interpolation.
+who: "world"
+double: "hello"
+single: 'hello'
+escapes: "tab:\tquote:\"backslash:\\"
+unicode: "caf\u00e9"
+interpolated: "hello ${.who}"
+mixed: "${.who} and ${.who}"
+raw-double: r"no ${interpolation} here"
+raw-single: r'no ${interpolation} here'
+escaped-dollar: "a literal $${braces} pair"
+lone-dollar: "costs $5"
+nested-quotes: "zone is ${$$["region"]}"
+folded-quotes: "one
+  two"
+literal-block: |
+  first line
+  second line for ${.who}
+literal-strip: |-
+  no trailing newline
+literal-keep: |+
+  kept blank line below
+
+folded-block: >
+  these lines
+  become one
+
+  this is a second paragraph
+folded-strip: >-
+  folded without a trailing newline
+raw-block: r|
+  ${untouched}
+indented-block: |
+  outer
+    inner indented

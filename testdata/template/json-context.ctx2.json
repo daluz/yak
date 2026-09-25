@@ -1,0 +1,6 @@
+{
+	"app": {"replicas": 3},
+	"paths": {"data": "\/var\/lib\/frontend"},
+	"limits": {"cpu": 0.5, "memory": 512},
+	"tags": ["from-json"]
+}

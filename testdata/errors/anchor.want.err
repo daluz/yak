@@ -1,0 +1,1 @@
+anchor.yak:1:7: anchors and aliases are not supported in yak; use a local variable instead

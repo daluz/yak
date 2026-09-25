@@ -1,0 +1,28 @@
+name: root
+ports:
+  - 80
+  - 443
+  - 8080
+nested:
+  name: inner
+  self: inner
+  parent: root
+  deeper:
+    name: deepest
+    own: deepest
+    up-one: inner
+    up-two: root
+    from-root: root
+absolute:
+  first-port: 80
+  last-port: 8080
+  by-name: deepest
+context:
+  long-form: staging
+  short-form: staging
+  nested: us-east-1a
+  by-string-index: us-east-1a
+staging: the key came from the context
+in-sequence:
+  - who: root
+  - who: inner

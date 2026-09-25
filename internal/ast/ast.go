@@ -1,0 +1,145 @@
+// Package ast defines the syntax tree produced by the yak parser.
+package ast
+
+import "github.com/daluz/yak/internal/token"
+
+// Node is any syntax tree node.
+type Node interface {
+	Pos() token.Pos
+	node()
+}
+
+// Base carries the source position shared by every node.
+type Base struct{ P token.Pos }
+
+// Pos returns the position of the first token of the node.
+func (b Base) Pos() token.Pos { return b.P }
+
+func (Base) node() {}
+
+// At builds a Base for the given position.
+func At(p token.Pos) Base { return Base{P: p} }
+
+// Stream is a parsed file: one or more documents separated by "---".
+type Stream struct {
+	File string
+	Docs []*Document
+}
+
+// Document is a single YAML document within a stream.
+type Document struct {
+	Base
+	Body Node
+}
+
+// Mapping is a collection of key/value entries, written either in block form
+// or in flow form with braces.
+type Mapping struct {
+	Base
+	Entries []*Entry
+	Flow    bool
+}
+
+// Entry is one key/value pair of a Mapping.
+type Entry struct {
+	// Key is a *String for literal keys (bare identifiers are normalized into
+	// strings) or an arbitrary expression for computed keys written as [expr].
+	Key Node
+	// Computed records that the key was written in bracket form.
+	Computed bool
+	// Hidden records that the entry was written with "::" and must be omitted
+	// from rendered output while remaining visible to references.
+	Hidden bool
+	Value  Node
+	KeyPos token.Pos
+}
+
+// Sequence is an ordered list of items.
+type Sequence struct {
+	Base
+	Items []Node
+	Flow  bool
+}
+
+// StringPart is one piece of a string literal.
+type StringPart struct {
+	// Text is the literal text when Expr is nil.
+	Text string
+	// Expr is the parsed interpolation when non-nil.
+	Expr Node
+}
+
+// String is a string literal, possibly containing interpolations.
+type String struct {
+	Base
+	Parts []StringPart
+}
+
+// IsLiteral reports whether the string has no interpolations.
+func (s *String) IsLiteral() bool {
+	return len(s.Parts) == 0 || (len(s.Parts) == 1 && s.Parts[0].Expr == nil)
+}
+
+// Literal returns the constant text of a string without interpolations.
+func (s *String) Literal() string {
+	if len(s.Parts) == 0 {
+		return ""
+	}
+	return s.Parts[0].Text
+}
+
+// Int is an integer literal.
+type Int struct {
+	Base
+	Value int64
+}
+
+// Float is a floating point literal.
+type Float struct {
+	Base
+	Value float64
+}
+
+// Bool is a true or false literal.
+type Bool struct {
+	Base
+	Value bool
+}
+
+// Null is the null literal.
+type Null struct{ Base }
+
+// Self is a relative reference: "." is the enclosing mapping, ".." its parent,
+// and so on. Up counts how many mappings to walk outwards.
+type Self struct {
+	Base
+	Up int
+}
+
+// Root is "$", the root node of the enclosing document.
+type Root struct{ Base }
+
+// Context is "$context" or its "$$" shorthand: the merged context data.
+type Context struct{ Base }
+
+// Field is an "x.name" access.
+type Field struct {
+	Base
+	X    Node
+	Name string
+}
+
+// Index is an "x[i]" access.
+type Index struct {
+	Base
+	X     Node
+	Index Node
+}
+
+// Ident is a bare identifier. Until "local" bindings exist there is nothing
+// for one to resolve to, but the node gives the evaluator a place to produce a
+// precise error.
+type Ident struct {
+	Base
+	Name string
+}

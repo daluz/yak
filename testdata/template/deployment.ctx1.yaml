@@ -1,0 +1,6 @@
+app:
+  name: frontend
+  replicas: 1
+image:
+  repo: registry.example.com/frontend
+  tag: latest

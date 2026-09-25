@@ -1,0 +1,5 @@
+app:
+  name: frontend
+  replicas: 1
+tags:
+  - from-yaml

@@ -1,0 +1,4 @@
+/yak
+/dist/
+*.test
+*.out

@@ -1,0 +1,30 @@
+# A representative workload manifest, rendered from two context files.
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: "${$$.app.name}-web"
+  labels:
+    app: ..name
+    tier: "web"
+spec:
+  replicas: $$.app.replicas
+  selector:
+    matchLabels:
+      app: $.metadata.labels.app
+  template:
+    metadata:
+      labels: $.metadata.labels
+    spec:
+      containers:
+        - name: $$.app.name
+          image: "${$$.image.repo}:${$$.image.tag}"
+          ports:
+            - containerPort: 8080
+          env:
+            - name: "APP_NAME"
+              value: ..name
+            - name: "CONFIG"
+              value: |
+                app=${$$.app.name}
+                replicas=${$$.app.replicas}
+  defaults:: "kept out of the output but readable by references"

@@ -1,0 +1,3 @@
+base: &defaults
+  port: 80
+use: *defaults

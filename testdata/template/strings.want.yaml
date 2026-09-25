@@ -1,0 +1,29 @@
+who: world
+double: hello
+single: hello
+escapes: "tab:\tquote:\"backslash:\\"
+unicode: café
+interpolated: hello world
+mixed: world and world
+raw-double: no ${interpolation} here
+raw-single: no ${interpolation} here
+escaped-dollar: a literal ${braces} pair
+lone-dollar: costs $5
+nested-quotes: zone is us-east-1
+folded-quotes: one two
+literal-block: |
+  first line
+  second line for world
+literal-strip: no trailing newline
+literal-keep: |+
+  kept blank line below
+
+folded-block: |
+  these lines become one
+  this is a second paragraph
+folded-strip: folded without a trailing newline
+raw-block: |
+  ${untouched}
+indented-block: |
+  outer
+    inner indented

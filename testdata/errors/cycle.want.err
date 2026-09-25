@@ -1,0 +1,6 @@
+cycle.yak:1:4: circular reference: this value depends on itself
+	the cycle passes through:
+	  cycle.yak:1:4
+	  cycle.yak:2:4
+	  cycle.yak:3:4
+	  cycle.yak:1:4

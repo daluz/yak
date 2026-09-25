@@ -1,0 +1,14 @@
+# Hidden entries are readable by references but never rendered.
+defaults::
+  image: "alpine"
+  tag: "3.20"
+  port: 8080
+services:
+  web:
+    image: "${$.defaults.image}:${$.defaults.tag}"
+    port: $.defaults.port
+    internal-id:: "web-1"
+    label: "service ${.internal-id}"
+  worker:
+    image: "${$.defaults.image}:${$.defaults.tag}"
+    port: $.defaults.port

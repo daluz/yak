@@ -1,0 +1,8 @@
+services:
+  web:
+    image: alpine:3.20
+    port: 8080
+    label: service web-1
+  worker:
+    image: alpine:3.20
+    port: 8080

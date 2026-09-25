@@ -1,0 +1,13 @@
+# Each document has its own root, and $context is shared by all of them.
+kind: "ConfigMap"
+name: "${$$.app}-config"
+data:
+  self-kind: ..kind
+---
+kind: "Service"
+name: "${$$.app}-svc"
+selector:
+  app: $.name
+ports: [80, 443]
+options: {debug: false, retries: 3}
+...

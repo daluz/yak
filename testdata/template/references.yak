@@ -1,0 +1,29 @@
+# Every form of reference available in phase one.
+name: "root"
+ports:
+  - 80
+  - 443
+  - 8080
+nested:
+  name: "inner"
+  self: .name
+  parent: ..name
+  deeper:
+    name: "deepest"
+    own: .name
+    up-one: ..name
+    up-two: ...name
+    from-root: $.name
+absolute:
+  first-port: $.ports[0]
+  last-port: $.ports[-1]
+  by-name: $.nested.deeper.name
+context:
+  long-form: $context.environment
+  short-form: $$.environment
+  nested: $$.region.zone
+  by-string-index: $$["region"]["zone"]
+[$$.environment]: "the key came from the context"
+in-sequence:
+  - who: ..name
+  - who: $.nested.name
