@@ -38,8 +38,21 @@ func (Int) TypeName() string    { return "integer" }
 func (Float) TypeName() string  { return "float" }
 func (String) TypeName() string { return "string" }
 
+// Comments are the source comments written around an entry or an item, which
+// the renderer writes out again around it.
+type Comments struct {
+	// Head holds the whole-line comments written above, each keeping the
+	// "#" it was written with.
+	Head []string
+	// Line holds the comment written after it on the same line.
+	Line string
+	// Foot holds the comments that followed everything in the document.
+	Foot []string
+}
+
 // Field is one entry of an Object.
 type Field struct {
+	Comments
 	Name string
 	// Hidden fields are written with "::". References can read them but the
 	// renderer leaves them out of the output.
@@ -99,8 +112,8 @@ func (o *Object) Set(name string, hidden bool, v *Thunk) {
 
 // reserve appends an unnamed slot, preserving source order while the key is
 // still being evaluated.
-func (o *Object) reserve(hidden bool, v *Thunk) *Field {
-	f := &Field{Hidden: hidden, Value: v}
+func (o *Object) reserve(c Comments, hidden bool, v *Thunk) *Field {
+	f := &Field{Comments: c, Hidden: hidden, Value: v}
 	o.fields = append(o.fields, f)
 	return f
 }
@@ -120,19 +133,29 @@ func (o *Object) bind(f *Field, name string) error {
 	return fmt.Errorf("internal error: unknown field slot for key %q", name)
 }
 
+// Elem is one item of an Array. It wraps the item's value so that the item
+// can carry comments of its own, as a Field does.
+type Elem struct {
+	Comments
+	Value *Thunk
+}
+
+// Item wraps an already computed value as a sequence item.
+func Item(v Value) *Elem { return &Elem{Value: Done(v)} }
+
 // Array is an ordered sequence.
 type Array struct {
-	items []*Thunk
+	items []*Elem
 }
 
 // NewArray returns a sequence holding the given items.
-func NewArray(items []*Thunk) *Array { return &Array{items: items} }
+func NewArray(items []*Elem) *Array { return &Array{items: items} }
 
 // TypeName implements Value.
 func (*Array) TypeName() string { return "sequence" }
 
 // Items returns the sequence's items.
-func (a *Array) Items() []*Thunk { return a.items }
+func (a *Array) Items() []*Elem { return a.items }
 
 // Len returns the number of items.
 func (a *Array) Len() int { return len(a.items) }

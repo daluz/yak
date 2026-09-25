@@ -21,8 +21,9 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Pos.String() + ": " + e.Msg }
 
-// Lex tokenizes a complete yak source file.
-func Lex(file string, src []byte) ([]token.Token, error) {
+// Lex tokenizes a complete yak source file, returning its tokens and the
+// comments written between them.
+func Lex(file string, src []byte) ([]token.Token, []token.Comment, error) {
 	l := &lexer{
 		file:  file,
 		src:   src,
@@ -36,7 +37,8 @@ func Lex(file string, src []byte) ([]token.Token, error) {
 
 // LexExpr tokenizes an expression fragment, such as the body of a string
 // interpolation. Positions are reported relative to start so that diagnostics
-// point into the enclosing file.
+// point into the enclosing file. A fragment is part of a single line, so any
+// comment in it is discarded.
 func LexExpr(src string, start token.Pos) ([]token.Token, error) {
 	l := &lexer{
 		file:  start.File,
@@ -46,7 +48,8 @@ func LexExpr(src string, start token.Pos) ([]token.Token, error) {
 		bol:   false,
 		block: false,
 	}
-	return l.run()
+	toks, _, err := l.run()
+	return toks, err
 }
 
 type lexer struct {
@@ -61,7 +64,8 @@ type lexer struct {
 	// block reports whether document markers and block scalars are allowed.
 	block bool
 
-	toks []token.Token
+	toks     []token.Token
+	comments []token.Comment
 }
 
 func (l *lexer) pos() token.Pos {
@@ -109,20 +113,20 @@ func (l *lexer) emit(t token.Token) {
 	l.bol = false
 }
 
-func (l *lexer) run() ([]token.Token, error) {
+func (l *lexer) run() ([]token.Token, []token.Comment, error) {
 	for {
 		if err := l.skipSpace(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if l.eof() {
 			break
 		}
 		if err := l.scanToken(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	l.toks = append(l.toks, token.Token{Kind: token.EOF, Pos: l.pos()})
-	return l.toks, nil
+	return l.toks, l.comments, nil
 }
 
 func (l *lexer) skipSpace() error {
@@ -137,14 +141,30 @@ func (l *lexer) skipSpace() error {
 			}
 			l.advance()
 		case c == '#' && (l.bol || l.prevIsSpace()):
-			for !l.eof() && l.peek() != '\n' {
-				l.advance()
-			}
+			l.scanComment()
 		default:
 			return nil
 		}
 	}
 	return nil
+}
+
+// scanComment consumes a comment and records it. Reading it does not end the
+// line, so l.bol keeps telling later comments on the same line apart from
+// ones that start their own.
+func (l *lexer) scanComment() {
+	start := l.pos()
+	ownLine := l.bol
+	from := l.off
+	for !l.eof() && l.peek() != '\n' {
+		l.advance()
+	}
+	l.comments = append(l.comments, token.Comment{
+		Text:    strings.TrimRight(string(l.src[from:l.off]), " \t\r"),
+		Pos:     start,
+		OwnLine: ownLine,
+		Next:    len(l.toks),
+	})
 }
 
 func (l *lexer) prevIsSpace() bool {

@@ -160,7 +160,8 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 
 	slots := make([]*Field, len(node.Entries))
 	for i, e := range node.Entries {
-		slots[i] = obj.reserve(e.Hidden, &Thunk{node: e.Value, env: child, pos: e.Value.Pos()})
+		slots[i] = obj.reserve(comments(e.Comments), e.Hidden,
+			&Thunk{node: e.Value, env: child, pos: e.Value.Pos()})
 	}
 	for i, e := range node.Entries {
 		if name, ok := literalKey(e); ok {
@@ -201,11 +202,19 @@ func literalKey(e *ast.Entry) (string, bool) {
 }
 
 func evalSequence(node *ast.Sequence, env *Env) (Value, error) {
-	items := make([]*Thunk, len(node.Items))
+	items := make([]*Elem, len(node.Items))
 	for i, item := range node.Items {
-		items[i] = &Thunk{node: item, env: env, pos: item.Pos()}
+		items[i] = &Elem{
+			Comments: comments(item.Comments),
+			Value:    &Thunk{node: item.Value, env: env, pos: item.Value.Pos()},
+		}
 	}
 	return NewArray(items), nil
+}
+
+// comments carries the comments of a syntax node through to the renderer.
+func comments(c ast.Comments) Comments {
+	return Comments{Head: c.Head, Line: c.Line, Foot: c.Foot}
 }
 
 func evalString(node *ast.String, env *Env) (Value, error) {
@@ -340,7 +349,7 @@ func evalIndex(node *ast.Index, env *Env) (Value, error) {
 			}
 			return nil, errorf(node.Index.Pos(), "index %d is out of range for a sequence of length %d", int(n), container.Len())
 		}
-		return container.Items()[i].Value()
+		return container.Items()[i].Value.Value()
 	case *Object:
 		name, ok := idx.(String)
 		if !ok {

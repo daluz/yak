@@ -60,8 +60,22 @@ type Local struct {
 	Body  Node
 }
 
+// Comments are the source comments attached to a node that is rendered. The
+// renderer writes them back out around it.
+type Comments struct {
+	// Head holds the whole-line comments written above the node, in source
+	// order. Each keeps the "#" it was written with.
+	Head []string
+	// Line holds a comment written after the node on the node's own line.
+	Line string
+	// Foot holds the comments left over at the end of a document, which the
+	// last node of that document carries.
+	Foot []string
+}
+
 // Entry is one key/value pair of a Mapping.
 type Entry struct {
+	Comments
 	// Key is a *String for literal keys (bare identifiers are normalized into
 	// strings) or an arbitrary expression for computed keys written as [expr].
 	Key Node
@@ -77,8 +91,15 @@ type Entry struct {
 // Sequence is an ordered list of items.
 type Sequence struct {
 	Base
-	Items []Node
+	Items []*Item
 	Flow  bool
+}
+
+// Item is one element of a Sequence. It wraps the element's value so that the
+// element can carry comments of its own, as a mapping entry does.
+type Item struct {
+	Comments
+	Value Node
 }
 
 // StringPart is one piece of a string literal.

@@ -1,0 +1,46 @@
+# A comment above an entry is kept,
+# including the rest of its paragraph.
+service:
+  # Comments nest with the entries they describe.
+  name: "web"        # so do the ones written after a value
+  replicas: 2
+
+  #local A note for whoever edits this file, left out of the output.
+  port: 8080
+
+local {
+  # A comment inside a "local" block is dropped with the block.
+  region = "us-east-1"
+  zone = "${region}a"
+}
+
+local defaults =
+  # Dropped too: this one sits inside a binding's value.
+  tier: "shared"
+
+# A comment above a binding belongs to the next thing that is rendered.
+local owner = "platform"   # and one written beside it is dropped
+
+placement:
+  region: region
+  zone: zone
+
+team: owner
+defaults: defaults
+
+workers:
+  # The queue worker comes first.
+  - name: "queue"    # each item keeps its own comments
+  - name: "cron"
+
+credentials::
+  # Dropped along with the hidden entry it describes.
+  user: "admin"
+
+#localhost is a word, not the marker, so this comment is kept.
+endpoint: "https://${$$.host}/"
+
+# Whatever is left at the end comes out at the end.
+---
+# Every document keeps its own comments.
+second: true

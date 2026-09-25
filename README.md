@@ -71,6 +71,9 @@ the JSON parser. Pass `-` as the file to read a template from standard input.
   them. They are named, scoped, and produce no output.
 - **Optional access and defaults.** `?.` and `?[` give `null` where a field or
   an index is missing, and `??` supplies the value to use instead.
+- **Comments survive.** They are carried into the output, except the ones
+  written inside a `local` and the ones starting with `#local`, which are
+  notes about the template.
 
 [docs/SPEC.md](docs/SPEC.md) is the full language description.
 

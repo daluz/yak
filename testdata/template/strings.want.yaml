@@ -1,3 +1,4 @@
+# Every string form, with and without interpolation.
 who: world
 double: hello
 single: hello

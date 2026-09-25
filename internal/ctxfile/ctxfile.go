@@ -170,7 +170,7 @@ func jsonObject(dec *json.Decoder, name string, data []byte) (eval.Value, error)
 }
 
 func jsonArray(dec *json.Decoder, name string, data []byte) (eval.Value, error) {
-	var items []*eval.Thunk
+	var items []*eval.Elem
 	for {
 		tok, err := dec.Token()
 		if err != nil {
@@ -183,7 +183,7 @@ func jsonArray(dec *json.Decoder, name string, data []byte) (eval.Value, error) 
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, eval.Done(v))
+		items = append(items, eval.Item(v))
 	}
 }
 
@@ -304,13 +304,13 @@ func convert(n *yaml.Node, name string) (eval.Value, error) {
 		return obj, nil
 
 	case yaml.SequenceNode:
-		items := make([]*eval.Thunk, 0, len(n.Content))
+		items := make([]*eval.Elem, 0, len(n.Content))
 		for _, c := range n.Content {
 			v, err := convert(c, name)
 			if err != nil {
 				return nil, err
 			}
-			items = append(items, eval.Done(v))
+			items = append(items, eval.Item(v))
 		}
 		return eval.NewArray(items), nil
 

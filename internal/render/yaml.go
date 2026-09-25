@@ -101,14 +101,20 @@ func toNode(v eval.Value) (*yaml.Node, error) {
 			if err != nil {
 				return nil, err
 			}
-			node.Content = append(node.Content, stringNode(f.Name), valNode)
+			// An entry's comments go on its key, which is where they
+			// were written and where they come out again.
+			keyNode := stringNode(f.Name)
+			keyNode.HeadComment = joinComments(f.Head)
+			keyNode.LineComment = f.Line
+			keyNode.FootComment = joinComments(f.Foot)
+			node.Content = append(node.Content, keyNode, valNode)
 		}
 		return node, nil
 
 	case *eval.Array:
 		node := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 		for _, item := range t.Items() {
-			inner, err := item.Value()
+			inner, err := item.Value.Value()
 			if err != nil {
 				return nil, err
 			}
@@ -116,6 +122,7 @@ func toNode(v eval.Value) (*yaml.Node, error) {
 			if err != nil {
 				return nil, err
 			}
+			setItemComments(itemNode, item.Comments)
 			node.Content = append(node.Content, itemNode)
 		}
 		return node, nil
@@ -127,6 +134,53 @@ func toNode(v eval.Value) (*yaml.Node, error) {
 
 func scalar(tag, value string) *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: value}
+}
+
+func joinComments(lines []string) string { return strings.Join(lines, "\n") }
+
+// setItemComments attaches a sequence item's comments to its node.
+//
+// The head comment goes on the item itself, but a line or foot comment
+// written on a collection comes out attached to the item after it, so those
+// are moved onto the scalar that opens or closes the item instead.
+func setItemComments(n *yaml.Node, c eval.Comments) {
+	n.HeadComment = joinComments(c.Head)
+	if c.Line != "" {
+		if target := opening(n); target.LineComment == "" {
+			target.LineComment = c.Line
+		}
+	}
+	if foot := joinComments(c.Foot); foot != "" {
+		if target := closing(n); target.FootComment == "" {
+			target.FootComment = foot
+		}
+	}
+}
+
+// opening returns the scalar a node begins with: itself, or the first key or
+// item of a collection.
+func opening(n *yaml.Node) *yaml.Node {
+	if len(n.Content) == 0 {
+		return n
+	}
+	return opening(n.Content[0])
+}
+
+// closing returns the scalar a node ends with. A mapping ends at its last
+// key rather than its last value, because a comment written after a value
+// that holds a block would come out inside that block.
+func closing(n *yaml.Node) *yaml.Node {
+	switch n.Kind {
+	case yaml.MappingNode:
+		if len(n.Content) >= 2 {
+			return closing(n.Content[len(n.Content)-2])
+		}
+	case yaml.SequenceNode:
+		if len(n.Content) > 0 {
+			return closing(n.Content[len(n.Content)-1])
+		}
+	}
+	return n
 }
 
 // stringNode emits a string, choosing a literal block for multi-line text so

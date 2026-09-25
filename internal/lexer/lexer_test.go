@@ -10,11 +10,20 @@ import (
 
 func lex(t *testing.T, src string) []token.Token {
 	t.Helper()
-	toks, err := lexer.Lex("test.yak", []byte(src))
+	toks, _, err := lexer.Lex("test.yak", []byte(src))
 	if err != nil {
 		t.Fatalf("Lex(%q) returned error: %v", src, err)
 	}
 	return toks
+}
+
+func lexComments(t *testing.T, src string) []token.Comment {
+	t.Helper()
+	_, comments, err := lexer.Lex("test.yak", []byte(src))
+	if err != nil {
+		t.Fatalf("Lex(%q) returned error: %v", src, err)
+	}
+	return comments
 }
 
 // firstString lexes a source that is expected to start with a string token.
@@ -249,6 +258,29 @@ func TestComments(t *testing.T) {
 	}
 }
 
+func TestCommentsAreRecorded(t *testing.T) {
+	got := lexComments(t, "# leading\na: 1 # trailing\n")
+	want := []token.Comment{
+		{Text: "# leading", Pos: token.Pos{File: "test.yak", Line: 1, Col: 1}, OwnLine: true, Next: 0},
+		{Text: "# trailing", Pos: token.Pos{File: "test.yak", Line: 2, Col: 6}, OwnLine: false, Next: 3},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d comments, want %d: %v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("comment %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// A "#" inside a block scalar is content, not a comment.
+func TestCommentsIgnoreBlockScalars(t *testing.T) {
+	if got := lexComments(t, "a: |\n  # not a comment\n"); len(got) != 0 {
+		t.Errorf("got %v, want no comments", got)
+	}
+}
+
 func TestNumbers(t *testing.T) {
 	tests := []struct {
 		src  string
@@ -293,7 +325,7 @@ func TestLexErrors(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := lexer.Lex("test.yak", []byte(tc.src))
+			_, _, err := lexer.Lex("test.yak", []byte(tc.src))
 			if err == nil {
 				t.Fatalf("Lex(%q) succeeded, want an error containing %q", tc.src, tc.want)
 			}

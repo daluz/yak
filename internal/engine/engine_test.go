@@ -2,12 +2,16 @@ package engine_test
 
 import (
 	"bytes"
+	"errors"
 	"flag"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/daluz/yak/internal/engine"
 	"github.com/daluz/yak/internal/render"
@@ -54,6 +58,7 @@ func TestTemplateGolden(t *testing.T) {
 			if err != nil {
 				t.Fatalf("rendering %s: %v", path, err)
 			}
+			requireValidYAML(t, buf.Bytes())
 			compareGolden(t, filepath.Join(dir, name+".want.yaml"), buf.String())
 		})
 	}
@@ -88,6 +93,24 @@ func TestTemplateErrors(t *testing.T) {
 			got := strings.ReplaceAll(err.Error(), path, filepath.Base(path))
 			compareGolden(t, filepath.Join(dir, name+".want.err"), got+"\n")
 		})
+	}
+}
+
+// requireValidYAML reads the rendered stream back. Comments are written into
+// the output, and one placed badly would change the shape of a document
+// rather than just look wrong.
+func requireValidYAML(t *testing.T, out []byte) {
+	t.Helper()
+	dec := yaml.NewDecoder(bytes.NewReader(out))
+	for {
+		var doc any
+		err := dec.Decode(&doc)
+		if errors.Is(err, io.EOF) {
+			return
+		}
+		if err != nil {
+			t.Fatalf("rendered output is not valid YAML: %v\n%s", err, out)
+		}
 	}
 }
 

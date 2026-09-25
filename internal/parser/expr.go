@@ -217,7 +217,7 @@ func (p *parser) parseFlowSequence() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		s.Items = append(s.Items, item)
+		s.Items = append(s.Items, &ast.Item{Value: item})
 		if p.at(token.Comma) {
 			p.next()
 			continue
@@ -304,7 +304,7 @@ func (p *parser) parseFragment(src string, start token.Pos) (ast.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	sub := &parser{file: p.file, toks: toks}
+	sub := &parser{file: p.file, toks: toks, comments: newCommentSet(nil)}
 	if sub.at(token.EOF) {
 		return nil, p.errorf(start, "empty string interpolation")
 	}

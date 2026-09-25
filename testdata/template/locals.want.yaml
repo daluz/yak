@@ -1,3 +1,4 @@
+# Bindings, defaults, and optional context lookups.
 service:
   name: shop-web
   labels:
@@ -5,6 +6,7 @@ service:
     region: us-east-1
   replicas: 1
   zone: us-east-1a
+  # A binding may read the mapping it sits in, and may be declared after use.
   endpoint: https://shop-web.us-east-1a.example.com
   tls: false
 workers:

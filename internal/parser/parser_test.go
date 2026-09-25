@@ -31,7 +31,7 @@ func dump(n ast.Node) string {
 	case *ast.Sequence:
 		parts := make([]string, 0, len(t.Items))
 		for _, item := range t.Items {
-			parts = append(parts, dump(item))
+			parts = append(parts, dump(item.Value))
 		}
 		return "[" + strings.Join(parts, " ") + "]"
 	case *ast.String:
@@ -279,6 +279,87 @@ func TestParseDocuments(t *testing.T) {
 				if got := dump(stream.Docs[i].Body); got != want {
 					t.Errorf("document %d = %s, want %s", i, got, want)
 				}
+			}
+		})
+	}
+}
+
+// dumpComments lists where each comment of a tree ended up, so that a test
+// can state the whole outcome on one line.
+func dumpComments(n ast.Node) []string {
+	var out []string
+	switch t := n.(type) {
+	case *ast.Local:
+		out = append(out, dumpComments(t.Body)...)
+	case *ast.Mapping:
+		for _, e := range t.Entries {
+			out = append(out, labelComments(dump(e.Key), e.Comments)...)
+			out = append(out, dumpComments(e.Value)...)
+		}
+	case *ast.Sequence:
+		for i, item := range t.Items {
+			out = append(out, labelComments(fmt.Sprintf("[%d]", i), item.Comments)...)
+			out = append(out, dumpComments(item.Value)...)
+		}
+	}
+	return out
+}
+
+func labelComments(at string, c ast.Comments) []string {
+	var out []string
+	for _, head := range c.Head {
+		out = append(out, at+" head "+head)
+	}
+	if c.Line != "" {
+		out = append(out, at+" line "+c.Line)
+	}
+	for _, foot := range c.Foot {
+		out = append(out, at+" foot "+foot)
+	}
+	return out
+}
+
+func TestParseComments(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"above an entry", "# c\na: 1\n", `"a" head # c`},
+		{"beside an entry", "a: 1 # c\n", `"a" line # c`},
+		{"a whole paragraph", "# one\n# two\na: 1\n", `"a" head # one; "a" head # two`},
+		{"above a nested entry", "a:\n  # c\n  b: 1\n", `"b" head # c`},
+		{"beside a key that opens a block", "a: # c\n  b: 1\n", `"a" line # c`},
+		{"at the end of a block", "a:\n  b: 1\n  # c\nd: 2\n", `"d" head # c`},
+		{"on a sequence item", "a:\n  # c\n  - 1 # d\n", `[0] head # c; [0] line # d`},
+		{"on a mapping in a sequence", "# c\n- a: 1 # d\n", `[0] head # c; "a" line # d`},
+		{"at the end of a document", "a: 1\n# c\n", `"a" foot # c`},
+		{"at the end of the first document", "a: 1\n# c\n---\nb: 2\n", `"a" foot # c`},
+
+		{"above a binding", "# c\nlocal x = 1\na: x\n", `"a" head # c`},
+		{"beside a binding", "local x = 1 # c\na: x\n", ""},
+		{"inside a binding's value", "local x =\n  # c\n  b: 1\na: x\n", ""},
+		{"inside a local block", "local {\n  # c\n  x = 1\n}\na: x\n", ""},
+		{"above a binding in a block", "a:\n  # c\n  local x = 1\n  b: x\n", `"b" head # c`},
+
+		{"marked for the template", "#local c\na: 1\n", ""},
+		{"marked beside an entry", "a: 1 #local c\n", ""},
+		{"marked with no text", "#local\na: 1\n", ""},
+		{"a word that starts with local", "#localhost c\na: 1\n", `"a" head #localhost c`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			stream, err := parser.Parse("test.yak", []byte(tc.src))
+			if err != nil {
+				t.Fatalf("Parse(%q) returned error: %v", tc.src, err)
+			}
+			var got []string
+			for _, doc := range stream.Docs {
+				got = append(got, dumpComments(doc.Body)...)
+			}
+			if joined := strings.Join(got, "; "); joined != tc.want {
+				t.Errorf("Parse(%q) placed comments %q, want %q", tc.src, joined, tc.want)
 			}
 		})
 	}

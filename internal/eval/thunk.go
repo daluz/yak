@@ -107,12 +107,12 @@ func force(v Value, active map[Value]bool) error {
 		active[t] = true
 		defer delete(active, t)
 		for _, item := range t.Items() {
-			inner, err := item.Value()
+			inner, err := item.Value.Value()
 			if err != nil {
 				return err
 			}
 			if err := force(inner, active); err != nil {
-				return annotate(err, item.pos)
+				return annotate(err, item.Value.pos)
 			}
 		}
 	}

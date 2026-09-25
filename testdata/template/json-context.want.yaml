@@ -1,3 +1,5 @@
+# A JSON context file merges with a YAML one exactly as another YAML file
+# would, and keeps JSON-only spelling such as the escaped slash.
 name: frontend
 replicas: 3
 mount: /var/lib/frontend

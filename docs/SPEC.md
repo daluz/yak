@@ -287,11 +287,64 @@ A `.json` file is read by the JSON parser, so all of JSON is accepted,
 including escapes such as `\/` that YAML rejects. Every other file is read as
 YAML, which accepts most JSON as well.
 
+## Comments
+
+A comment runs from `#` to the end of the line, as in YAML, and it is carried
+into the rendered output. One written above an entry stays above it, and one
+written after a value stays beside it:
+
+```yaml
+# The public face of the service.
+service:
+  name: "web"    # and its DNS label
+```
+
+renders as:
+
+```yaml
+# The public face of the service.
+service:
+  name: web # and its DNS label
+```
+
+A comment belongs to the next thing that is rendered, so one written above a
+`local` comes out above whatever follows the binding. Comments with nothing
+after them come out at the end of the document.
+
+Two kinds of comment are left out of the output:
+
+- Anything written **inside a `local`**: in a `local { ... }` block, or in
+  the value of a binding. A binding renders nothing, so there is nowhere to
+  put them, and its value may be used in several places at once.
+- Any comment that starts with **`#local`**, wherever it is written. This is
+  how to address the next person to edit the template rather than whoever
+  reads the output. A word boundary is required after the marker, so
+  `#localhost` is an ordinary comment.
+
+```yaml
+local {
+  # Dropped: this describes the bindings, not the output.
+  region = "us-east-1"
+}
+#local Revisit when the cluster moves.
+region: region
+```
+
+renders as:
+
+```yaml
+region: us-east-1
+```
+
+Because a comment travels with the entry it was written on, a value that is
+used in several places brings its comments along to each of them. Comments in
+context files are not carried over at all.
+
 ## Output
 
-`yak template` writes YAML: source key order is preserved, hidden fields are
-dropped, and documents are separated by `---`. Nothing is written unless every
-document evaluates successfully.
+`yak template` writes YAML: source key order is preserved, comments are kept,
+hidden fields are dropped, and documents are separated by `---`. Nothing is
+written unless every document evaluates successfully.
 
 ## Grammar sketch
 

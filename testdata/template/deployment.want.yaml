@@ -1,3 +1,4 @@
+# A representative workload manifest, rendered from two context files.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

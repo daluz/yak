@@ -1,3 +1,4 @@
+# Each document has its own root, and $context is shared by all of them.
 kind: ConfigMap
 name: checkout-config
 data:

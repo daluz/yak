@@ -23,11 +23,11 @@ func (e *Error) Error() string { return e.Pos.String() + ": " + e.Msg }
 
 // Parse parses a complete yak source file into a document stream.
 func Parse(file string, src []byte) (*ast.Stream, error) {
-	toks, err := lexer.Lex(file, src)
+	toks, comments, err := lexer.Lex(file, src)
 	if err != nil {
 		return nil, err
 	}
-	p := &parser{file: file, toks: toks}
+	p := &parser{file: file, toks: toks, comments: newCommentSet(comments)}
 	return p.parseStream()
 }
 
@@ -38,6 +38,35 @@ type parser struct {
 	// prevEnd is where the most recently consumed token ended, used to
 	// require that references are written without internal whitespace.
 	prevEnd token.Pos
+
+	comments *commentSet
+	// localDepth counts the "local" statements being parsed, and localStart
+	// is where the innermost of them began. A binding renders nothing, so
+	// the comments inside one have nowhere to go.
+	localDepth int
+	localStart int
+}
+
+// takeHead claims the comments written above the current token for the node
+// about to be parsed.
+func (p *parser) takeHead() []string {
+	if p.localDepth > 0 {
+		// Claim the comments written inside the binding and throw them
+		// away. The ones above it are left for what follows it.
+		p.comments.head(p.localStart, p.i)
+		return nil
+	}
+	return p.comments.head(-1, p.i)
+}
+
+// takeLine claims the comment trailing a node that began at token start and
+// ends at the current position.
+func (p *parser) takeLine(start int) string {
+	line := p.comments.line(start, p.i)
+	if p.localDepth > 0 {
+		return ""
+	}
+	return line
 }
 
 func (p *parser) cur() token.Token { return p.toks[p.i] }
@@ -99,12 +128,36 @@ func (p *parser) parseStream() (*ast.Stream, error) {
 		if !p.atDocBoundary() {
 			return nil, p.errorf(p.cur().Pos, "unexpected %s at document level", p.cur())
 		}
+		attachFoot(body, p.takeHead())
 	}
 	if len(st.Docs) == 0 {
 		pos := token.Pos{File: p.file, Line: 1, Col: 1}
 		st.Docs = append(st.Docs, &ast.Document{Base: ast.At(pos), Body: &ast.Null{Base: ast.At(pos)}})
 	}
 	return st, nil
+}
+
+// attachFoot gives the comments left at the end of a document to the last
+// node that is rendered, which is where they come out again.
+func attachFoot(body ast.Node, foot []string) {
+	if len(foot) == 0 {
+		return
+	}
+	switch t := body.(type) {
+	case *ast.Local:
+		attachFoot(t.Body, foot)
+	case *ast.Mapping:
+		for i := len(t.Entries) - 1; i >= 0; i-- {
+			if !t.Entries[i].Hidden {
+				t.Entries[i].Foot = foot
+				return
+			}
+		}
+	case *ast.Sequence:
+		if n := len(t.Items); n > 0 {
+			t.Items[n-1].Foot = foot
+		}
+	}
 }
 
 // parseBlockNode parses a node in block context. The node's own extent is
@@ -193,6 +246,8 @@ func (p *parser) parseBlockMapping(col int) (*ast.Mapping, error) {
 }
 
 func (p *parser) parseMappingEntry(col int) (*ast.Entry, error) {
+	start := p.i
+	head := p.takeHead()
 	keyPos := p.cur().Pos
 	key, computed, err := p.parseKey()
 	if err != nil {
@@ -211,7 +266,14 @@ func (p *parser) parseMappingEntry(col int) (*ast.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ast.Entry{Key: key, Computed: computed, Hidden: hidden, Value: value, KeyPos: keyPos}, nil
+	return &ast.Entry{
+		Comments: ast.Comments{Head: head, Line: p.takeLine(start)},
+		Key:      key,
+		Computed: computed,
+		Hidden:   hidden,
+		Value:    value,
+		KeyPos:   keyPos,
+	}, nil
 }
 
 // parseEntryValue parses the value that follows a mapping key, which is either
@@ -248,7 +310,20 @@ func (p *parser) atLocal() bool {
 
 // parseLocalStatement parses one "local name = value" binding or a
 // "local { ... }" block of them.
+//
+// A binding renders nothing, so the comments written inside one are claimed
+// and dropped rather than left to drift onto the next entry.
 func (p *parser) parseLocalStatement(col int) ([]*ast.Binding, error) {
+	start := p.i
+	outer := p.localStart
+	p.localDepth, p.localStart = p.localDepth+1, start
+	binds, err := p.parseLocalBinding(col)
+	p.localDepth, p.localStart = p.localDepth-1, outer
+	p.comments.drop(start, p.i)
+	return binds, err
+}
+
+func (p *parser) parseLocalBinding(col int) ([]*ast.Binding, error) {
 	kw := p.next()
 	// A colon here means the line was meant to be an entry keyed "local".
 	switch p.cur().Kind {
@@ -342,12 +417,17 @@ func (p *parser) expectAssign() (token.Token, error) {
 func (p *parser) parseBlockSequence(col int) (ast.Node, error) {
 	s := &ast.Sequence{Base: ast.At(p.cur().Pos)}
 	for p.cur().Kind == token.Dash && p.cur().Col() == col {
+		start := p.i
+		head := p.takeHead()
 		dash := p.next()
-		item, err := p.parseSequenceItem(dash)
+		value, err := p.parseSequenceItem(dash)
 		if err != nil {
 			return nil, err
 		}
-		s.Items = append(s.Items, item)
+		s.Items = append(s.Items, &ast.Item{
+			Comments: ast.Comments{Head: head, Line: p.takeLine(start)},
+			Value:    value,
+		})
 	}
 	return s, nil
 }

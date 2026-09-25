@@ -105,6 +105,23 @@ type Chunk struct {
 	Pos Pos
 }
 
+// Comment is a "#" comment. Comments are kept out of the token stream so
+// that the parser never has to skip over one, and are matched back to the
+// nodes they belong to afterwards.
+type Comment struct {
+	// Text is the comment as written, including the leading "#" and
+	// without any trailing whitespace.
+	Text string
+	Pos  Pos
+	// OwnLine reports that nothing but whitespace preceded the comment on
+	// its line, which makes it describe what follows rather than what it
+	// was written after.
+	OwnLine bool
+	// Next is the index of the first token after the comment, which is how
+	// a comment is placed relative to the constructs around it.
+	Next int
+}
+
 // Token is a single lexical unit.
 type Token struct {
 	Kind Kind
