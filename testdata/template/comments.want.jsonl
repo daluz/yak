@@ -1,0 +1,2 @@
+{"service":{"name":"web","replicas":2,"port":8080},"placement":{"region":"us-east-1","zone":"us-east-1a"},"team":"platform","defaults":{"tier":"shared"},"workers":[{"name":"queue"},{"name":"cron"}],"endpoint":"https://example.com/"}
+{"second":true}

@@ -1,0 +1,13 @@
+{
+  "trailing-spaces": "a   \nb  \n",
+  "leading-tab": "\tstart\nmid\n",
+  "only-spaces": "   \n   ",
+  "lone-newline": "\n",
+  "no-final-newline": "first\nsecond",
+  "blank-line-inside": "above\n\nbelow\n",
+  "control": "bell:\u0007 escape:\u001b",
+  "quote-run": "a \"\"\" b",
+  "backslash-end": "path\\",
+  "carriage-return": "a\r\nb",
+  "unicode": "emoji 🎉 accent é"
+}

@@ -134,6 +134,96 @@ func TestTemplateErrorMentionsPosition(t *testing.T) {
 	}
 }
 
+func TestTemplateFormatFlag(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
+
+	for _, tc := range []struct {
+		format string
+		want   string
+	}{
+		{"json", "{\n  \"name\": \"web\"\n}\n"},
+		{"jsonl", "{\"name\":\"web\"}\n"},
+		{"toml", "name = \"web\"\n"},
+		{"jwcc", "{\n  \"name\": \"web\",\n}\n"},
+		// jsoncc, hujson and json5 are other names for jwcc.
+		{"jsoncc", "{\n  \"name\": \"web\",\n}\n"},
+		{"hujson", "{\n  \"name\": \"web\",\n}\n"},
+		{"json5", "{\n  \"name\": \"web\",\n}\n"},
+	} {
+		t.Run(tc.format, func(t *testing.T) {
+			out, err := run(t, "template", tmpl, "-f", tc.format)
+			if err != nil {
+				t.Fatalf("template returned error: %v", err)
+			}
+			if out != tc.want {
+				t.Errorf("stdout = %q, want %q", out, tc.want)
+			}
+		})
+	}
+}
+
+func TestTemplateRejectsUnknownFormat(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
+
+	_, err := run(t, "template", tmpl, "-f", "xml")
+	if err == nil || !strings.Contains(err.Error(), `unknown output format "xml"`) {
+		t.Errorf("error = %v, want a complaint about the format name", err)
+	}
+}
+
+func TestTemplateInfersFormatFromOutputFile(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
+	dest := filepath.Join(dir, "out.toml")
+
+	if _, err := run(t, "template", tmpl, "-o", dest); err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "name = \"web\"\n" {
+		t.Errorf("file contents = %q, want TOML", got)
+	}
+}
+
+func TestTemplateFormatFlagBeatsOutputExtension(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
+	dest := filepath.Join(dir, "out.toml")
+
+	if _, err := run(t, "template", tmpl, "-o", dest, "-f", "json"); err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "{\n  \"name\": \"web\"\n}\n" {
+		t.Errorf("file contents = %q, want JSON", got)
+	}
+}
+
+func TestTemplateKeepsYAMLForAnUnknownExtension(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
+	dest := filepath.Join(dir, "out.txt")
+
+	if _, err := run(t, "template", tmpl, "-o", dest); err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "name: web\n" {
+		t.Errorf("file contents = %q, want YAML", got)
+	}
+}
+
 func TestBuildAndValidateAreNotRegisteredYet(t *testing.T) {
 	for _, name := range []string{"build", "validate"} {
 		if _, err := run(t, name); err == nil {

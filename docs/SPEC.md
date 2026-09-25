@@ -342,9 +342,49 @@ context files are not carried over at all.
 
 ## Output
 
-`yak template` writes YAML: source key order is preserved, comments are kept,
-hidden fields are dropped, and documents are separated by `---`. Nothing is
-written unless every document evaluates successfully.
+`yak template` writes YAML by default: source key order is preserved,
+comments are kept, hidden fields are dropped, and documents are separated by
+`---`. Nothing is written unless every document evaluates successfully.
+
+`--format` selects another encoding, and naming an output file with a known
+extension selects the matching one:
+
+| Format  | Also known as                 | Documents | Comments |
+| ------- | ----------------------------- | --------- | -------- |
+| `yaml`  | `yml`                         | many      | yes      |
+| `kyaml` |                               | many      | yes      |
+| `json`  |                               | one       | no       |
+| `jsonc` |                               | one       | `//`     |
+| `jwcc`  | `jsoncc`, `hujson`, `json5`   | one       | `//`     |
+| `jsonl` | `ndjson`                      | many      | no       |
+| `toml`  |                               | one       | yes      |
+
+Key order, hidden fields and the all-or-nothing rule are the same everywhere.
+Comments are carried into every format that has somewhere to put them; the
+ones that do not simply leave them out.
+
+`kyaml` is the Kubernetes dialect of YAML from KEP-5295: flow style
+throughout, every string value double-quoted, keys left bare unless they
+could be read as something else, trailing commas, and a `---` header on every
+document. It is a subset of YAML, so any YAML parser reads it. Unlike
+`kubectl`, yak writes the keys in the order they were written rather than
+sorting them.
+
+`jsonc` adds comments to JSON, and `jwcc` ("JSON with commas and comments")
+adds trailing commas on top of them. `json5` names `jwcc` because everything
+yak writes reads as JSON5, even though JSON5 as a language allows more than
+yak ever emits. `jsonl` writes one compact document per line and is the way
+to get a stream of documents out as JSON. The three single-document formats
+report an error rather than picking one when a template produced several.
+
+TOML is the one format that cannot hold everything yak can say:
+
+- A document must be a mapping, and there can only be one of them.
+- There is no null. A null value is an error naming the key it was found
+  at; `??` is how to supply something else.
+- Sub-tables have to follow the plain keys of the table they belong to, so
+  keys come out grouped by whether they open a table. Within each group the
+  source order holds.
 
 ## Grammar sketch
 

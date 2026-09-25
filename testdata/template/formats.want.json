@@ -1,0 +1,46 @@
+{
+  "ports": [
+    80,
+    443,
+    8080
+  ],
+  "matrix": [
+    [
+      1,
+      2
+    ],
+    [
+      3,
+      4
+    ]
+  ],
+  "empty-map": {},
+  "empty-list": [],
+  "keys": {
+    "no": "not a boolean",
+    "On": "not a boolean either",
+    "8080": "not a number",
+    "kubernetes.io/name": "punctuation needs quoting",
+    "plain-key": "this one does not"
+  },
+  "numbers": {
+    "whole": 1.0,
+    "fraction": 0.5,
+    "exponent": 1.5e+10,
+    "large": 9007199254740991
+  },
+  "servers": [
+    {
+      "host": "a.example.com",
+      "tags": [
+        "web",
+        "edge"
+      ]
+    },
+    {
+      "host": "b.example.com",
+      "tags": []
+    }
+  ],
+  "script": "set -eu\n  an indented line\n\na line after a blank one\n"
+}

@@ -45,13 +45,42 @@ $ go build ./cmd/yak
 ## Usage
 
 ```console
-$ yak template FILE.yak [-c context.yaml|context.json]... [-o output.yaml]
+$ yak template FILE.yak [-c context.yaml|context.json]... [-f FORMAT] [-o output.yaml]
 ```
 
 Context files are merged in the order given, with later files taking
 precedence, and are available to the template as `$context` or its `$$`
 shorthand. They may be YAML or JSON, mixed freely; a `.json` extension selects
 the JSON parser. Pass `-` as the file to read a template from standard input.
+
+## Output formats
+
+`-f` picks the encoding, and naming an output file with a known extension
+picks it too:
+
+| Format  | Also known as               | Documents | Comments |
+| ------- | --------------------------- | --------- | -------- |
+| `yaml`  | `yml`                       | many      | yes      |
+| `kyaml` |                             | many      | yes      |
+| `json`  |                             | one       | no       |
+| `jsonc` |                             | one       | `//`     |
+| `jwcc`  | `jsoncc`, `hujson`, `json5` | one       | `//`     |
+| `jsonl` | `ndjson`                    | many      | no       |
+| `toml`  |                             | one       | yes      |
+
+`kyaml` is the Kubernetes dialect from KEP-5295: flow style, quoted string
+values, bare keys where they cannot be misread, and trailing commas. `jsonc`
+keeps comments, `jwcc` adds trailing commas as well, and `jsonl` writes one
+compact document per line.
+
+The single-document formats refuse a template that produced several rather
+than picking one. TOML also needs a mapping at the top level and has no null,
+so a null value is an error naming the key it came from.
+
+```console
+$ yak template app.yak -c production.yaml -f kyaml
+$ yak template app.yak -o rendered.json     # the extension chooses JSON
+```
 
 ## What makes it different from YAML
 
@@ -73,7 +102,8 @@ the JSON parser. Pass `-` as the file to read a template from standard input.
   an index is missing, and `??` supplies the value to use instead.
 - **Comments survive.** They are carried into the output, except the ones
   written inside a `local` and the ones starting with `#local`, which are
-  notes about the template.
+  notes about the template. Every output format that can hold a comment
+  gets them, JSON dialects and TOML included.
 
 [docs/SPEC.md](docs/SPEC.md) is the full language description.
 
@@ -95,3 +125,5 @@ $ go test ./... -update   # refresh the golden files under testdata/
 Fixtures live in `testdata/template` (a template, its `*.ctx*.yaml` or
 `*.ctx*.json` context files, and the expected `*.want.yaml`) and
 `testdata/errors` (a template and the exact diagnostic it should produce).
+A template is also rendered in any other format it has a `*.want.FORMAT`
+file for, or `*.want.FORMAT.err` where that format has to refuse it.

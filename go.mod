@@ -3,6 +3,7 @@ module github.com/daluz/yak
 go 1.27.1
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/spf13/cobra v1.10.2
 	gopkg.in/yaml.v3 v3.0.1
 )

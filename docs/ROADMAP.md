@@ -2,8 +2,9 @@
 
 Done so far: the restricted YAML parser, string interpolation, relative
 references, hidden fields, context files, the `template` command, `local`
-bindings, and the `??` and `?.` operators. What follows is the planned order
-of the remaining work.
+bindings, the `??` and `?.` operators, and the YAML, KYAML, JSON, TOML and
+line-delimited output formats. What follows is the planned order of the
+remaining work.
 
 Everything listed here is already reserved in the language. Using one of these
 keywords today produces an explicit "not implemented yet" error pointing at the
@@ -78,8 +79,8 @@ Both slot into `internal/cli` beside `template`, and both can reuse
   without a precedence table; arithmetic and comparison will need one. Note
   that `-` is allowed inside identifiers, so binary operators will require
   surrounding whitespace.
-- `--format json`. `render.Options` already carries a format enum and
-  `render.Documents` already branches on it.
 - Preserving flow style. Flow collections currently render as block
   collections; `ast.Mapping.Flow` and `ast.Sequence.Flow` record the original
   style if that becomes worth honouring.
+- An `--indent` flag. `render.Options` already carries the width and every
+  format reads it; nothing exposes it yet.

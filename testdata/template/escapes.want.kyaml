@@ -1,0 +1,38 @@
+---
+{
+  # Text that every format has to escape or fold carefully. The formats
+  # agree on what these strings say, which is what the round-trip test
+  # checks; the goldens record how each one spells them.
+  trailing-spaces: "\
+     a  \ \n\
+     b \ \n\
+    ",
+  leading-tab: "\
+    \tstart\n\
+     mid\n\
+    ",
+  only-spaces: "\
+    \  \ \n\
+    \  \ \
+    ",
+  lone-newline: "\
+     \n\
+    ",
+  no-final-newline: "\
+     first\n\
+     second\
+    ",
+  blank-line-inside: "\
+     above\n\
+     \n\
+     below\n\
+    ",
+  control: "bell:\u0007 escape:\u001b",
+  quote-run: "a \"\"\" b",
+  backslash-end: "path\\",
+  carriage-return: "\
+     a\r\n\
+     b\
+    ",
+  unicode: "emoji 🎉 accent é",
+}

@@ -2,16 +2,12 @@ package engine_test
 
 import (
 	"bytes"
-	"errors"
 	"flag"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/daluz/yak/internal/engine"
 	"github.com/daluz/yak/internal/render"
@@ -25,10 +21,14 @@ func testdataDir(name string) string {
 }
 
 // TestTemplateGolden renders every testdata/template/*.yak file against its
-// sibling context files and compares the result with the .want.yaml golden.
+// sibling context files and compares the result with its goldens.
 //
 // Context files are named NAME.ctx*.yaml or NAME.ctx*.json and are passed in
 // sorted order, so deployment.ctx1.yaml is merged before deployment.ctx2.yaml.
+//
+// Every template has a NAME.want.yaml. To cover another output format, add
+// a NAME.want.FORMAT file beside it, or a NAME.want.FORMAT.err holding the
+// diagnostic when the format cannot hold what the template produces.
 func TestTemplateGolden(t *testing.T) {
 	dir := testdataDir("template")
 	templates, err := filepath.Glob(filepath.Join(dir, "*.yak"))
@@ -48,20 +48,78 @@ func TestTemplateGolden(t *testing.T) {
 			}
 			sort.Strings(contexts)
 
-			var buf bytes.Buffer
-			err = engine.Template(engine.TemplateRequest{
-				Path:         path,
-				ContextPaths: contexts,
-				Out:          &buf,
-				Options:      render.DefaultOptions(),
-			})
-			if err != nil {
-				t.Fatalf("rendering %s: %v", path, err)
+			for _, c := range goldenCases(t, dir, name) {
+				t.Run(c.name(), func(t *testing.T) {
+					var buf bytes.Buffer
+					err := engine.Template(engine.TemplateRequest{
+						Path:         path,
+						ContextPaths: contexts,
+						Out:          &buf,
+						Options:      render.Options{Format: c.format},
+					})
+					if c.wantErr {
+						if err == nil {
+							t.Fatalf("rendering %s as %s succeeded, want an error", path, c.format)
+						}
+						compareGolden(t, c.golden, err.Error()+"\n")
+						return
+					}
+					if err != nil {
+						t.Fatalf("rendering %s as %s: %v", path, c.format, err)
+					}
+					requireValid(t, c.format, buf.Bytes())
+					compareGolden(t, c.golden, buf.String())
+				})
 			}
-			requireValidYAML(t, buf.Bytes())
-			compareGolden(t, filepath.Join(dir, name+".want.yaml"), buf.String())
 		})
 	}
+}
+
+// goldenCase is one template rendered in one format.
+type goldenCase struct {
+	format  render.Format
+	golden  string
+	wantErr bool
+}
+
+func (c goldenCase) name() string {
+	if c.wantErr {
+		return c.format.String() + "-error"
+	}
+	return c.format.String()
+}
+
+// goldenCases finds the goldens recorded for a template. The YAML one is
+// always expected, so that a new fixture only needs `make update`.
+func goldenCases(t *testing.T, dir, name string) []goldenCase {
+	t.Helper()
+	yamlGolden := filepath.Join(dir, name+".want.yaml")
+	cases := []goldenCase{{format: render.FormatYAML, golden: yamlGolden}}
+
+	prefix := name + ".want."
+	paths, err := filepath.Glob(filepath.Join(dir, prefix+"*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		if path == yamlGolden {
+			continue
+		}
+		suffix := strings.TrimPrefix(filepath.Base(path), prefix)
+		c := goldenCase{golden: path}
+		if rest, ok := strings.CutSuffix(suffix, ".err"); ok {
+			c.wantErr = true
+			suffix = rest
+		}
+		format, err := render.ParseFormat(suffix)
+		if err != nil {
+			t.Fatalf("golden file %s: %v", path, err)
+		}
+		c.format = format
+		cases = append(cases, c)
+	}
+	return cases
 }
 
 // TestTemplateErrors checks that every testdata/errors/*.yak file fails with
@@ -93,24 +151,6 @@ func TestTemplateErrors(t *testing.T) {
 			got := strings.ReplaceAll(err.Error(), path, filepath.Base(path))
 			compareGolden(t, filepath.Join(dir, name+".want.err"), got+"\n")
 		})
-	}
-}
-
-// requireValidYAML reads the rendered stream back. Comments are written into
-// the output, and one placed badly would change the shape of a document
-// rather than just look wrong.
-func requireValidYAML(t *testing.T, out []byte) {
-	t.Helper()
-	dec := yaml.NewDecoder(bytes.NewReader(out))
-	for {
-		var doc any
-		err := dec.Decode(&doc)
-		if errors.Is(err, io.EOF) {
-			return
-		}
-		if err != nil {
-			t.Fatalf("rendered output is not valid YAML: %v\n%s", err, out)
-		}
 	}
 }
 

@@ -1,0 +1,48 @@
+---
+{
+  # A representative workload manifest, rendered from two context files.
+  apiVersion: "apps/v1",
+  kind: "Deployment",
+  metadata: {
+    name: "frontend-web",
+    labels: {
+      app: "frontend-web",
+      tier: "web",
+    },
+  },
+  spec: {
+    replicas: 3,
+    selector: {
+      matchLabels: {
+        app: "frontend-web",
+      },
+    },
+    template: {
+      metadata: {
+        labels: {
+          app: "frontend-web",
+          tier: "web",
+        },
+      },
+      spec: {
+        containers: [{
+          name: "frontend",
+          image: "registry.example.com/frontend:v1.2.3",
+          ports: [{
+            containerPort: 8080,
+          }],
+          env: [{
+            name: "APP_NAME",
+            value: "frontend",
+          }, {
+            name: "CONFIG",
+            value: "\
+               app=frontend\n\
+               replicas=3\n\
+              ",
+          }],
+        }],
+      },
+    },
+  },
+}

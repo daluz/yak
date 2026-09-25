@@ -1,10 +1,8 @@
-// Package render writes evaluated yak values as YAML.
 package render
 
 import (
+	"bytes"
 	"fmt"
-	"io"
-	"math"
 	"strconv"
 	"strings"
 
@@ -13,58 +11,29 @@ import (
 	"github.com/daluz/yak/internal/eval"
 )
 
-// Format selects the output encoding. Only YAML exists today; the enum keeps
-// the seam open for JSON.
-type Format int
-
-// Supported output formats.
-const (
-	FormatYAML Format = iota
-)
-
-// Options controls how documents are written.
-type Options struct {
-	Format Format
-	// Indent is the number of spaces per nesting level.
-	Indent int
-}
-
-// DefaultOptions returns the standard rendering settings.
-func DefaultOptions() Options {
-	return Options{Format: FormatYAML, Indent: 2}
-}
-
-// Documents writes every evaluated document to w, separated by "---".
-func Documents(w io.Writer, docs []eval.Value, opts Options) error {
-	if opts.Indent <= 0 {
-		opts.Indent = 2
-	}
-	if opts.Format != FormatYAML {
-		return fmt.Errorf("unsupported output format")
-	}
-
-	// Resolve every document before writing anything, so that a failure in a
-	// later document does not leave a partial stream behind.
+// encodeYAML writes the documents as block YAML, separated by "---".
+func encodeYAML(docs []eval.Value, opts Options) ([]byte, error) {
 	nodes := make([]*yaml.Node, 0, len(docs))
 	for _, doc := range docs {
-		if err := eval.Force(doc); err != nil {
-			return err
-		}
 		node, err := toNode(doc)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		nodes = append(nodes, node)
 	}
 
-	enc := yaml.NewEncoder(w)
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(opts.Indent)
 	for _, node := range nodes {
 		if err := enc.Encode(node); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return enc.Close()
+	if err := enc.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func toNode(v eval.Value) (*yaml.Node, error) {
@@ -82,7 +51,11 @@ func toNode(v eval.Value) (*yaml.Node, error) {
 		return scalar("!!int", strconv.FormatInt(int64(t), 10)), nil
 
 	case eval.Float:
-		return scalar("!!float", formatFloat(float64(t))), nil
+		s, err := formatFloat(float64(t), yamlFloats)
+		if err != nil {
+			return nil, err
+		}
+		return scalar("!!float", s), nil
 
 	case eval.String:
 		return stringNode(string(t)), nil
@@ -187,38 +160,32 @@ func closing(n *yaml.Node) *yaml.Node {
 // that rendered output stays readable.
 func stringNode(s string) *yaml.Node {
 	n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s}
-	if strings.Contains(s, "\n") && isBlockSafe(s) {
-		n.Style = yaml.LiteralStyle
+	if !strings.Contains(s, "\n") {
+		return n
 	}
+	if isBlockSafe(s) {
+		n.Style = yaml.LiteralStyle
+		return n
+	}
+	// Left to itself the encoder reaches for a block scalar here too, and
+	// writes one that cannot be read back.
+	n.Style = yaml.DoubleQuotedStyle
 	return n
 }
 
 // isBlockSafe reports whether a literal block scalar can round-trip the text.
-// Trailing spaces and interior tabs at line starts defeat block scalars, so
-// such strings fall back to quoted style.
+// Trailing spaces and interior tabs at line starts defeat block scalars, and
+// so does an empty first line, which leaves the block with no indentation to
+// measure itself against.
 func isBlockSafe(s string) bool {
-	for _, line := range strings.Split(s, "\n") {
+	lines := strings.Split(s, "\n")
+	if lines[0] == "" {
+		return false
+	}
+	for _, line := range lines {
 		if strings.HasSuffix(line, " ") || strings.HasPrefix(line, "\t") {
 			return false
 		}
 	}
 	return true
-}
-
-func formatFloat(f float64) string {
-	switch {
-	case math.IsNaN(f):
-		return ".nan"
-	case math.IsInf(f, 1):
-		return ".inf"
-	case math.IsInf(f, -1):
-		return "-.inf"
-	}
-	s := strconv.FormatFloat(f, 'g', -1, 64)
-	// A float that formats without a decimal point would read back as an
-	// integer, so keep it unambiguous.
-	if !strings.ContainsAny(s, ".eE") {
-		s += ".0"
-	}
-	return s
 }

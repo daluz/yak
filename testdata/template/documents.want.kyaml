@@ -1,0 +1,25 @@
+---
+{
+  # Each document has its own root, and $context is shared by all of them.
+  kind: "ConfigMap",
+  name: "checkout-config",
+  data: {
+    self-kind: "ConfigMap",
+  },
+}
+---
+{
+  kind: "Service",
+  name: "checkout-svc",
+  selector: {
+    app: "checkout-svc",
+  },
+  ports: [
+    80,
+    443,
+  ],
+  options: {
+    debug: false,
+    retries: 3,
+  },
+}

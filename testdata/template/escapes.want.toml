@@ -1,0 +1,32 @@
+# Text that every format has to escape or fold carefully. The formats
+# agree on what these strings say, which is what the round-trip test
+# checks; the goldens record how each one spells them.
+trailing-spaces = """
+a   
+b  
+"""
+leading-tab = """
+\tstart
+mid
+"""
+only-spaces = """
+   
+   """
+lone-newline = """
+
+"""
+no-final-newline = """
+first
+second"""
+blank-line-inside = """
+above
+
+below
+"""
+control = "bell:\u0007 escape:\u001b"
+quote-run = "a \"\"\" b"
+backslash-end = "path\\"
+carriage-return = """
+a\r
+b"""
+unicode = "emoji 🎉 accent é"

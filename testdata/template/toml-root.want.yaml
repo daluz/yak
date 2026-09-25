@@ -1,0 +1,3 @@
+# TOML has no way to write a document that is not a table.
+- first
+- second

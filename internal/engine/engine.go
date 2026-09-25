@@ -27,7 +27,9 @@ type TemplateRequest struct {
 	// ContextPaths are merged in order, with later files taking precedence.
 	ContextPaths []string
 	Out          io.Writer
-	Options      render.Options
+	// Options selects the output format and its indentation. The zero
+	// value renders YAML at the default indent.
+	Options render.Options
 }
 
 // Template renders one template file to the request's writer.
@@ -40,11 +42,7 @@ func Template(req TemplateRequest) error {
 	if err != nil {
 		return err
 	}
-	opts := req.Options
-	if opts.Indent == 0 {
-		opts = render.DefaultOptions()
-	}
-	return Render(name, src, context, req.Out, opts)
+	return Render(name, src, context, req.Out, req.Options)
 }
 
 // Render parses, evaluates and writes a source buffer. It is the seam used by
