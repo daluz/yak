@@ -287,6 +287,91 @@ Because they resolve lazily, bindings may refer to each other in any order,
 and a binding that ends up needing itself is reported as a circular reference.
 A binding that is never used is never evaluated.
 
+## Functions
+
+A binding whose name is followed by a parameter list is a function. Calling it
+evaluates its value with the parameters bound to the arguments:
+
+```yaml
+local url(host, port) = "https://{host}:{port}"
+
+endpoint: url($$.host, 8080)
+```
+
+The parentheses of a call are written flush against what they call, exactly as
+`.` and `[` are, and the body may be an indented block like any other binding
+value:
+
+```yaml
+local endpoint(name) =
+  host: "{name}.example.com"
+  port: 443
+
+web: endpoint("web")
+```
+
+A parameter may declare the value to use when a call leaves it out. Arguments
+are given by position, by name, or by position and then by name:
+
+```yaml
+local url(host, port = 8080, scheme = "https") = "{scheme}://{host}:{port}"
+
+a: url("web.example.com")                   # https://web.example.com:8080
+b: url("web.example.com", 443)              # https://web.example.com:443
+c: url(port = 443, host = "web.example.com")
+d: url("web.example.com", scheme = "http")
+```
+
+A named argument may not be followed by a positional one, since its position
+would say nothing. Naming a parameter that does not exist, naming one twice,
+giving more arguments than there are parameters, and leaving out one that has
+no default are all errors.
+
+A default is evaluated at the call, in the same scope as the parameters, so it
+may name a parameter declared before it:
+
+```yaml
+local span(from, to = from) = "{from}..{to}"
+```
+
+### What a function sees
+
+A function is a binding, so everything bindings do applies: it covers the
+block it is written in, it may be used before the line that declares it, and
+one in an inner block shadows an outer one of the same name. A parameter is a
+binding too, and shadows anything of its name that the function could
+otherwise see.
+
+The body is evaluated where the function was written, not where it is called,
+so `.name` inside one names the mapping that holds the declaration:
+
+```yaml
+name: "shop"
+local label(suffix) = "{.name}-{suffix}"
+labels:
+  app: label("web")
+```
+
+Arguments are evaluated in the scope of the call instead, and lazily, so an
+argument that no parameter needs is never evaluated, and neither is a function
+that is never called.
+
+### Functions as values
+
+A function is a value like any other. It can be bound to another name, held in
+a hidden field, and passed to another function:
+
+```yaml
+local apply(fn, to) = fn(to)
+local twice(s) = "{s}{s}"
+
+v: apply(twice, "ab")   # abab
+```
+
+No output format can hold a function, so one that reaches the output is an
+error rather than something rendered. Calling anything that is not a function
+is an error naming what was found instead.
+
 ## Missing values
 
 `?.` and `?[` read a field or an index that may not be there, and produce
@@ -555,7 +640,9 @@ blockMapping:= (local | key sep value)+           -- aligned on one column
 blockSequence := ("-" node)+                      -- aligned on one column
 sep         := ":" | "::" | ":?"
 local       := "local" binding | "local" "{" binding+ "}"
-binding     := identifier "=" value
+binding     := identifier params? "=" value
+params      := "(" (param ("," param)* ","?)? ")"
+param       := identifier ("=" value)?
 value       := conditional | coalesce
 conditional := "if" coalesce "then" value ("else" value)?
 coalesce    := binary ("??" binary)*
@@ -569,6 +656,8 @@ loop        := "for" identifier "in" value ("if" value)?
 key         := identifier | string | "[" value "]"
 literal     := string | int | float | "true" | "false" | "null"
 reference   := (dots | "$" | "$context" | "$$" | identifier) postfix*
-postfix     := "?"? ("." identifier | "[" value "]")
+postfix     := "?"? ("." identifier | "[" value "]") | args
+args        := "(" (arg ("," arg)* ","?)? ")"
+arg         := (identifier "=")? value
 dots        := "." | ".." | "..."  ...
 ```

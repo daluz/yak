@@ -75,6 +75,26 @@ func dump(n ast.Node) string {
 		return "{" + dumpEntry(t.Entry) + dumpLoop(t.Loop) + "}"
 	case *ast.Local:
 		return "local(" + strings.Join(dumpBinds(t.Binds), " ") + ";" + dump(t.Body) + ")"
+	case *ast.Function:
+		params := make([]string, 0, len(t.Params))
+		for _, p := range t.Params {
+			if p.Default == nil {
+				params = append(params, p.Name)
+				continue
+			}
+			params = append(params, p.Name+"="+dump(p.Default))
+		}
+		return "fn(" + strings.Join(params, ",") + ";" + dump(t.Body) + ")"
+	case *ast.Call:
+		args := make([]string, 0, len(t.Args))
+		for _, a := range t.Args {
+			if a.Name == "" {
+				args = append(args, dump(a.Value))
+				continue
+			}
+			args = append(args, a.Name+"="+dump(a.Value))
+		}
+		return dump(t.Fn) + "(" + strings.Join(args, ",") + ")"
 	case *ast.Ident:
 		return "ident(" + t.Name + ")"
 	default:
@@ -224,6 +244,42 @@ func TestParseLocals(t *testing.T) {
 		{"in a sequence item", "- local x = 1\n  a: x\n", `[{x=1 "a":ident(x)}]`},
 		{"before a sequence", "local x = 1\n- x\n", `local(x=1;[ident(x)])`},
 		{"before a scalar", "local x = 1\nx\n", `local(x=1;ident(x))`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseOne(t, tc.src); got != tc.want {
+				t.Errorf("Parse(%q) = %s, want %s", tc.src, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseFunctions(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"one parameter", "local f(a) = a\nb: 1\n", `{f=fn(a;ident(a)) "b":1}`},
+		{"several parameters", "local f(a, b) = a\nc: 1\n", `{f=fn(a,b;ident(a)) "c":1}`},
+		{"no parameters", "local f() = 1\nb: 1\n", `{f=fn(;1) "b":1}`},
+		{"a default", "local f(a, b = 123) = a\nc: 1\n", `{f=fn(a,b=123;ident(a)) "c":1}`},
+		{"a default expression", "local f(a = .x ?? 1) = a\nb: 1\n", `{f=fn(a=(self+0.x??1);ident(a)) "b":1}`},
+		{"trailing comma", "local f(a,) = a\nb: 1\n", `{f=fn(a;ident(a)) "b":1}`},
+		{"block body", "local f(a) =\n  b: a\nc: 1\n", `{f=fn(a;{"b":ident(a)}) "c":1}`},
+		{"in a local block", "local { f(a) = a, g = 1 }\nb: 1\n", `{f=fn(a;ident(a)) g=1 "b":1}`},
+
+		{"positional call", "local f(a) = a\nb: f(1)\n", `{f=fn(a;ident(a)) "b":ident(f)(1)}`},
+		{"empty call", "local f() = 1\nb: f()\n", `{f=fn(;1) "b":ident(f)()}`},
+		{"named call", "local f(a, b) = a\nc: f(b = 2, a = 1)\n", `{f=fn(a,b;ident(a)) "c":ident(f)(b=2,a=1)}`},
+		{"mixed call", "local f(a, b) = a\nc: f(1, b = 2)\n", `{f=fn(a,b;ident(a)) "c":ident(f)(1,b=2)}`},
+		{"call spanning lines", "local f(a) = a\nb: f(\n  1,\n)\n", `{f=fn(a;ident(a)) "b":ident(f)(1)}`},
+		{"call on a field", "a: $.f(1)\n", `{"a":root.f(1)}`},
+		{"chained after a call", "local f(a) = a\nb: f(1).c[0]\n", `{f=fn(a;ident(a)) "b":ident(f)(1).c[0]}`},
+		{"call of a call", "local f(a) = a\nb: f(1)(2)\n", `{f=fn(a;ident(a)) "b":ident(f)(1)(2)}`},
+		{"call binds tighter than an operator", "local f(a) = a\nb: f(1) == 2\n", `{f=fn(a;ident(a)) "b":(ident(f)(1)==2)}`},
+		{"call in an interpolation", "local f(a) = a\nb: \"{f(1)}\"\n", `{f=fn(a;ident(a)) "b":concat(ident(f)(1))}`},
 	}
 
 	for _, tc := range tests {
@@ -500,7 +556,15 @@ func TestParseErrors(t *testing.T) {
 		{"local without a name", "local = 1\na: 1\n", "expected the name of a binding"},
 		{"local without an assignment", "local x 1\na: 1\n", `expected "=" after the name of a binding`},
 		{"local naming a keyword", "local null = 1\na: 1\n", "cannot name a binding"},
-		{"local function", "local f(x) = x\na: 1\n", `"local" functions are not implemented yet`},
+		{"parameter list without an assignment", "local f(a) 1\nb: 1\n", `expected "=" after the name of a binding`},
+		{"parameter naming a keyword", "local f(for) = 1\na: 1\n", `"for" is a keyword and cannot name a parameter`},
+		{"parameter that is not a name", "local f(1) = 1\na: 1\n", "expected the name of a parameter"},
+		{"duplicate parameter", "local f(a, a) = a\nb: 1\n", `parameter "a" is declared twice`},
+		{"unseparated parameters", "local f(a b) = a\nc: 1\n", `expected "," or ")" in a parameter list`},
+		{"unterminated parameter list", "local f(a = 1", "unterminated parameter list"},
+		{"unseparated arguments", "local f(a) = a\nb: f(1 2)\n", `expected "," or ")" in an argument list`},
+		{"unterminated argument list", "local f(a) = a\nb: f(1", "unterminated argument list"},
+		{"positional argument after a named one", "local f(a, b) = a\nc: f(a = 1, 2)\n", "cannot follow a named one"},
 		{"over-indented local", "local x = 1\n  local y = 2\na: x\n", "unexpected indentation"},
 		{"empty local block", "local {}\na: 1\n", "at least one binding"},
 		{"unterminated local block", "local {\n  x = 1\n", "unterminated"},

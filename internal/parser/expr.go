@@ -284,9 +284,9 @@ func (p *parser) adjacentFieldName(dots token.Token) (string, bool) {
 	return t.Lit, true
 }
 
-// parsePostfix applies field and index accesses. Each must be written flush
-// against the expression it applies to, so "$.b .c" is a mistake rather than
-// a silently accepted "$.b.c".
+// parsePostfix applies field accesses, index accesses and calls. Each must be
+// written flush against the expression it applies to, so "$.b .c" is a mistake
+// rather than a silently accepted "$.b.c".
 func (p *parser) parsePostfix(x ast.Node) (ast.Node, error) {
 	for {
 		if !p.adjacent() {
@@ -321,8 +321,58 @@ func (p *parser) parsePostfix(x ast.Node) (ast.Node, error) {
 			x = &ast.Index{Base: ast.At(x.Pos()), X: x, Index: idx, Optional: optional}
 		case optional:
 			return nil, p.errorf(t.Pos, "expected %q or %q after %q, found %s", ".", "[", "?", t)
+		case t.Kind == token.LParen:
+			args, err := p.parseArgs()
+			if err != nil {
+				return nil, err
+			}
+			x = &ast.Call{Base: ast.At(x.Pos()), Fn: x, Args: args}
 		default:
 			return x, nil
+		}
+	}
+}
+
+// parseArgs parses the argument list of a call. A named argument is written
+// "name = value", the way a parameter declares its default, and the
+// positional ones all come before the first of them.
+func (p *parser) parseArgs() ([]ast.Arg, error) {
+	open := p.next()
+	var args []ast.Arg
+	named := false
+	for {
+		if p.at(token.EOF) {
+			return nil, p.errorf(open.Pos, "unterminated argument list: missing %q", ")")
+		}
+		if p.at(token.RParen) {
+			p.next()
+			return args, nil
+		}
+		var arg ast.Arg
+		switch {
+		case p.at(token.Ident) && p.toks[p.i+1].Kind == token.Assign:
+			name := p.next()
+			p.next()
+			arg.Name, arg.NamePos = name.Lit, name.Pos
+			named = true
+		case named:
+			return nil, p.errorf(p.cur().Pos, "a positional argument cannot follow a named one")
+		}
+		value, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		arg.Value = value
+		args = append(args, arg)
+		if p.at(token.Comma) {
+			p.next()
+			continue
+		}
+		if p.at(token.EOF) {
+			return nil, p.errorf(open.Pos, "unterminated argument list: missing %q", ")")
+		}
+		if !p.at(token.RParen) {
+			return nil, p.errorf(p.cur().Pos, "expected %q or %q in an argument list, found %s", ",", ")", p.cur())
 		}
 	}
 }

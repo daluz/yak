@@ -365,7 +365,11 @@ func (p *parser) parseLocalBinding(col int) ([]*ast.Binding, error) {
 	if p.at(token.LBrace) {
 		return p.parseLocalBlock()
 	}
-	name, err := p.parseBindingName()
+	name, err := p.parseName("binding")
+	if err != nil {
+		return nil, err
+	}
+	fn, err := p.parseSignature(name)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +383,7 @@ func (p *parser) parseLocalBinding(col int) ([]*ast.Binding, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []*ast.Binding{{Base: ast.At(name.Pos), Name: name.Lit, Value: value}}, nil
+	return []*ast.Binding{bind(name, fn, value)}, nil
 }
 
 // parseLocalBlock parses the braced form. Bindings are written one per line,
@@ -404,7 +408,11 @@ func (p *parser) parseLocalBlock() ([]*ast.Binding, error) {
 		if !separated {
 			return nil, p.errorf(p.cur().Pos, "expected %q or a line break between bindings, found %s", ",", p.cur())
 		}
-		name, err := p.parseBindingName()
+		name, err := p.parseName("binding")
+		if err != nil {
+			return nil, err
+		}
+		fn, err := p.parseSignature(name)
 		if err != nil {
 			return nil, err
 		}
@@ -415,7 +423,7 @@ func (p *parser) parseLocalBlock() ([]*ast.Binding, error) {
 		if err != nil {
 			return nil, err
 		}
-		binds = append(binds, &ast.Binding{Base: ast.At(name.Pos), Name: name.Lit, Value: value})
+		binds = append(binds, bind(name, fn, value))
 		if p.at(token.Comma) {
 			p.next()
 			continue
@@ -424,25 +432,91 @@ func (p *parser) parseLocalBlock() ([]*ast.Binding, error) {
 	}
 }
 
-func (p *parser) parseBindingName() (token.Token, error) {
+// parseName parses the name of a binding or of a parameter, which is an
+// identifier that no keyword has already claimed.
+func (p *parser) parseName(what string) (token.Token, error) {
 	t := p.cur()
 	if t.Kind != token.Ident {
-		return t, p.errorf(t.Pos, "expected the name of a binding, found %s", t)
+		return t, p.errorf(t.Pos, "expected the name of a %s, found %s", what, t)
 	}
 	if token.IsReserved(t.Lit) {
-		return t, p.errorf(t.Pos, "%q is a reserved word and cannot name a binding", t.Lit)
+		return t, p.errorf(t.Pos, "%q is a reserved word and cannot name a %s", t.Lit, what)
 	}
 	if token.IsKeyword(t.Lit) {
-		return t, p.errorf(t.Pos, "%q is a keyword and cannot name a binding", t.Lit)
+		return t, p.errorf(t.Pos, "%q is a keyword and cannot name a %s", t.Lit, what)
 	}
 	p.next()
 	return t, nil
 }
 
-func (p *parser) expectAssign() (token.Token, error) {
-	if p.at(token.LParen) {
-		return p.cur(), p.errorf(p.cur().Pos, "%q functions are not implemented yet", "local")
+// parseSignature parses the parameter list that turns a binding into a
+// function. It returns nil when the name is not followed by "(", which is an
+// ordinary binding of a value.
+func (p *parser) parseSignature(name token.Token) (*ast.Function, error) {
+	if !p.at(token.LParen) {
+		return nil, nil
 	}
+	open := p.next()
+	fn := &ast.Function{Base: ast.At(name.Pos), Name: name.Lit}
+	for {
+		if p.at(token.EOF) {
+			return nil, p.errorf(open.Pos, "unterminated parameter list: missing %q", ")")
+		}
+		if p.at(token.RParen) {
+			p.next()
+			return fn, nil
+		}
+		param, err := p.parseParam(fn)
+		if err != nil {
+			return nil, err
+		}
+		fn.Params = append(fn.Params, param)
+		if p.at(token.Comma) {
+			p.next()
+			continue
+		}
+		if p.at(token.EOF) {
+			return nil, p.errorf(open.Pos, "unterminated parameter list: missing %q", ")")
+		}
+		if !p.at(token.RParen) {
+			return nil, p.errorf(p.cur().Pos, "expected %q or %q in a parameter list, found %s", ",", ")", p.cur())
+		}
+	}
+}
+
+// parseParam parses one parameter of fn, along with the default value that a
+// call may leave out.
+func (p *parser) parseParam(fn *ast.Function) (*ast.Param, error) {
+	name, err := p.parseName("parameter")
+	if err != nil {
+		return nil, err
+	}
+	for _, prev := range fn.Params {
+		if prev.Name == name.Lit {
+			return nil, p.errorf(name.Pos, "parameter %q is declared twice", name.Lit)
+		}
+	}
+	param := &ast.Param{Base: ast.At(name.Pos), Name: name.Lit}
+	if p.at(token.Assign) {
+		p.next()
+		if param.Default, err = p.parseExpr(); err != nil {
+			return nil, err
+		}
+	}
+	return param, nil
+}
+
+// bind builds a binding of name to value, wrapping it in the function that
+// its parameter list declared.
+func bind(name token.Token, fn *ast.Function, value ast.Node) *ast.Binding {
+	if fn != nil {
+		fn.Body = value
+		value = fn
+	}
+	return &ast.Binding{Base: ast.At(name.Pos), Name: name.Lit, Value: value}
+}
+
+func (p *parser) expectAssign() (token.Token, error) {
 	if !p.at(token.Assign) {
 		return p.cur(), p.errorf(p.cur().Pos, "expected %q after the name of a binding, found %s", "=", p.cur())
 	}

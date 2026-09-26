@@ -1,0 +1,3 @@
+local url(host, port) = "https://{host}:{port}"
+
+endpoint: url("web.example.com")

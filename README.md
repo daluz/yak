@@ -100,6 +100,8 @@ $ yak template app.yak -o rendered.json     # the extension chooses JSON
   value is null.
 - **Local bindings.** `local name = "web"`, or a `local { ... }` block of
   them. They are named, scoped, and produce no output.
+- **Functions.** `local url(host, port = 8080) = "https://{host}:{port}"`,
+  called with arguments by position or by name: `url("web", port = 443)`.
 - **Optional access and defaults.** `?.` and `?[` give `null` where a field or
   an index is missing, and `??` supplies the value to use instead.
 - **Conditionals.** `if $$.env == "prod" then 5 else 1`, built on the usual
@@ -117,7 +119,7 @@ $ yak template app.yak -o rendered.json     # the extension chooses JSON
 ## Status
 
 The `template` command is implemented, along with `local` bindings,
-conditionals and comprehensions. Functions, a standard library, `import`,
+functions, conditionals and comprehensions. A standard library, `import`,
 `schema`, and the `build` and `validate` commands are planned; see
 [docs/ROADMAP.md](docs/ROADMAP.md). Their keywords are already reserved, so
 using one today fails with a clear message rather than parsing as something

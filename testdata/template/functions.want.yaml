@@ -1,0 +1,18 @@
+services:
+  - name: web
+    url: https://web.example.com:8080
+    label: web!
+  - name: api
+    url: http://api.example.com:9000
+    label: api!
+web:
+  host: web.us-east-1.example.com
+  address: https://web.us-east-1.example.com:443
+tiers:
+  - gold
+  - bronze
+spans:
+  - a..a
+  - a..b
+  - a..z
+applied: x!

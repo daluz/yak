@@ -16,6 +16,9 @@ type docState struct {
 	// stack records the positions currently being evaluated so that a cycle
 	// can be reported as the chain of references that formed it.
 	stack []token.Pos
+	// depth counts the function calls being evaluated, which bounds a
+	// recursion that never ends.
+	depth int
 }
 
 // Env is the lexical environment of an expression.
@@ -151,6 +154,10 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 		return evalMapComp(node, env)
 	case *ast.Local:
 		return evalLocal(node, env)
+	case *ast.Function:
+		return &Function{decl: node, env: env}, nil
+	case *ast.Call:
+		return evalCall(node, env)
 	case *ast.Ident:
 		return evalIdent(node, env)
 	default:

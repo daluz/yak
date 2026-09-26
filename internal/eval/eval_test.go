@@ -497,6 +497,100 @@ func TestComprehensions(t *testing.T) {
 	}
 }
 
+func TestFunctions(t *testing.T) {
+	tests := []struct {
+		name    string
+		src     string
+		context string
+		want    string
+	}{
+		{
+			name: "positional arguments",
+			src:  "local f(a, b) = \"{a}-{b}\"\nv: f(1, 2)\n",
+			want: "v: 1-2\n",
+		},
+		{
+			name: "named arguments in any order",
+			src:  "local f(a, b) = \"{a}-{b}\"\nv: f(b = 2, a = 1)\n",
+			want: "v: 1-2\n",
+		},
+		{
+			name: "a named argument after the positional ones",
+			src:  "local f(a, b) = \"{a}-{b}\"\nv: f(1, b = 2)\n",
+			want: "v: 1-2\n",
+		},
+		{
+			name: "a default fills in a missing argument",
+			src:  "local f(a, b = 2) = \"{a}-{b}\"\nv: f(1)\nw: f(1, 3)\n",
+			want: "v: 1-2\nw: 1-3\n",
+		},
+		{
+			name: "a default may name an earlier parameter",
+			src:  "local f(a, b = a) = \"{a}-{b}\"\nv: f(1)\n",
+			want: "v: 1-1\n",
+		},
+		{
+			name: "a function with no parameters",
+			src:  "local f() = 1\nv: f()\n",
+			want: "v: 1\n",
+		},
+		{
+			name: "the body may be a block",
+			src:  "local f(a) =\n  k: a\nv: f(1)\n",
+			want: "v:\n  k: 1\n",
+		},
+		{
+			name: "the body sees the scope it was written in",
+			src:  "local suffix = \"s\"\nlocal f(a) = \"{a}-{suffix}\"\nv:\n  local suffix = \"inner\"\n  w: f(1)\n",
+			want: "v:\n  w: 1-s\n",
+		},
+		{
+			name: "a parameter shadows an outer binding",
+			src:  "local a = \"outer\"\nlocal f(a) = a\nv: f(\"inner\")\nw: a\n",
+			want: "v: inner\nw: outer\n",
+		},
+		{
+			name: "an argument is evaluated in the calling scope",
+			src:  "local f(a) = a\nv:\n  local x = 1\n  w: f(x)\n",
+			want: "v:\n  w: 1\n",
+		},
+		{
+			name: "an unused argument is never evaluated",
+			src:  "local f(a, b) = a\nv: f(1, .missing)\n",
+			want: "v: 1\n",
+		},
+		{
+			name: "a function that is never called is never evaluated",
+			src:  "local f(a) = .missing\nv: 1\n",
+			want: "v: 1\n",
+		},
+		{
+			name: "a function is a value that may be passed on",
+			src:  "local apply(fn, to) = fn(to)\nlocal twice(s) = \"{s}{s}\"\nv: apply(twice, \"ab\")\n",
+			want: "v: abab\n",
+		},
+		{
+			name: "a hidden field may hold a function",
+			src:  "f:: g\nlocal g(a) = \"g-{a}\"\nv: .f(1)\n",
+			want: "v: g-1\n",
+		},
+		{
+			name:    "a call inside a comprehension",
+			src:     "local f(a) = \"n-{a}\"\nv: [f(x) for x in $$.list]\n",
+			context: "list: [1, 2]\n",
+			want:    "v:\n  - n-1\n  - n-2\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mustRender(t, tc.src, tc.context); got != tc.want {
+				t.Errorf("rendered:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHiddenFields(t *testing.T) {
 	got := mustRender(t, "secret:: \"s3cret\"\nvisible: \"{.secret}!\"\n", "")
 	want := "visible: s3cret!\n"
@@ -587,6 +681,15 @@ func TestEvalErrors(t *testing.T) {
 		{"a non-boolean filter", "a: [x for x in [1] if x]\n", "", `the filter of a "for" must be a boolean`},
 		{"a constant comprehension key", `a: {"k": x for x in [1, 2]}` + "\n", "", "two items of the comprehension produced"},
 		{"a non-string comprehension key", "a: {[x]: 1 for x in [1]}\n", "", "mapping keys must be strings"},
+		{"a missing argument", "local f(a, b) = a\nv: f(1)\n", "", `needs an argument for parameter "b"`},
+		{"too many arguments", "local f(a) = a\nv: f(1, 2)\n", "", `takes at most 1 argument, found 2`},
+		{"an unknown parameter name", "local f(a) = a\nv: f(b = 1)\n", "", `has no parameter named "b"`},
+		{"lists the parameters", "local f(a) = a\nv: f(b = 1)\n", "", `parameters: "a"`},
+		{"a parameter given twice", "local f(a) = a\nv: f(1, a = 2)\n", "", `is given twice`},
+		{"calling something else", "local f = 1\nv: f(1)\n", "", "cannot call a value of type integer"},
+		{"rendering a function", "local f(a) = a\nv: f\n", "", "cannot render a value of type function"},
+		{"interpolating a function", "local f(a) = a\nv: \"{f}\"\n", "", "cannot interpolate a function"},
+		{"endless recursion", "local f(a) = f(a)\nv: f(1)\n", "", "may not terminate"},
 	}
 
 	for _, tc := range tests {

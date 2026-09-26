@@ -51,6 +51,24 @@ type Binding struct {
 	Value Node
 }
 
+// Function is the value of a binding whose name was followed by a parameter
+// list. Name is the name of that binding, which is what diagnostics about a
+// call report.
+type Function struct {
+	Base
+	Name   string
+	Params []*Param
+	Body   Node
+}
+
+// Param is one parameter of a Function. Default is nil for a parameter that
+// every call has to supply.
+type Param struct {
+	Base
+	Name    string
+	Default Node
+}
+
 // Local scopes bindings over a body that is not a mapping. Bindings written
 // in a mapping belong to the Mapping instead, so that they can refer to its
 // fields.
@@ -184,6 +202,21 @@ type Index struct {
 	// Optional records the "?[" form, which yields null instead of failing
 	// when x is null or has nothing at that index.
 	Optional bool
+}
+
+// Call is an "f(x)" call of a Function.
+type Call struct {
+	Base
+	Fn   Node
+	Args []Arg
+}
+
+// Arg is one argument of a Call. Name is empty for a positional argument,
+// which takes the parameter in the position it was written in.
+type Arg struct {
+	Name    string
+	NamePos token.Pos
+	Value   Node
 }
 
 // Coalesce is "x ?? y", which evaluates to y when x is null.

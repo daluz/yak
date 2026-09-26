@@ -1,0 +1,39 @@
+#local Functions: positional and named arguments, and parameter defaults.
+local url(host, port = 8080, scheme = "https") = "{scheme}://{host}:{port}"
+local { shout(s) = "{s}!", tier(replicas) = if replicas > 3 then "gold" else "bronze" }
+
+#local A default may name a parameter declared before it.
+local span(from, to = from) = "{from}..{to}"
+
+#local The body may be an indented block, and it sees what was in scope where
+#local it was written rather than where it is called.
+local region = $$.region
+local endpoint(name) =
+  host: "{name}.{region}.example.com"
+  address: url(.host, port = 443)
+
+services:
+  - name: "web"
+    url: url("web.example.com")
+    label: shout("web")
+  - name: "api"
+    url: url("api.example.com", 9000, "http")
+    label: shout(s = "api")
+
+web: endpoint("web")
+
+tiers:
+  - tier($$.replicas)
+  - tier(replicas = 1)
+
+spans:
+  - span("a")
+  - span("a", "b")
+  - span(to = "z", from = "a")
+
+#local Functions are values, so one may be passed to another.
+local apply(fn, to) = fn(to)
+applied: apply(shout, "x")
+
+#local A function that is never called is never evaluated.
+local unused(a) = $$.absent
