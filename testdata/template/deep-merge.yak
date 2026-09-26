@@ -1,0 +1,23 @@
+local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+local labelled = {inner: {name: "web", label: "{.name}-1"}}
+
+# "++" merges at every depth, so "limits" is merged rather than replaced.
+container: defaults ++ {limits: {memory: 512}, port: 8080}
+
+# Both operands are left as they were.
+untouched: defaults.limits
+
+# The merge goes as deep as the two mappings do.
+deep: {a: {b: {c: 1, d: 2}}} ++ {a: {b: {d: 3, e: 4}}}
+
+# Only a mapping merges. A key that holds anything else takes its value from
+# the right, so a sequence overrides rather than joining.
+overridden: {expose: [80], tag: "1.25"} ++ {expose: [443], tag: "1.27"}
+
+# A merged entry still reads the mapping it was written in, however deep the
+# merge reached, so overriding "name" leaves "label" alone.
+scope: (labelled ++ {inner: {name: "api"}}).inner.label
+
+# A merged entry keeps what the mapping on the right said about it, so "::"
+# there hides an entry the left would have rendered.
+hiding: {kept: {a: 1}, dropped: {b: 2}} ++ {dropped:: {c: 3}, added: 4}

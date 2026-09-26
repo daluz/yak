@@ -604,9 +604,9 @@ container:
 
 The merge is one level deep. A key whose value is a mapping on both sides is
 replaced outright rather than merged, which keeps what `+` did readable from
-the two mappings alone. An entry also carries over whatever the mapping it
-came from said about it, so a `::` on the right hides an entry the left would
-have rendered.
+the two mappings alone; `++` below is the operator that goes deeper. An entry
+also carries over whatever the mapping it came from said about it, so a `::`
+on the right hides an entry the left would have rendered.
 
 Merging builds a third mapping and leaves both operands as they were. An
 entry that came through a merge still reads the mapping it was written in, so
@@ -620,6 +620,37 @@ v: (base + {name: "api"}).label   # "web-1", not "api-1"
 
 Adding two values of different kinds is an error naming both, and so is
 adding two of a kind that `+` does not join, such as two booleans.
+
+`++` merges two mappings at every depth. A key whose value is a mapping on
+both sides is merged rather than replaced, which is the one thing it does
+differently:
+
+```yaml
+local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+
+container: defaults ++ {limits: {memory: 512}, port: 8080}
+```
+
+That renders as:
+
+```yaml
+container:
+  image: nginx
+  limits:
+    cpu: 1
+    memory: 512
+  port: 8080
+```
+
+Only a mapping merges. A key holding a sequence or a scalar still takes its
+value from the right, so `[80] ++ [443]` is not what appends a port. `++`
+joins nothing but mappings, and two values of any other kind are an error
+naming both.
+
+Telling a mapping from anything else means resolving the value, so a key held
+by both sides is evaluated where the `++` is written rather than where the
+merged mapping is read. That is the one way `++` is stricter than `+`; what
+it renders is the same either way.
 
 Comparisons answer a boolean:
 
@@ -649,7 +680,7 @@ level is left associative:
 &&
 ==  !=
 <  <=  >  >=
-+  -
++  ++  -
 *  /  %
 !  -
 ```

@@ -285,6 +285,9 @@ func TestOperatorTokens(t *testing.T) {
 		{"addition", "a: 1 + 2\n", []token.Kind{
 			token.Ident, token.Colon, token.Int, token.Plus, token.Int, token.EOF,
 		}},
+		{"deep merge", "a: x ++ y\n", []token.Kind{
+			token.Ident, token.Colon, token.Ident, token.DoublePlus, token.Ident, token.EOF,
+		}},
 		{"subtraction", "a: 1 - 2\n", []token.Kind{
 			token.Ident, token.Colon, token.Int, token.Dash, token.Int, token.EOF,
 		}},

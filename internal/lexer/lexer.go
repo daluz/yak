@@ -249,6 +249,11 @@ func (l *lexer) scanToken() error {
 		return nil
 	case c == '+':
 		l.advance()
+		if l.peek() == '+' {
+			l.advance()
+			l.emit(token.Token{Kind: token.DoublePlus, Lit: "++", Pos: start})
+			return nil
+		}
 		l.emit(token.Token{Kind: token.Plus, Lit: "+", Pos: start})
 		return nil
 	case c == '/':

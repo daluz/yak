@@ -77,6 +77,17 @@ func evalBinary(node *ast.Binary, env *Env) (Value, error) {
 			return nil, errorf(node.OpPos, "%s", err.Error())
 		}
 		return v, nil
+	case token.DoublePlus:
+		a, aok := x.(*Object)
+		b, bok := y.(*Object)
+		if !aok || !bok {
+			return nil, errorf(node.OpPos, "%s needs two mappings, found %s and %s", node.Op, x.TypeName(), y.TypeName())
+		}
+		v, err := deepMerge(a, b)
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
 	}
 	c, err := compare(x, y)
 	if err != nil {
@@ -217,6 +228,63 @@ func merge(x, y *Object) *Object {
 		o.add(f)
 	}
 	return o
+}
+
+// deepMerge joins two mappings the way merge does, except that a key whose
+// value is a mapping on both sides merges rather than being replaced.
+// Anything else the right hand side holds still replaces what the left one
+// held, so a sequence or a scalar overrides rather than combining.
+//
+// Telling a mapping from anything else means resolving the value, so unlike
+// "+" a key held by both sides is evaluated where the merge is written
+// rather than where the merged mapping is read.
+func deepMerge(x, y *Object) (*Object, error) {
+	o := NewObject()
+	for _, f := range x.fields {
+		o.add(f)
+	}
+	for _, f := range y.fields {
+		nested, err := mergedField(o, f)
+		if err != nil {
+			return nil, err
+		}
+		o.add(nested)
+	}
+	return o, nil
+}
+
+// mergedField returns the field to carry over for f, which is f itself
+// unless o already holds that key with a mapping on both sides.
+func mergedField(o *Object, f *Field) (*Field, error) {
+	prev, ok := o.Lookup(f.Name)
+	if !ok {
+		return f, nil
+	}
+	old, err := prev.Value.Value()
+	if err != nil {
+		return nil, err
+	}
+	a, aok := old.(*Object)
+	if !aok {
+		return f, nil
+	}
+	v, err := f.Value.Value()
+	if err != nil {
+		return nil, err
+	}
+	b, bok := v.(*Object)
+	if !bok {
+		return f, nil
+	}
+	merged, err := deepMerge(a, b)
+	if err != nil {
+		return nil, err
+	}
+	// The entry keeps everything else the right hand side said about it,
+	// as it would under "+"; only its value is combined.
+	copied := *f
+	copied.Value = Done(merged)
+	return &copied, nil
 }
 
 // equal compares two values for "==". Values of different types are never

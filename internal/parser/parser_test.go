@@ -357,6 +357,7 @@ func TestParseOperators(t *testing.T) {
 		{"division binds tighter than subtraction", "a: 1 - 4 / 2\n", `{"a":(1-(4/2))}`},
 		{"addition binds tighter than comparison", "a: 1 + 2 < 4\n", `{"a":((1+2)<4)}`},
 		{"arithmetic is left associative", "a: 1 - 2 - 3\n", `{"a":((1-2)-3)}`},
+		{"deep merge binds like addition", "a: x + y ++ z\n", `{"a":((ident(x)+ident(y))++ident(z))}`},
 		{"negating a reference", "a: -x\n", `{"a":-ident(x)}`},
 		{"a negative literal keeps its sign", "a: -1\n", `{"a":-1}`},
 		{"subtracting a negation", "a: 1 - -x\n", `{"a":(1--ident(x))}`},

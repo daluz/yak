@@ -112,6 +112,8 @@ $ yak template app.yak -o rendered.json     # the extension chooses JSON
 - **Arithmetic, and a `+` that does more.** `+`, `-`, `*`, `/` and `%` work
   on numbers, and `+` also joins two strings or two sequences and merges two
   mappings, where the one on the right overrides: `defaults + {tag: "1.27"}`.
+  `++` merges two mappings at every depth, so a key holding a mapping on both
+  sides is merged too: `defaults ++ {limits: {memory: 512}}`.
 - **Optional access and defaults.** `?.` and `?[` give `null` where a field or
   an index is missing, and `??` supplies the value to use instead.
 - **Conditionals.** `if $$.env == "prod" then 5 else 1`, built on the usual

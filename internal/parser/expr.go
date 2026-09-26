@@ -66,7 +66,7 @@ var precedence = [][]token.Kind{
 	{token.And},
 	{token.Eq, token.Ne},
 	{token.Lt, token.Le, token.Gt, token.Ge},
-	{token.Plus, token.Dash},
+	{token.Plus, token.DoublePlus, token.Dash},
 	{token.Star, token.Slash, token.Percent},
 }
 

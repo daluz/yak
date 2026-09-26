@@ -1,0 +1,2 @@
+local defaults = {tag: "1.25"}
+merged: defaults ++ [1]
