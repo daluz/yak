@@ -280,7 +280,7 @@ func TestParseOperators(t *testing.T) {
 		{"coalesce binds looser than or", "a: .x ?? true || false\n", `{"a":(self+0.x??(true||false))}`},
 		{"parentheses regroup", "a: (1 < 2) == (3 < 4)\n", `{"a":((1<2)==(3<4))}`},
 		{"left associative", "a: 1 == 2 == true\n", `{"a":((1==2)==true)}`},
-		{"in an interpolation", `a: "${1 < 2}"`, `{"a":concat((1<2))}`},
+		{"in an interpolation", `a: "{1 < 2}"`, `{"a":concat((1<2))}`},
 		{"greater than beats a folded scalar", "a: .x > 2\n", `{"a":(self+0.x>2)}`},
 	}
 
@@ -305,7 +305,7 @@ func TestParseConditionals(t *testing.T) {
 		{"with a comparison", "a: if .n > 1 then 1 else 2\n", `{"a":if((self+0.n>1);1;2)}`},
 		{"wrapped over lines", "a:\n  if true\n  then 1\n  else 2\n", `{"a":if(true;1;2)}`},
 		{"branches may be collections", "a: if true then [1] else {b: 2}\n", `{"a":if(true;[1];{"b":2})}`},
-		{"inside an interpolation", `a: "${if true then "y" else "n"}"`, `{"a":concat(if(true;"y";"n"))}`},
+		{"inside an interpolation", `a: "{if true then "y" else "n"}"`, `{"a":concat(if(true;"y";"n"))}`},
 		{"in a flow sequence", "a: [if true then 1 else 2]\n", `{"a":[if(true;1;2)]}`},
 		{"parenthesized as an operand", "a: (if true then 1 else 2) == 1\n", `{"a":(if(true;1;2)==1)}`},
 		{"a key named else ends it", "a: if true then 1\nelse: 2\n", `{"a":if(true;1) "else":2}`},
@@ -331,7 +331,7 @@ func TestParseComprehensions(t *testing.T) {
 		{"sequence with a filter", "a: [x for x in $$.list if x > 1]\n", `{"a":[ident(x) for x in context.list if (ident(x)>1)]}`},
 		{"sequence over a literal", "a: [x for x in [1, 2]]\n", `{"a":[ident(x) for x in [1 2]]}`},
 		{"mapping with a computed key", "a: {[x]: 1 for x in $$.list}\n", `{"a":{[ident(x)]:1 for x in context.list}}`},
-		{"mapping with an interpolated key", `a: {"k${x}": x for x in $$.list}`, `{"a":{concat("k",ident(x)):ident(x) for x in context.list}}`},
+		{"mapping with an interpolated key", `a: {"k{x}": x for x in $$.list}`, `{"a":{concat("k",ident(x)):ident(x) for x in context.list}}`},
 		{"mapping with a filter", "a: {[x]: 1 for x in $$.list if true}\n", `{"a":{[ident(x)]:1 for x in context.list if true}}`},
 		{"mapping of hidden entries", "a: {[x]:: 1 for x in $$.list}\n", `{"a":{[ident(x)]::1 for x in context.list}}`},
 		{"a conditional item", "a: [if x then 1 else 2 for x in $$.list]\n", `{"a":[if(ident(x);1;2) for x in context.list]}`},
@@ -354,11 +354,11 @@ func TestParseInterpolation(t *testing.T) {
 		src  string
 		want string
 	}{
-		{"single", `a: "${.b}"`, `{"a":concat(self+0.b)}`},
-		{"surrounded", `a: "x${.b}y"`, `{"a":concat("x",self+0.b,"y")}`},
-		{"nested quotes", `a: "${$$["k"]}"`, `{"a":concat(context["k"])}`},
-		{"raw", `a: r"${.b}"`, `{"a":"${.b}"}`},
-		{"escaped", `a: "$${.b}"`, `{"a":"${.b}"}`},
+		{"single", `a: "{.b}"`, `{"a":concat(self+0.b)}`},
+		{"surrounded", `a: "x{.b}y"`, `{"a":concat("x",self+0.b,"y")}`},
+		{"nested quotes", `a: "{$$["k"]}"`, `{"a":concat(context["k"])}`},
+		{"raw", `a: r"{.b}"`, `{"a":"{.b}"}`},
+		{"escaped", `a: "{{.b}}"`, `{"a":"{.b}"}`},
 	}
 
 	for _, tc := range tests {
@@ -515,8 +515,8 @@ func TestParseErrors(t *testing.T) {
 		{"dots in postfix", "a: $.b..c\n", "may only begin a reference"},
 		{"dangling dot", "a: $. b\n", "expected a field name"},
 		{"unknown special variable", "a: $ctx\n", "unknown special variable"},
-		{"empty interpolation", `a: "${}"`, "empty string interpolation"},
-		{"junk in interpolation", `a: "${.b .c}"`, "unexpected"},
+		{"empty interpolation", `a: "{}"`, "empty string interpolation"},
+		{"junk in interpolation", `a: "{.b .c}"`, "unexpected"},
 		{"double bang is still a tag", "a: !!true\n", "tags are not supported"},
 		{"if without then", "a: if true 1\n", `expected "then"`},
 		{"if as an operand", "a: 1 == if true then 1 else 2\n", "wrap it in parentheses"},

@@ -54,26 +54,34 @@ Block scalars accept the usual chomping and indentation indicators: `|-`, `|+`,
 
 ### Every string interpolates
 
-Any string may contain `${ expression }`:
+Any string may contain `{ expression }`:
 
 ```yaml
 name: "web"
-title: "the ${.name} service"
-url: "https://${$$.host}:${$$.port}/"
+title: "the {.name} service"
+url: "https://{$$.host}:{$$.port}/"
 ```
 
-To write a literal `${`, double the dollar sign: `"$${not an expression}"`
-produces `${not an expression}`. A lone `$` needs no escaping. Inside
-double-quoted strings `\$` also works.
+Double a brace to write a literal one: `{{` produces `{` and `}}` produces
+`}`, so `"{{not an expression}}"` renders `{not an expression}`. A closing
+brace standing on its own needs no escaping; an opening one that is never
+closed is an error rather than literal text.
+
+Doubling is the only escape there is, which is what makes it work identically
+in every interpolating form, including single-quoted strings and block
+scalars, where backslash escapes do not exist.
 
 To turn interpolation off for a whole string, prefix it with `r`. Raw strings
 also disable backslash escapes:
 
 ```yaml
-pattern: r"\d+ and ${literal}"
+pattern: r"\d+ and {literal}"
 script: r|
   echo "${SHELL_VARIABLE}"
 ```
+
+A raw string is usually the better answer for text that is dense with braces,
+such as a Go template or a query with a label selector in it.
 
 Because a raw double-quoted string has no escapes, it cannot contain a `"`; use
 `r'...'` or a raw block scalar instead.
@@ -96,7 +104,7 @@ A key is one of:
 ```yaml
 plain-key: 1              # any identifier: letters, digits, _, and interior -
 "a key with spaces": 2    # any quoted string, interpolation included
-["computed-${$$.env}"]: 3 # an expression in brackets
+["computed-{$$.env}"]: 3  # an expression in brackets
 ```
 
 Numbers and reserved words must be quoted to be used as keys. Duplicate keys
@@ -119,7 +127,7 @@ defaults::
   tag: "3.20"
 services:
   web:
-    image: "${$.defaults.image}:${$.defaults.tag}"
+    image: "{$.defaults.image}:{$.defaults.tag}"
 ```
 
 renders as:
@@ -203,7 +211,7 @@ local name = "web"
 local port = 8080
 
 service: name
-url: "http://${name}:${port}"
+url: "http://{name}:{port}"
 ```
 
 Bindings produce no output of their own. They are the replacement for YAML
@@ -216,7 +224,7 @@ separate them with commas to fit them on one:
 ```yaml
 local {
   region = "us-east-1"
-  zone = "${region}a"
+  zone = "{region}a"
 }
 local { retries = 3, timeout = 30 }
 ```
@@ -228,7 +236,7 @@ local defaults =
   image: "alpine"
   tag: "3.20"
 
-image: "${defaults.image}:${defaults.tag}"
+image: "{defaults.image}:{defaults.tag}"
 ```
 
 ### Scope
@@ -246,7 +254,7 @@ so they can read its fields with `.name`:
 
 ```yaml
 name: "shop"
-local label = "${.name}-web"
+local label = "{.name}-web"
 labels:
   app: label
 ```
@@ -387,7 +395,7 @@ builds itself by walking a sequence, evaluating the element once per item
 with `name` bound to it:
 
 ```yaml
-names: ["port-${p.name}" for p in $$.ports]
+names: ["port-{p.name}" for p in $$.ports]
 byName: {[p.name]: p.number for p in $$.ports}
 ```
 

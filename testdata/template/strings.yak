@@ -4,18 +4,22 @@ double: "hello"
 single: 'hello'
 escapes: "tab:\tquote:\"backslash:\\"
 unicode: "caf\u00e9"
-interpolated: "hello ${.who}"
-mixed: "${.who} and ${.who}"
-raw-double: r"no ${interpolation} here"
-raw-single: r'no ${interpolation} here'
-escaped-dollar: "a literal $${braces} pair"
+interpolated: "hello {.who}"
+single-interpolated: 'hello {.who}'
+mixed: "{.who} and {.who}"
+raw-double: r"no {interpolation} here"
+raw-single: r'no {interpolation} here'
+escaped-braces: "a literal {{braces}} pair"
+single-escaped: 'a literal {{braces}} pair'
+lone-close-brace: "a } closes nothing"
 lone-dollar: "costs $5"
-nested-quotes: "zone is ${$$["region"]}"
+nested-quotes: "zone is {$$["region"]}"
 folded-quotes: "one
   two"
 literal-block: |
   first line
-  second line for ${.who}
+  second line for {.who}
+  a literal {{brace}} needs no backslash here
 literal-strip: |-
   no trailing newline
 literal-keep: |+
@@ -29,7 +33,7 @@ folded-block: >
 folded-strip: >-
   folded without a trailing newline
 raw-block: r|
-  ${untouched}
+  {untouched}
 indented-block: |
   outer
     inner indented

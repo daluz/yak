@@ -18,7 +18,7 @@ Bindings that take arguments, using the syntax `local` already reserves for
 them:
 
 ```yaml
-local url(host, port) = "https://${host}:${port}"
+local url(host, port) = "https://{host}:{port}"
 
 endpoint: url($$.host, 8080)
 ```

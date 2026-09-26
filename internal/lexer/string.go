@@ -15,7 +15,7 @@ type decoded struct {
 	buf []byte
 	pos []token.Pos
 	// escaped marks bytes produced by an escape sequence. Such bytes never
-	// start an interpolation, which is what makes `\$` a literal dollar.
+	// start an interpolation, which is what makes `\u007b` a literal brace.
 	escaped []bool
 	start   token.Pos
 }
@@ -97,16 +97,15 @@ func (l *lexer) scanQuotedAt(start token.Pos, raw bool) error {
 				return err
 			}
 			continue
-		case c == '$' && !raw && l.peekAt(1) == '$' && l.peekAt(2) == '{':
-			// The "$${" escape for a literal "${": copy it through for the
+		case c == '{' && !raw && l.peekAt(1) == '{':
+			// The "{{" escape for a literal brace: copy it through for the
 			// splitter to collapse.
 			l.copyByte(d)
 			l.copyByte(d)
-			l.copyByte(d)
 			continue
-		case c == '$' && !raw && l.peekAt(1) == '{':
+		case c == '{' && !raw:
 			// Copy the interpolation verbatim so that a quote inside it, as
-			// in "${ $$.m["k"] }", does not end the enclosing string. The
+			// in "{ $$.m["k"] }", does not end the enclosing string. The
 			// splitter re-reads the same region afterwards.
 			if err := l.copyInterpolation(d); err != nil {
 				return err
@@ -132,12 +131,11 @@ func (l *lexer) copyByte(d *decoded) byte {
 	return c
 }
 
-// copyInterpolation copies a "${ ... }" region verbatim, tracking brace depth
+// copyInterpolation copies a "{ ... }" region verbatim, tracking brace depth
 // and nested string literals so that the enclosing string is not terminated
 // early by a quote belonging to the expression.
 func (l *lexer) copyInterpolation(d *decoded) error {
 	start := l.pos()
-	l.copyByte(d) // $
 	l.copyByte(d) // {
 	depth := 1
 	for !l.eof() {
@@ -159,7 +157,7 @@ func (l *lexer) copyInterpolation(d *decoded) error {
 			l.copyByte(d)
 		}
 	}
-	return l.errorf(start, "unterminated string interpolation: missing %q", "}")
+	return l.errorf(start, "unterminated string interpolation: missing %q; write %q for a literal brace", "}", "{{")
 }
 
 func (l *lexer) copyNestedQuoted(d *decoded) error {
@@ -184,7 +182,7 @@ func (l *lexer) copyNestedQuoted(d *decoded) error {
 			return nil
 		}
 	}
-	return l.errorf(start, "unterminated string literal inside an interpolation")
+	return l.errorf(start, "unterminated string literal inside an interpolation; write %q for a literal brace", "{{")
 }
 
 func (l *lexer) scanEscape(d *decoded) error {
@@ -215,7 +213,7 @@ func (l *lexer) scanEscape(d *decoded) error {
 		d.addByte(0x1b, p, true)
 	case ' ':
 		d.addByte(' ', p, true)
-	case '"', '\'', '\\', '/', '$':
+	case '"', '\'', '\\', '/':
 		d.addByte(c, p, true)
 	case 'N':
 		d.addRune(0x85, p)
@@ -491,10 +489,11 @@ func (l *lexer) emitString(start token.Pos, d *decoded, raw bool) error {
 	return nil
 }
 
-// splitInterpolations breaks decoded string content into literal and ${...}
-// expression chunks. A doubled dollar before a brace ("$${") is the escape for
-// a literal "${"; it works in every interpolating string form, including block
-// scalars where backslash escapes do not exist.
+// splitInterpolations breaks decoded string content into literal and {...}
+// expression chunks. A doubled brace is the escape for a literal one: "{{"
+// yields "{" and "}}" yields "}". Doubling is the only escape, so it works in
+// every interpolating string form, including block scalars and single-quoted
+// strings where backslash escapes do not exist.
 func splitInterpolations(d *decoded) ([]token.Chunk, error) {
 	var (
 		chunks []token.Chunk
@@ -509,14 +508,6 @@ func splitInterpolations(d *decoded) ([]token.Chunk, error) {
 	}
 	// The buffer holds raw bytes of UTF-8 text, so literal runs are copied
 	// byte by byte rather than converted through string(byte).
-	addLit := func(s string, p token.Pos) {
-		if lit.Len() == 0 {
-			litPos = p
-		}
-		for i := 0; i < len(s); i++ {
-			lit.WriteByte(s[i])
-		}
-	}
 	addLitByte := func(b byte, p token.Pos) {
 		if lit.Len() == 0 {
 			litPos = p
@@ -525,27 +516,29 @@ func splitInterpolations(d *decoded) ([]token.Chunk, error) {
 	}
 
 	buf := d.buf
+	doubled := func(i int) bool {
+		return i+1 < len(buf) && buf[i+1] == buf[i] && !d.escaped[i+1]
+	}
+
 	for i := 0; i < len(buf); {
-		if buf[i] == '$' && !d.escaped[i] {
-			if i+2 < len(buf) && buf[i+1] == '$' && !d.escaped[i+1] && buf[i+2] == '{' {
-				addLit("${", d.posAt(i))
-				i += 3
-				continue
+		if (buf[i] == '{' || buf[i] == '}') && !d.escaped[i] && doubled(i) {
+			addLitByte(buf[i], d.posAt(i))
+			i += 2
+			continue
+		}
+		if buf[i] == '{' && !d.escaped[i] {
+			end, err := matchBrace(buf, i+1)
+			if err != nil {
+				return nil, &Error{Pos: d.posAt(i), Msg: err.Error()}
 			}
-			if i+1 < len(buf) && buf[i+1] == '{' {
-				end, err := matchBrace(buf, i+2)
-				if err != nil {
-					return nil, &Error{Pos: d.posAt(i), Msg: err.Error()}
-				}
-				flush()
-				chunks = append(chunks, token.Chunk{
-					Text:   string(buf[i+2 : end]),
-					IsExpr: true,
-					Pos:    d.posAt(i + 2),
-				})
-				i = end + 1
-				continue
-			}
+			flush()
+			chunks = append(chunks, token.Chunk{
+				Text:   string(buf[i+1 : end]),
+				IsExpr: true,
+				Pos:    d.posAt(i + 1),
+			})
+			i = end + 1
+			continue
 		}
 		addLitByte(buf[i], d.posAt(i))
 		i++
@@ -598,7 +591,7 @@ func matchBrace(buf []byte, from int) (int, error) {
 	return 0, errUnterminatedInterp
 }
 
-var errUnterminatedInterp = interpError("unterminated string interpolation: missing \"}\"")
+var errUnterminatedInterp = interpError("unterminated string interpolation: missing \"}\"; write \"{{\" for a literal brace")
 
 type interpError string
 

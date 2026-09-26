@@ -2,7 +2,7 @@
 apiVersion: "apps/v1"
 kind: "Deployment"
 metadata:
-  name: "${$$.app.name}-web"
+  name: "{$$.app.name}-web"
   labels:
     app: ..name
     tier: "web"
@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: $$.app.name
-          image: "${$$.image.repo}:${$$.image.tag}"
+          image: "{$$.image.repo}:{$$.image.tag}"
           ports:
             - containerPort: 8080
           env:
@@ -25,6 +25,6 @@ spec:
               value: ..name
             - name: "CONFIG"
               value: |
-                app=${$$.app.name}
-                replicas=${$$.app.replicas}
+                app={$$.app.name}
+                replicas={$$.app.replicas}
   defaults:: "kept out of the output but readable by references"

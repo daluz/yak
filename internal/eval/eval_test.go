@@ -126,14 +126,14 @@ func TestInterpolation(t *testing.T) {
 		context string
 		want    string
 	}{
-		{"string", `a: "x"` + "\n" + `b: "${.a}y"` + "\n", "", "a: x\nb: xy\n"},
-		{"integer", "n: 3\ns: \"n=${.n}\"\n", "", "n: 3\ns: n=3\n"},
-		{"boolean", "b: true\ns: \"b=${.b}\"\n", "", "b: true\ns: b=true\n"},
-		{"float", "f: 1.5\ns: \"f=${.f}\"\n", "", "f: 1.5\ns: f=1.5\n"},
-		{"null", "n: null\ns: \"n=${.n}\"\n", "", "n: null\ns: n=null\n"},
-		{"context", `s: "${$$.a}-${$$.b}"` + "\n", "a: one\nb: two\n", "s: one-two\n"},
-		{"in block scalar", "name: \"web\"\ntext: |\n  hello ${.name}\n", "", "name: web\ntext: |\n  hello web\n"},
-		{"in computed key", "k: \"dyn\"\n[\"${.k}-key\"]: 1\n", "", "k: dyn\ndyn-key: 1\n"},
+		{"string", `a: "x"` + "\n" + `b: "{.a}y"` + "\n", "", "a: x\nb: xy\n"},
+		{"integer", "n: 3\ns: \"n={.n}\"\n", "", "n: 3\ns: n=3\n"},
+		{"boolean", "b: true\ns: \"b={.b}\"\n", "", "b: true\ns: b=true\n"},
+		{"float", "f: 1.5\ns: \"f={.f}\"\n", "", "f: 1.5\ns: f=1.5\n"},
+		{"null", "n: null\ns: \"n={.n}\"\n", "", "n: null\ns: n=null\n"},
+		{"context", `s: "{$$.a}-{$$.b}"` + "\n", "a: one\nb: two\n", "s: one-two\n"},
+		{"in block scalar", "name: \"web\"\ntext: |\n  hello {.name}\n", "", "name: web\ntext: |\n  hello web\n"},
+		{"in computed key", "k: \"dyn\"\n[\"{.k}-key\"]: 1\n", "", "k: dyn\ndyn-key: 1\n"},
 	}
 
 	for _, tc := range tests {
@@ -169,7 +169,7 @@ func TestLocals(t *testing.T) {
 		},
 		{
 			name: "bindings see each other",
-			src:  "local a = \"x\"\nlocal b = \"${a}y\"\nv: b\n",
+			src:  "local a = \"x\"\nlocal b = \"{a}y\"\nv: b\n",
 			want: "v: xy\n",
 		},
 		{
@@ -179,7 +179,7 @@ func TestLocals(t *testing.T) {
 		},
 		{
 			name: "block form",
-			src:  "local {\n  region = \"us-east-1\"\n  zone = \"${region}a\"\n}\nwhere: zone\n",
+			src:  "local {\n  region = \"us-east-1\"\n  zone = \"{region}a\"\n}\nwhere: zone\n",
 			want: "where: us-east-1a\n",
 		},
 		{
@@ -189,7 +189,7 @@ func TestLocals(t *testing.T) {
 		},
 		{
 			name: "a binding can read the enclosing mapping",
-			src:  "local label = \"${.name}-web\"\nname: \"shop\"\nlabel: label\n",
+			src:  "local label = \"{.name}-web\"\nname: \"shop\"\nlabel: label\n",
 			want: "name: shop\nlabel: shop-web\n",
 		},
 		{
@@ -199,7 +199,7 @@ func TestLocals(t *testing.T) {
 		},
 		{
 			name: "a nested scope still sees the outer bindings",
-			src:  "local n = \"outer\"\nchild:\n  local m = \"inner\"\n  v: \"${n}-${m}\"\n",
+			src:  "local n = \"outer\"\nchild:\n  local m = \"inner\"\n  v: \"{n}-{m}\"\n",
 			want: "child:\n  v: outer-inner\n",
 		},
 		{
@@ -312,7 +312,7 @@ func TestCoalesceAndOptionalAccess(t *testing.T) {
 		},
 		{
 			name: "an optional access inside interpolation",
-			src:  "v: \"port ${$$?.port ?? 80}\"\n",
+			src:  "v: \"port {$$?.port ?? 80}\"\n",
 			want: "v: port 80\n",
 		},
 	}
@@ -437,7 +437,7 @@ func TestComprehensions(t *testing.T) {
 		},
 		{
 			name:    "sequence over the context",
-			src:     "v: [\"n-${x}\" for x in $$.list]\n",
+			src:     "v: [\"n-{x}\" for x in $$.list]\n",
 			context: "list: [1, 2]\n",
 			want:    "v:\n  - n-1\n  - n-2\n",
 		},
@@ -460,7 +460,7 @@ func TestComprehensions(t *testing.T) {
 		},
 		{
 			name:    "mapping keyed by interpolation",
-			src:     "v: {\"k${x}\": x for x in $$.list}\n",
+			src:     "v: {\"k{x}\": x for x in $$.list}\n",
 			context: "list: [1, 2]\n",
 			want:    "v:\n  k1: 1\n  k2: 2\n",
 		},
@@ -498,7 +498,7 @@ func TestComprehensions(t *testing.T) {
 }
 
 func TestHiddenFields(t *testing.T) {
-	got := mustRender(t, "secret:: \"s3cret\"\nvisible: \"${.secret}!\"\n", "")
+	got := mustRender(t, "secret:: \"s3cret\"\nvisible: \"{.secret}!\"\n", "")
 	want := "visible: s3cret!\n"
 	if got != want {
 		t.Errorf("rendered %q, want %q", got, want)
@@ -560,11 +560,11 @@ func TestEvalErrors(t *testing.T) {
 		{"self past root", "a: ..b\n", "", "reaches past the outermost mapping"},
 		{"direct cycle", "a: .a\n", "", "circular reference"},
 		{"indirect cycle", "a: .b\nb: .a\n", "", "circular reference"},
-		{"interpolation cycle", `a: "${.b}"` + "\n" + `b: "${.a}"` + "\n", "", "circular reference"},
+		{"interpolation cycle", `a: "{.b}"` + "\n" + `b: "{.a}"` + "\n", "", "circular reference"},
 		{"field of scalar", "a: 1\nb: .a.c\n", "", "cannot read field"},
 		{"index out of range", "a:\n  - 1\nb: $.a[5]\n", "", "out of range"},
 		{"index with wrong type", "a:\n  - 1\nb: $.a[\"x\"]\n", "", "index must be an integer"},
-		{"interpolate a mapping", "a:\n  b: 1\ns: \"${.a}\"\n", "", "cannot interpolate a mapping"},
+		{"interpolate a mapping", "a:\n  b: 1\ns: \"{.a}\"\n", "", "cannot interpolate a mapping"},
 		{"unknown identifier", "a: hello\n", "", `unknown identifier "hello"`},
 		{"yaml yes", "a: yes\n", "", `"yes" is not a boolean in yak`},
 		{"yaml off", "a: off\n", "", `"off" is not a boolean in yak`},

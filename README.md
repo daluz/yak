@@ -12,7 +12,7 @@ local tag = "3.20"
 apiVersion: "apps/v1"
 kind: "Deployment"
 metadata:
-  name: "${$$.app.name}-web"
+  name: "{$$.app.name}-web"
   labels:
     app: ..name
 spec:
@@ -20,7 +20,7 @@ spec:
   selector:
     matchLabels: $.metadata.labels
   containers:
-    - image: "${image}:${tag}"
+    - image: "{image}:{tag}"
       env:
         - name: "APP_NAME"
           value: $$.app.name
@@ -86,8 +86,9 @@ $ yak template app.yak -o rendered.json     # the extension chooses JSON
 
 - **Strings are always quoted.** An unquoted value is an expression, which is
   what lets `alias: .name` mean a reference instead of the text ".name".
-- **Every string interpolates.** `"hello ${.name}"`. Prefix with `r` to turn
-  that off: `r"hello ${literal}"`.
+- **Every string interpolates.** `"hello {.name}"`. Double a brace for a
+  literal one, and prefix with `r` to turn interpolation off altogether:
+  `r"hello {literal}"`.
 - **Only `true` and `false` are booleans.** No `yes`, `no`, `on`, or `off`.
 - **No anchors and no tags.** References and `local` bindings replace anchors;
   tags return with schemas, and `!` means boolean `not` in the meantime.

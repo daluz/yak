@@ -11,7 +11,7 @@ service:
 local {
   # A comment inside a "local" block is dropped with the block.
   region = "us-east-1"
-  zone = "${region}a"
+  zone = "{region}a"
 }
 
 local defaults =
@@ -38,7 +38,7 @@ credentials::
   user: "admin"
 
 #localhost is a word, not the marker, so this comment is kept.
-endpoint: "https://${$$.host}/"
+endpoint: "https://{$$.host}/"
 
 # Whatever is left at the end comes out at the end.
 ---

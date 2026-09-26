@@ -117,7 +117,7 @@ func (k Kind) String() string {
 }
 
 // Chunk is one piece of a string literal: either literal text or an
-// interpolated expression written as ${ ... }.
+// interpolated expression written as { ... }.
 type Chunk struct {
 	// Text holds the decoded literal text when IsExpr is false, and the raw
 	// expression source when IsExpr is true.

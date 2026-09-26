@@ -1,7 +1,7 @@
 local ports = $$.ports
 
 # A sequence comprehension evaluates its item once per item of the source.
-names: ["port-${p.name}" for p in ports]
+names: ["port-{p.name}" for p in ports]
 
 # The item may be any value, including a mapping.
 containers: [{name: p.name, containerPort: p.number} for p in ports]
@@ -11,7 +11,7 @@ public: [p.name for p in ports if p.number < 1024]
 
 # A mapping comprehension names each entry as it goes.
 byName: {[p.name]: p.number for p in ports}
-labels: {"port-${p.name}": "${p.number}" for p in ports if p.tls}
+labels: {"port-{p.name}": "{p.number}" for p in ports if p.tls}
 
 # The loop variable is an ordinary binding, so comprehensions nest.
 grid: [[n for n in row] for row in $$.grid]
@@ -19,4 +19,4 @@ grid: [[n for n in row] for row in $$.grid]
 # A comprehension opens no mapping of its own, so "." still names the one it
 # is written in.
 service: "web"
-endpoints: ["${.service}:${p.number}" for p in ports]
+endpoints: ["{.service}:{p.number}" for p in ports]
