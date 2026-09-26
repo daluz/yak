@@ -42,7 +42,13 @@ const (
 	// ColonQuestion is the ":?" of an entry hidden only when its value is
 	// null.
 	ColonQuestion
+	// Dash is the "-" of a sequence item, of a subtraction, and of a
+	// negation. Which one it is depends on where it appears.
 	Dash
+	Plus
+	Star
+	Slash
+	Percent
 	Comma
 	LBracket
 	RBracket
@@ -85,6 +91,10 @@ var kindNames = map[Kind]string{
 	DoubleColon:   `"::"`,
 	ColonQuestion: `":?"`,
 	Dash:          `"-"`,
+	Plus:          `"+"`,
+	Star:          `"*"`,
+	Slash:         `"/"`,
+	Percent:       `"%"`,
 	Comma:         `","`,
 	LBracket:      `"["`,
 	RBracket:      `"]"`,
@@ -182,7 +192,8 @@ func (t Token) String() string {
 }
 
 // Keywords reserved by the language. They lex as identifiers; the parser
-// decides what they mean.
+// decides what they mean. "local", "import" and "schema" each begin a
+// statement rather than a value.
 const (
 	KeywordTrue   = "true"
 	KeywordFalse  = "false"

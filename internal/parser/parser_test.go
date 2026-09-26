@@ -60,7 +60,7 @@ func dump(n ast.Node) string {
 	case *ast.Coalesce:
 		return "(" + dump(t.X) + "??" + dump(t.Y) + ")"
 	case *ast.Unary:
-		return "!" + dump(t.X)
+		return strings.Trim(t.Op.String(), `"`) + dump(t.X)
 	case *ast.Binary:
 		return "(" + dump(t.X) + strings.Trim(t.Op.String(), `"`) + dump(t.Y) + ")"
 	case *ast.If:
@@ -338,6 +338,19 @@ func TestParseOperators(t *testing.T) {
 		{"left associative", "a: 1 == 2 == true\n", `{"a":((1==2)==true)}`},
 		{"in an interpolation", `a: "{1 < 2}"`, `{"a":concat((1<2))}`},
 		{"greater than beats a folded scalar", "a: .x > 2\n", `{"a":(self+0.x>2)}`},
+		{"addition", "a: 1 + 2\n", `{"a":(1+2)}`},
+		{"subtraction", "a: 1 - 2\n", `{"a":(1-2)}`},
+		{"multiplication", "a: 1 * 2\n", `{"a":(1*2)}`},
+		{"division", "a: 1 / 2\n", `{"a":(1/2)}`},
+		{"remainder", "a: 1 % 2\n", `{"a":(1%2)}`},
+		{"multiplication binds tighter than addition", "a: 1 + 2 * 3\n", `{"a":(1+(2*3))}`},
+		{"division binds tighter than subtraction", "a: 1 - 4 / 2\n", `{"a":(1-(4/2))}`},
+		{"addition binds tighter than comparison", "a: 1 + 2 < 4\n", `{"a":((1+2)<4)}`},
+		{"arithmetic is left associative", "a: 1 - 2 - 3\n", `{"a":((1-2)-3)}`},
+		{"negating a reference", "a: -x\n", `{"a":-ident(x)}`},
+		{"a negative literal keeps its sign", "a: -1\n", `{"a":-1}`},
+		{"subtracting a negation", "a: 1 - -x\n", `{"a":(1--ident(x))}`},
+		{"negation binds tighter than multiplication", "a: -x * 2\n", `{"a":(-ident(x)*2)}`},
 	}
 
 	for _, tc := range tests {
@@ -550,6 +563,8 @@ func TestParseErrors(t *testing.T) {
 		{"unquoted multiword string", "a: hello world\n", "strings must be quoted"},
 		{"local as a value", "a: local\n", `a "local" binding is a statement of its own`},
 		{"import keyword", "a: import\n", `"import" is not implemented yet`},
+		{"import statement", "import mydir.mymodule\na: 1\n", `"import" is not implemented yet`},
+		{"import block", "import {\n  m = mydir.mymodule\n}\na: 1\n", `"import" is not implemented yet`},
 		{"schema keyword", "a: schema\n", `"schema" is not implemented yet`},
 		{"reserved key", "local: 1\n", "reserved word"},
 		{"local without a body", "a:\n  local x = 1\n", "must be followed by a value"},
@@ -592,6 +607,11 @@ func TestParseErrors(t *testing.T) {
 		{"comprehension after several items", "a: [1, 2 for x in $$.l]\n", `expected "," or "]"`},
 		{"unterminated comprehension", "a: [x for x in $$.l\n", `expected "]" to close a comprehension`},
 		{"unterminated mapping comprehension", "a: {[x]: 1 for x in $$.l\n", `expected "}" to close a comprehension`},
+		{"alias", "a: *x\n", "anchors and aliases are not supported"},
+		{"minus without a space after it", "a: 1 -2\n", "a subtraction needs whitespace"},
+		{"minus against a reference", "a: $.b -$.c\n", "a subtraction needs whitespace"},
+		{"minus without a space before it", "a: 1- 2\n", "a subtraction needs whitespace"},
+		{"minus in an argument list", "local f(a) = a\nb: f(1 -2)\n", "a subtraction needs whitespace"},
 	}
 
 	for _, tc := range tests {

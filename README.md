@@ -105,6 +105,9 @@ $ yak template app.yak -o rendered.json     # the extension chooses JSON
 - **Built-ins.** `size` measures a sequence, mapping or string, `empty` asks
   whether there is anything in one, and `nullify` turns an empty value into
   `null` for `:?` to drop.
+- **Arithmetic, and a `+` that does more.** `+`, `-`, `*`, `/` and `%` work
+  on numbers, and `+` also joins two strings or two sequences and merges two
+  mappings, where the one on the right overrides: `defaults + {tag: "1.27"}`.
 - **Optional access and defaults.** `?.` and `?[` give `null` where a field or
   an index is missing, and `??` supplies the value to use instead.
 - **Conditionals.** `if $$.env == "prod" then 5 else 1`, built on the usual
@@ -122,12 +125,13 @@ $ yak template app.yak -o rendered.json     # the extension chooses JSON
 ## Status
 
 The `template` command is implemented, along with `local` bindings,
-functions, conditionals, comprehensions and the first built-ins. The
-namespaced part of the standard library, `import`, `schema`, and the `build`
-and `validate` commands are planned; see
-[docs/ROADMAP.md](docs/ROADMAP.md). Their keywords are already reserved, so
-using one today fails with a clear message rather than parsing as something
-else.
+functions, conditionals, comprehensions and the first built-ins. `local` is
+one of three statement keywords; the other two — `import`, which reads
+another module into a namespace, and `schema` — are reserved but not
+implemented, so using one today fails with a clear message rather than
+parsing as something else. They are planned along with the namespaced part of
+the standard library and the `build` and `validate` commands; see
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Development
 

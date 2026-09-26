@@ -1,9 +1,10 @@
 # The yak language
 
-This describes the language as it exists today. Features that are planned but
-not yet implemented are listed in [ROADMAP.md](ROADMAP.md); using one of their
-keywords produces an explicit "not implemented yet" error rather than a
-confusing parse failure.
+This describes the language as it exists today, together with the `import`
+statement, which is specified here but not implemented yet. Everything else
+that is planned is listed in [ROADMAP.md](ROADMAP.md); using one of the
+keywords held for it produces an explicit "not implemented yet" error rather
+than a confusing parse failure.
 
 yak is a restricted dialect of YAML. Everything that YAML does ambiguously has
 been either removed or made explicit, and a small expression language has been
@@ -195,6 +196,27 @@ name: "web"
 
 A value that ends up depending on itself is reported as a circular reference,
 with the chain of positions that formed the cycle.
+
+## Statements
+
+A line in a block is usually a mapping entry or a sequence item. Three
+keywords begin a statement instead:
+
+| Statement | Purpose |
+| --- | --- |
+| `local` | Names a value or a function. |
+| `import` | Reads another module into a namespace. |
+| `schema` | Declares types, defaults and validation. |
+
+A statement is never an expression. It stands on its own in the block it is
+written in, it renders nothing of its own, and what it declares is visible to
+that block and to everything nested inside it.
+
+All three keywords are reserved, so one written where a value belongs is an
+error rather than a reference, and using one as a key takes quotes:
+`"schema": 1`. Only `local` is implemented. `import` is described in
+[Modules](#modules) and `schema` in [ROADMAP.md](ROADMAP.md); writing either
+one today is a "not implemented yet" error.
 
 ## Local bindings
 
@@ -418,6 +440,56 @@ to come — string, encoding and formatting helpers — will be namespaced
 instead, so that growing the library cannot take a bare name out from under a
 template.
 
+## Modules
+
+**Not implemented yet.** This is how `import` will be used once it lands.
+
+Every `.yak` file is a module. A module is named by a dotted path that walks a
+directory chain and ends at the file, so
+
+```yaml
+import mydirectory.mymodule
+```
+
+loads `./mydirectory/mymodule.yak` and binds it under the last segment of the
+path. The name is an ordinary binding of the module's definitions, read back
+with field access like any other mapping:
+
+```yaml
+import mydirectory.mymodule
+
+image: "{mymodule.defaults.image}:{mymodule.defaults.tag}"
+```
+
+Writing `name = path` chooses the namespace instead of taking it from the
+path, which is how two modules of the same file name live side by side:
+
+```yaml
+import shared = mydirectory.mymodule
+```
+
+Several imports can share an `import { ... }` block, exactly as bindings share
+a `local` one. Each names its namespace, one per line or separated by commas:
+
+```yaml
+import {
+  name1 = mydir.module1
+  name2 = mydir.module2
+}
+```
+
+### Resolution
+
+A path resolves relative to the file that imports it, so `mydir.module1` is
+`./mydir/module1.yak` beside the importing file.
+
+A `yak.mod` and `yak.lock` pair changes that. `yak.mod` remaps a module — or
+the parent module that contains it — onto somewhere else: another local
+directory, or a remote location fetched over `https` or `git`. `yak.lock`
+pins what `yak.mod` names so the same paths resolve to the same sources on
+every machine. A path with no entry covering it keeps resolving relative to
+the importing file.
+
 ## Missing values
 
 `?.` and `?[` read a field or an index that may not be there, and produce
@@ -451,6 +523,66 @@ is the way to say that the field is optional.
 
 ## Operators
 
+Arithmetic works on numbers:
+
+| Syntax | Meaning |
+| --- | --- |
+| `x + y` / `x - y` | Sum and difference. |
+| `x * y` / `x / y` | Product and quotient. |
+| `x % y` | Remainder, taking the sign of `x`. |
+| `-x` | Negation. |
+
+Two integers answer an integer, and a float on either side answers a float.
+`/` is the exception: it always answers a float, so `7 / 2` is `3.5` rather
+than a silently truncated `3`. Dividing or taking the remainder by zero is an
+error, as is any operand that is not a number.
+
+`+` also joins two values of the same kind. Strings and sequences
+concatenate:
+
+```yaml
+name: $$.app + "-web"     # "shop-web"
+ports: [80] + [443]       # [80, 443]
+```
+
+Two mappings merge, and the one on the right decides. A key held by both
+takes its value from the right and keeps the position it has on the left, so
+an override leaves the shape of the original recognisable:
+
+```yaml
+local defaults = {image: "nginx", tag: "1.25"}
+
+container: defaults + {tag: "1.27", port: 8080}
+```
+
+That renders as:
+
+```yaml
+container:
+  image: nginx
+  tag: "1.27"
+  port: 8080
+```
+
+The merge is one level deep. A key whose value is a mapping on both sides is
+replaced outright rather than merged, which keeps what `+` did readable from
+the two mappings alone. An entry also carries over whatever the mapping it
+came from said about it, so a `::` on the right hides an entry the left would
+have rendered.
+
+Merging builds a third mapping and leaves both operands as they were. An
+entry that came through a merge still reads the mapping it was written in, so
+overriding a key does not reach back into a sibling that referred to it:
+
+```yaml
+local base = {name: "web", label: "{.name}-1"}
+
+v: (base + {name: "api"}).label   # "web-1", not "api-1"
+```
+
+Adding two values of different kinds is an error naming both, and so is
+adding two of a kind that `+` does not join, such as two booleans.
+
 Comparisons answer a boolean:
 
 | Syntax | Meaning |
@@ -479,11 +611,33 @@ level is left associative:
 &&
 ==  !=
 <  <=  >  >=
-!
++  -
+*  /  %
+!  -
 ```
 
-Because `-` may appear inside an identifier, a binary operator needs
-whitespace around it: `a-b` is one name and `a - b` would be two.
+Because `-` may appear inside an identifier and may also negate what follows
+it, a subtraction is the one written with whitespace on both sides. The three
+spacings each mean something different, and the odd one out is an error
+rather than a guess:
+
+| Written | Read as |
+| --- | --- |
+| `a-b` | One name. |
+| `a - b` | `a` minus `b`. |
+| `a -b` | An error, naming the rule. |
+
+A `-` written flush against its operand negates it, which is what makes `-x`
+and `1 - -x` read as they do. Where a block sequence item may begin, though,
+a `-` is the sequence indicator it has always been, and a negative number is
+a single literal:
+
+```yaml
+a:
+  - -1        # the item -1
+  - - 1       # a nested sequence
+  - (-x)      # the item -x, since "- -x" would nest
+```
 
 ## Conditionals
 
@@ -680,20 +834,23 @@ TOML is the one format that cannot hold everything yak can say:
 
 ```
 stream      := document ("---" document)* "..."?
-document    := node | local+
-node        := local* (blockMapping | blockSequence | value)
-blockMapping:= (local | key sep value)+           -- aligned on one column
+document    := node | statement+
+node        := statement* (blockMapping | blockSequence | value)
+blockMapping:= (statement | key sep value)+       -- aligned on one column
 blockSequence := ("-" node)+                      -- aligned on one column
 sep         := ":" | "::" | ":?"
+statement   := local | import
 local       := "local" binding | "local" "{" binding+ "}"
 binding     := identifier params? "=" value
+import      := "import" module | "import" "{" module+ "}"   -- not implemented
+module      := (identifier "=")? identifier ("." identifier)*
 params      := "(" (param ("," param)* ","?)? ")"
 param       := identifier ("=" value)?
 value       := conditional | coalesce
 conditional := "if" coalesce "then" value ("else" value)?
 coalesce    := binary ("??" binary)*
 binary      := unary (op unary)*                  -- see the precedence list
-unary       := "!"* operand
+unary       := ("!" | "-")* operand
 operand     := literal | reference | flowSeq | flowMap | "(" value ")"
 flowSeq     := "[" ((value loop) | (value ("," value)*)? ","?) "]"
 flowMap     := "{" ((entry loop) | (entry ("," entry)*)?) "}"

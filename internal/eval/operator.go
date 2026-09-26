@@ -1,7 +1,9 @@
 package eval
 
 import (
+	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/daluz/yak/internal/ast"
@@ -26,11 +28,28 @@ func evalIf(node *ast.If, env *Env) (Value, error) {
 }
 
 func evalUnary(node *ast.Unary, env *Env) (Value, error) {
+	if node.Op == token.Dash {
+		return evalNegate(node, env)
+	}
 	x, err := condition(node.X, env, `the operand of "!"`)
 	if err != nil {
 		return nil, err
 	}
 	return Bool(!x), nil
+}
+
+func evalNegate(node *ast.Unary, env *Env) (Value, error) {
+	x, err := evalNode(node.X, env)
+	if err != nil {
+		return nil, err
+	}
+	switch t := x.(type) {
+	case Int:
+		return -t, nil
+	case Float:
+		return -t, nil
+	}
+	return nil, errorf(node.X.Pos(), `the operand of "-" must be a number, found %s`, x.TypeName())
 }
 
 func evalBinary(node *ast.Binary, env *Env) (Value, error) {
@@ -52,6 +71,12 @@ func evalBinary(node *ast.Binary, env *Env) (Value, error) {
 			return nil, errorf(node.OpPos, "%s", err.Error())
 		}
 		return Bool(same == (node.Op == token.Eq)), nil
+	case token.Plus, token.Dash, token.Star, token.Slash, token.Percent:
+		v, err := arith(node.Op, x, y)
+		if err != nil {
+			return nil, errorf(node.OpPos, "%s", err.Error())
+		}
+		return v, nil
 	}
 	c, err := compare(x, y)
 	if err != nil {
@@ -103,6 +128,95 @@ func condition(n ast.Node, env *Env, what string) (bool, error) {
 		return false, errorf(n.Pos(), "%s must be a boolean, found %s", what, v.TypeName())
 	}
 	return bool(b), nil
+}
+
+// arith applies an arithmetic operator. Every operator wants two numbers;
+// "+" also joins two strings, two sequences or two mappings.
+//
+// Two integers answer an integer, except under "/", which always answers a
+// float so that 7 / 2 is 3.5 rather than a silently truncated 3. A float on
+// either side makes the answer a float.
+func arith(op token.Kind, x, y Value) (Value, error) {
+	if op == token.Plus {
+		switch a := x.(type) {
+		case String:
+			if b, ok := y.(String); ok {
+				return a + b, nil
+			}
+		case *Array:
+			if b, ok := y.(*Array); ok {
+				return concat(a, b), nil
+			}
+		case *Object:
+			if b, ok := y.(*Object); ok {
+				return merge(a, b), nil
+			}
+		}
+	}
+	a, aok := numeric(x)
+	b, bok := numeric(y)
+	if !aok || !bok {
+		if op == token.Plus {
+			return nil, fmt.Errorf("cannot add %s to %s", y.TypeName(), x.TypeName())
+		}
+		return nil, fmt.Errorf("%s needs two numbers, found %s and %s", op, x.TypeName(), y.TypeName())
+	}
+	if b == 0 && (op == token.Slash || op == token.Percent) {
+		return nil, errors.New("division by zero")
+	}
+	ai, aInt := x.(Int)
+	bi, bInt := y.(Int)
+	if aInt && bInt && op != token.Slash {
+		switch op {
+		case token.Plus:
+			return ai + bi, nil
+		case token.Dash:
+			return ai - bi, nil
+		case token.Star:
+			return ai * bi, nil
+		default:
+			return ai % bi, nil
+		}
+	}
+	switch op {
+	case token.Plus:
+		return Float(a + b), nil
+	case token.Dash:
+		return Float(a - b), nil
+	case token.Star:
+		return Float(a * b), nil
+	case token.Slash:
+		return Float(a / b), nil
+	default:
+		return Float(math.Mod(a, b)), nil
+	}
+}
+
+// concat joins two sequences. The items are shared rather than copied, so an
+// item still resolves in the sequence it was written in.
+func concat(x, y *Array) *Array {
+	items := make([]*Elem, 0, x.Len()+y.Len())
+	items = append(items, x.items...)
+	return NewArray(append(items, y.items...))
+}
+
+// merge joins two mappings. A key held by both takes its value from y and
+// keeps the position it has in x, which is what makes "+" an override: the
+// mapping on the right decides, and the shape of the one on the left stays
+// recognisable.
+//
+// The merge is one level deep. A key whose value is a mapping on both sides
+// is replaced outright rather than merged, so what "+" does can be read off
+// the two mappings without resolving anything.
+func merge(x, y *Object) *Object {
+	o := NewObject()
+	for _, f := range x.fields {
+		o.add(f)
+	}
+	for _, f := range y.fields {
+		o.add(f)
+	}
+	return o
 }
 
 // equal compares two values for "==". Values of different types are never

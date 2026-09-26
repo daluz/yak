@@ -374,6 +374,27 @@ func TestLogicalOperatorsShortCircuit(t *testing.T) {
 	}
 }
 
+// TestMergeLeavesItsOperandsAlone checks that "+" builds a third mapping
+// rather than writing into either of the two it was given.
+func TestMergeLeavesItsOperandsAlone(t *testing.T) {
+	src := "local base = {a: 1}\nlocal over = {a: 2}\nmerged: (base + over).a\nbase: base.a\nover: over.a\n"
+	want := "merged: 2\nbase: 1\nover: 2\n"
+	if got := mustRender(t, src, ""); got != want {
+		t.Errorf("rendered %q, want %q", got, want)
+	}
+}
+
+// TestMergedFieldKeepsItsOwnScope checks that a field carried through "+"
+// still reads the mapping it was written in, so overriding "name" does not
+// reach back into a sibling that referred to it.
+func TestMergedFieldKeepsItsOwnScope(t *testing.T) {
+	src := "local base = {name: \"web\", label: \"{.name}-1\"}\nv: (base + {name: \"api\"}).label\n"
+	want := "v: web-1\n"
+	if got := mustRender(t, src, ""); got != want {
+		t.Errorf("rendered %q, want %q", got, want)
+	}
+}
+
 func TestConditionals(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -677,6 +698,13 @@ func TestEvalErrors(t *testing.T) {
 		{"a non-boolean operand of not", "a: !1\n", "", `the operand of "!" must be a boolean`},
 		{"ordering mismatched types", `a: "x" < 1` + "\n", "", "cannot compare string with integer"},
 		{"comparing collections", "a: [1] == [1]\n", "", "cannot compare a sequence"},
+		{"adding mismatched types", `a: [1] + {b: 2}` + "\n", "", "cannot add mapping to sequence"},
+		{"adding a null", "a: 1 + null\n", "", "cannot add null to integer"},
+		{"subtracting a string", `a: 1 - "x"` + "\n", "", `"-" needs two numbers, found integer and string`},
+		{"multiplying a sequence", "a: [1] * 2\n", "", `"*" needs two numbers, found sequence and integer`},
+		{"dividing by zero", "a: 1 / 0\n", "", "division by zero"},
+		{"a remainder of zero", "a: 1 % 0\n", "", "division by zero"},
+		{"negating a string", `a: -"x"` + "\n", "", `the operand of "-" must be a number, found string`},
 		{"looping over a scalar", "a: [x for x in 1]\n", "", `"for" needs a sequence to walk over`},
 		{"a non-boolean filter", "a: [x for x in [1] if x]\n", "", `the filter of a "for" must be a boolean`},
 		{"a constant comprehension key", `a: {"k": x for x in [1, 2]}` + "\n", "", "two items of the comprehension produced"},

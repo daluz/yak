@@ -131,6 +131,19 @@ func (o *Object) Set(name string, hidden bool, v *Thunk) {
 	o.fields = append(o.fields, &Field{Name: name, Hidden: hidden, Value: v})
 }
 
+// add appends a copy of f, or replaces an existing field of the same name
+// while keeping its position. Unlike Set it carries the whole field over,
+// which is what merging two mappings with "+" needs.
+func (o *Object) add(f *Field) {
+	copied := *f
+	if i, ok := o.index[f.Name]; ok {
+		o.fields[i] = &copied
+		return
+	}
+	o.index[f.Name] = len(o.fields)
+	o.fields = append(o.fields, &copied)
+}
+
 // reserve appends an unnamed slot, preserving source order while the key is
 // still being evaluated.
 func (o *Object) reserve(c Comments, hidden, hideNull bool, v *Thunk) *Field {

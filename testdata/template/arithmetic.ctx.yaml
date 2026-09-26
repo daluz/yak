@@ -1,0 +1,6 @@
+app: shop
+scale:
+  base: 2
+  extra: 1
+  max: 7
+extraPorts: [443, 8443]

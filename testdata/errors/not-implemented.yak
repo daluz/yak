@@ -1,2 +1,2 @@
-import "shared.yak"
+import mydirectory.mymodule
 greeting: "hello"

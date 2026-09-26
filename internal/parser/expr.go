@@ -2,6 +2,7 @@ package parser
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/lexer"
@@ -41,7 +42,21 @@ func (p *parser) parseCoalesce() (ast.Node, error) {
 		}
 		x = &ast.Coalesce{Base: ast.At(x.Pos()), X: x, Y: y}
 	}
+	// A "-" left over here was written without the whitespace a subtraction
+	// needs, and so was a number the lexer read with its sign attached.
+	// Either way the operator was meant, so say so rather than leave the
+	// caller to report two values in a row.
+	if p.cur().Line() == p.prevEnd.Line && (p.at(token.Dash) || p.atSignedNumber()) {
+		return nil, p.errorf(p.cur().Pos, "a subtraction needs whitespace on both sides of its %q", "-")
+	}
 	return x, nil
+}
+
+// atSignedNumber reports whether the current token is a number whose sign the
+// lexer folded into it, which is how "a -2" reads.
+func (p *parser) atSignedNumber() bool {
+	t := p.cur()
+	return (t.Kind == token.Int || t.Kind == token.Float) && strings.HasPrefix(t.Lit, "-")
 }
 
 // precedence lists the binary operators by level, loosest first. Every level
@@ -51,6 +66,8 @@ var precedence = [][]token.Kind{
 	{token.And},
 	{token.Eq, token.Ne},
 	{token.Lt, token.Le, token.Gt, token.Ge},
+	{token.Plus, token.Dash},
+	{token.Star, token.Slash, token.Percent},
 }
 
 func (p *parser) parseBinary(level int) (ast.Node, error) {
@@ -61,7 +78,7 @@ func (p *parser) parseBinary(level int) (ast.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	for p.atAny(precedence[level]) && p.cur().Line() == p.prevEnd.Line {
+	for p.atBinaryOp(level) {
 		op := p.next()
 		y, err := p.parseBinary(level + 1)
 		if err != nil {
@@ -70,6 +87,21 @@ func (p *parser) parseBinary(level int) (ast.Node, error) {
 		x = &ast.Binary{Base: ast.At(x.Pos()), Op: op.Kind, OpPos: op.Pos, X: x, Y: y}
 	}
 	return x, nil
+}
+
+// atBinaryOp reports whether an operator of the given level stands at the
+// current position, ready to extend the operand already parsed.
+func (p *parser) atBinaryOp(level int) bool {
+	if !p.atAny(precedence[level]) || p.cur().Line() != p.prevEnd.Line {
+		return false
+	}
+	// A "-" may appear inside an identifier and may negate what follows it,
+	// so a subtraction is the one written with whitespace on both sides:
+	// "a-b" is a name, "a -b" is two operands, and "a - b" subtracts.
+	if p.at(token.Dash) {
+		return !p.adjacent() && p.toks[p.i+1].Pos != p.cur().End
+	}
+	return true
 }
 
 func (p *parser) atAny(kinds []token.Kind) bool {
@@ -82,13 +114,13 @@ func (p *parser) atAny(kinds []token.Kind) bool {
 }
 
 func (p *parser) parseUnary() (ast.Node, error) {
-	if p.at(token.Not) {
+	if p.at(token.Not) || p.at(token.Dash) {
 		t := p.next()
 		x, err := p.parseUnary()
 		if err != nil {
 			return nil, err
 		}
-		return &ast.Unary{Base: ast.At(t.Pos), Op: token.Not, X: x}, nil
+		return &ast.Unary{Base: ast.At(t.Pos), Op: t.Kind, X: x}, nil
 	}
 	return p.parseOperand()
 }
@@ -222,13 +254,18 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		p.next()
 		return x, nil
 
+	case token.Star:
+		// A "*" multiplies two operands, so one standing where a value
+		// belongs is an alias rather than an operator.
+		return nil, p.errorf(t.Pos, "anchors and aliases are not supported in yak; use a local variable instead")
+
 	default:
 		return nil, p.errorf(t.Pos, "expected a value, found %s", t)
 	}
 }
 
-// unsupportedKeywords maps reserved words that are planned but not yet
-// implemented to the message shown when they are used.
+// unsupportedKeywords maps the statement keywords that are planned but not
+// yet implemented to the message shown when they are used.
 var unsupportedKeywords = map[string]string{
 	token.KeywordImport: `"import" is not implemented yet`,
 	token.KeywordSchema: `"schema" is not implemented yet`,

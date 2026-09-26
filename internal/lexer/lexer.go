@@ -247,6 +247,14 @@ func (l *lexer) scanToken() error {
 		l.advance()
 		l.emit(token.Token{Kind: token.Dash, Lit: "-", Pos: start})
 		return nil
+	case c == '+':
+		l.advance()
+		l.emit(token.Token{Kind: token.Plus, Lit: "+", Pos: start})
+		return nil
+	case c == '/':
+		l.advance()
+		l.emit(token.Token{Kind: token.Slash, Lit: "/", Pos: start})
+		return nil
 	case c == '.':
 		n := 0
 		for l.peek() == '.' {
@@ -346,7 +354,11 @@ func (l *lexer) scanToken() error {
 		}
 		return l.errorf(start, "anchors and aliases are not supported in yak; use a local variable instead")
 	case c == '*':
-		return l.errorf(start, "anchors and aliases are not supported in yak; use a local variable instead")
+		// A "*" is multiplication here and an alias where a value is
+		// expected, which only the parser can tell apart.
+		l.advance()
+		l.emit(token.Token{Kind: token.Star, Lit: "*", Pos: start})
+		return nil
 	case c == '!':
 		// "!!" can only be a tag: negating a boolean twice says nothing.
 		if l.peekAt(1) == '!' {
@@ -361,7 +373,14 @@ func (l *lexer) scanToken() error {
 		l.emit(token.Token{Kind: token.Not, Lit: "!", Pos: start})
 		return nil
 	case c == '%':
-		return l.errorf(start, "directives (%q) are not supported", "%")
+		// A directive is written at the start of a line, which is the one
+		// place a "%" cannot be the remainder operator.
+		if l.block && l.col == 1 {
+			return l.errorf(start, "directives (%q) are not supported", "%")
+		}
+		l.advance()
+		l.emit(token.Token{Kind: token.Percent, Lit: "%", Pos: start})
+		return nil
 	default:
 		return l.errorf(start, "unexpected character %q", string(rune(c)))
 	}

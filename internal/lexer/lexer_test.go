@@ -231,8 +231,9 @@ func TestOptionalAndCoalesceTokens(t *testing.T) {
 }
 
 // TestOperatorTokens pins down the characters that yak reads two ways: ">"
-// and "|" also open block scalars, "!" also opens a tag, and "=" and "&"
-// already meant something else.
+// and "|" also open block scalars, "!" also opens a tag, "*" also writes an
+// alias, "%" also writes a directive, and "=" and "&" already meant
+// something else.
 func TestOperatorTokens(t *testing.T) {
 	tests := []struct {
 		name string
@@ -279,6 +280,30 @@ func TestOperatorTokens(t *testing.T) {
 			token.Ident, token.Colon, token.String, token.EOF,
 		}},
 		{"a literal scalar is still a string", "a: |\n  text\n", []token.Kind{
+			token.Ident, token.Colon, token.String, token.EOF,
+		}},
+		{"addition", "a: 1 + 2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Plus, token.Int, token.EOF,
+		}},
+		{"subtraction", "a: 1 - 2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Dash, token.Int, token.EOF,
+		}},
+		{"a signed number is still one token", "a: 1 -2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Int, token.EOF,
+		}},
+		{"multiplication", "a: 1 * 2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Star, token.Int, token.EOF,
+		}},
+		{"an alias is a star for the parser to refuse", "a: *x\n", []token.Kind{
+			token.Ident, token.Colon, token.Star, token.Ident, token.EOF,
+		}},
+		{"division", "a: 1 / 2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Slash, token.Int, token.EOF,
+		}},
+		{"remainder", "a: 1 % 2\n", []token.Kind{
+			token.Ident, token.Colon, token.Int, token.Percent, token.Int, token.EOF,
+		}},
+		{"a chomping indicator is not an operator", "a: |+\n  text\n", []token.Kind{
 			token.Ident, token.Colon, token.String, token.EOF,
 		}},
 	}
@@ -381,7 +406,6 @@ func TestLexErrors(t *testing.T) {
 		want string
 	}{
 		{"anchor", "a: &x 1\n", "anchors and aliases are not supported"},
-		{"alias", "a: *x\n", "anchors and aliases are not supported"},
 		{"tag", "a: !!str 1\n", "tags are not supported"},
 		{"explicit key", "? a\n", "explicit key indicators"},
 		{"directive", "%YAML 1.2\n", "directives"},

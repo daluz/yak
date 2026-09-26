@@ -3,9 +3,10 @@
 Done so far: the restricted YAML parser, string interpolation, relative
 references, hidden fields, context files, the `template` command, `local`
 bindings, functions, the `size`, `empty` and `nullify` built-ins, the `??` and
-`?.` operators, comparison and boolean operators, `if`/`then`/`else`, sequence
-and mapping comprehensions, and the YAML, KYAML, JSON, TOML and line-delimited
-output formats. What follows is the planned order of the remaining work.
+`?.` operators, arithmetic, comparison and boolean operators,
+`if`/`then`/`else`, sequence and mapping comprehensions, and the YAML, KYAML,
+JSON, TOML and line-delimited output formats. What follows is the planned
+order of the remaining work.
 
 Everything listed here is already reserved in the language. Using one of these
 keywords today produces an explicit "not implemented yet" error pointing at the
@@ -27,17 +28,38 @@ can be an `*eval.Object` of built-ins resolved outside the document, since
 field access already reads a function out of a mapping; what it needs is a
 name that a template cannot bind.
 
+`render` belongs here rather than among the statements: it will be a built-in,
+so the name stays an ordinary identifier until then.
+
 ## 2. `import`
 
-Pull definitions out of another `.yak` file.
+Pull definitions out of another module. Like `local`, an `import` is a
+statement of its own rather than an expression, and it comes in the same two
+forms:
 
 ```yaml
-local shared = import "shared.yak"
+import mydirectory.mymodule
+import shared = mydirectory.mymodule
+import {
+  name1 = mydir.module1
+  name2 = mydir.module2
+}
 ```
 
-Imports need a resolver with a search path, a cache keyed by resolved path, and
-cycle detection across files. The per-document `docState` in
-`internal/eval/eval.go` is the natural place to hang that cache.
+The syntax and the resolution rules are specified in
+[SPEC.md](SPEC.md#modules): a dotted path names a directory chain and the
+`.yak` file at the end of it, relative to the importing file, and a `yak.mod`
+and `yak.lock` pair remaps a module or its parent onto another directory or a
+remote `https` or `git` location.
+
+That splits into two pieces of work. The resolver turns a path into a source
+file, which is where `yak.mod` and `yak.lock` are read, where a remote module
+is fetched, and where a module cache keyed by resolved path belongs; the
+per-document `docState` in `internal/eval/eval.go` is the natural place to
+hang it, along with the cycle detection that importing across files needs. The
+namespace is the smaller piece: a module evaluates to a value whose
+definitions are read by field access, so `import` can bind one the way a
+`local` binds anything else.
 
 ## 3. `schema`
 
@@ -57,16 +79,14 @@ message that says so.
 
 - `build` renders a multi-file project rather than a single template.
 - `validate` checks inputs and outputs against a schema.
+- `fmt` formats yak files following best practices.
+- `mod` controls yak.mod and yak.lock files.
 
-Both slot into `internal/cli` beside `template`, and both can reuse
+They slot into `internal/cli` beside `template`, and both can reuse
 `internal/engine`.
 
 ## Smaller items
 
-- Arithmetic. The comparison and boolean operators are in, and
-  `parser.precedence` is the table to add `+`, `-`, `*`, `/` and `%` to.
-  Note that `-` is allowed inside identifiers, so binary operators require
-  surrounding whitespace.
 - Chained comprehension clauses. One `for` with an optional `if` is
   supported; jsonnet allows any number of them, which `parser.parseLoop`
   would have to return a slice of.
