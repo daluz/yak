@@ -1,0 +1,26 @@
+ports:
+  - 80
+  - 443
+  - 8080
+sizes:
+  ports: 3
+  labels: 2
+  string: 4
+  none: 0
+  named: 4
+hidden-counted: 2
+emptiness:
+  absent: true
+  mapping: true
+  sequence: true
+  string: true
+  zero: false
+  flag: false
+  ports: false
+service:
+  selector:
+    app: web
+    tier: frontend
+applied: 3
+shadowed:
+  value: not the built-in

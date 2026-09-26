@@ -171,19 +171,6 @@ func compareGolden(t *testing.T, golden, got string) {
 	}
 }
 
-func TestTemplateRejectsLibraryFiles(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "shared"+engine.ExtLibrary)
-	if err := os.WriteFile(path, []byte("a: 1\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var buf bytes.Buffer
-	err := engine.Template(engine.TemplateRequest{Path: path, Out: &buf, Options: render.DefaultOptions()})
-	if err == nil || !strings.Contains(err.Error(), "meant to be imported") {
-		t.Errorf("error = %v, want a rejection of .libyak input", err)
-	}
-}
-
 func TestTemplateReportsMissingFile(t *testing.T) {
 	var buf bytes.Buffer
 	err := engine.Template(engine.TemplateRequest{

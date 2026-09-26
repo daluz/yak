@@ -29,11 +29,14 @@ func evalCall(node *ast.Call, env *Env) (Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	fn, ok := target.(*Function)
-	if !ok {
+	switch fn := target.(type) {
+	case *Function:
+		return fn.call(node, env)
+	case *Builtin:
+		return fn.call(node, env)
+	default:
 		return nil, errorf(node.Fn.Pos(), "cannot call a value of type %s", target.TypeName())
 	}
-	return fn.call(node, env)
 }
 
 // call binds the arguments to the parameters and evaluates the body in the
@@ -48,7 +51,7 @@ func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
 		return nil, errorf(node.Pos(), "function %q is nested more than %d calls deep and may not terminate",
 			f.decl.Name, maxCallDepth)
 	}
-	args, err := f.arguments(node, env)
+	args, err := matchArguments(f.decl.Name, f.decl.Params, node, env)
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +64,7 @@ func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
 		case p.Default != nil:
 			s.binds[p.Name] = &Thunk{node: p.Default, env: inner, pos: p.Default.Pos()}
 		default:
-			return nil, errorf(node.Pos(), "function %q needs an argument for parameter %q",
-				f.decl.Name, p.Name)
+			return nil, missingArgument(f.decl.Name, p.Name, node)
 		}
 	}
 	doc.depth++
@@ -70,30 +72,37 @@ func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
 	return evalNode(f.decl.Body, inner)
 }
 
-// arguments matches the arguments of a call to the names of the parameters
-// they supply.
-func (f *Function) arguments(node *ast.Call, env *Env) (map[string]*Thunk, error) {
-	params := f.decl.Params
+// matchArguments matches the arguments of a call to the names of the
+// parameters they supply, leaving each one behind a thunk of the calling
+// environment. A user function and a built-in are called the same way, so
+// both go through here.
+func matchArguments(fn string, params []*ast.Param, node *ast.Call, env *Env) (map[string]*Thunk, error) {
 	args := make(map[string]*Thunk, len(node.Args))
 	for i, arg := range node.Args {
 		name := arg.Name
 		switch {
 		case name == "" && i >= len(params):
 			return nil, errorf(arg.Value.Pos(), "function %q takes at most %s, found %d",
-				f.decl.Name, argumentCount(len(params)), len(node.Args))
+				fn, argumentCount(len(params)), len(node.Args))
 		case name == "":
 			name = params[i].Name
-		case f.param(name) == nil:
+		case paramNamed(params, name) == nil:
 			return nil, errorf(arg.NamePos, "function %q has no parameter named %q%s",
-				f.decl.Name, name, f.parameterNames())
+				fn, name, parameterNames(params))
 		}
 		if _, dup := args[name]; dup {
 			return nil, errorf(arg.Value.Pos(), "parameter %q of function %q is given twice",
-				name, f.decl.Name)
+				name, fn)
 		}
 		args[name] = &Thunk{node: arg.Value, env: env, pos: arg.Value.Pos()}
 	}
 	return args, nil
+}
+
+// missingArgument reports a parameter that the call left out and that has no
+// default to fall back on.
+func missingArgument(fn, param string, node *ast.Call) error {
+	return errorf(node.Pos(), "function %q needs an argument for parameter %q", fn, param)
 }
 
 // argumentCount counts arguments for a diagnostic.
@@ -104,8 +113,8 @@ func argumentCount(n int) string {
 	return strconv.Itoa(n) + " arguments"
 }
 
-func (f *Function) param(name string) *ast.Param {
-	for _, p := range f.decl.Params {
+func paramNamed(params []*ast.Param, name string) *ast.Param {
+	for _, p := range params {
 		if p.Name == name {
 			return p
 		}
@@ -115,12 +124,12 @@ func (f *Function) param(name string) *ast.Param {
 
 // parameterNames lists the parameters so that a misspelled argument can show
 // what was on offer.
-func (f *Function) parameterNames() string {
-	if len(f.decl.Params) == 0 {
+func parameterNames(params []*ast.Param) string {
+	if len(params) == 0 {
 		return " (it takes none)"
 	}
-	names := make([]string, len(f.decl.Params))
-	for i, p := range f.decl.Params {
+	names := make([]string, len(params))
+	for i, p := range params {
 		names[i] = p.Name
 	}
 	return "; parameters: " + quoteNames(names)

@@ -1,2 +1,2 @@
-local shared = import "shared.libyak"
+import "shared.yak"
 greeting: "hello"

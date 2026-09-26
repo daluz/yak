@@ -360,9 +360,14 @@ var yamlBooleans = map[string]string{
 	"y": "true", "n": "false",
 }
 
+// evalIdent reads a name back. Bindings come first, so a local named after a
+// built-in shadows it.
 func evalIdent(node *ast.Ident, env *Env) (Value, error) {
 	if t, ok := env.lookup(node.Name); ok {
 		return t.Value()
+	}
+	if b, ok := builtins[node.Name]; ok {
+		return b, nil
 	}
 	if want, ok := yamlBooleans[strings.ToLower(node.Name)]; ok {
 		return nil, errorf(node.Pos(),

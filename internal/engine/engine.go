@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/daluz/yak/internal/ctxfile"
 	"github.com/daluz/yak/internal/eval"
@@ -14,11 +13,8 @@ import (
 	"github.com/daluz/yak/internal/render"
 )
 
-// Extensions recognised by the tool.
-const (
-	ExtTemplate = ".yak"
-	ExtLibrary  = ".libyak"
-)
+// ExtTemplate is the extension recognised by the tool.
+const ExtTemplate = ".yak"
 
 // TemplateRequest describes a single template rendering.
 type TemplateRequest struct {
@@ -70,9 +66,6 @@ func readSource(path string) (string, []byte, error) {
 			return "", nil, fmt.Errorf("reading standard input: %w", err)
 		}
 		return "<stdin>", src, nil
-	}
-	if filepath.Ext(path) == ExtLibrary {
-		return "", nil, fmt.Errorf("%s is a library file; %s files are meant to be imported, not rendered", path, ExtLibrary)
 	}
 	src, err := os.ReadFile(path)
 	if err != nil {

@@ -1,0 +1,4 @@
+labels: {}
+selector:
+  app: web
+  tier: frontend

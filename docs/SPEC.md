@@ -11,13 +11,8 @@ added on top.
 
 ## Files
 
-| Extension | Meaning |
-| --- | --- |
-| `.yak` | A template that can be rendered directly. |
-| `.libyak` | A library meant to be imported. `yak template` refuses to render one. |
-
-A file holds one or more documents separated by `---`, optionally terminated by
-`...`, exactly as in YAML.
+yak files use the `.yak` extension. A file holds one or more documents
+separated by `---`, optionally terminated by `...`, exactly as in YAML.
 
 ## What changed from YAML
 
@@ -371,6 +366,57 @@ v: apply(twice, "ab")   # abab
 No output format can hold a function, so one that reaches the output is an
 error rather than something rendered. Calling anything that is not a function
 is an error naming what was found instead.
+
+## Standard library
+
+Some functions are built in. They are written without qualification, and they
+behave in every other way like a function declared in the template: arguments
+go by position or by name, and a built-in is a value that can be passed to
+another function.
+
+| Call | Answer |
+| --- | --- |
+| `size(value)` | How much is in a sequence, a mapping, or a string. |
+| `empty(value)` | Whether the value is `null`, `{}`, `[]` or `""`. |
+| `nullify(value)` | `null` when `empty(value)`, and the value itself otherwise. |
+
+`size` counts items, entries, or characters:
+
+```yaml
+ports: [80, 443]
+count: size(.ports)       # 2
+label: size("café")       # 4, characters rather than bytes
+```
+
+Hidden entries count, because `size` describes the value rather than what the
+renderer will write out. A value with nothing to measure — a number, a
+boolean, `null`, or a function — is an error naming the type that was found.
+
+`empty` and `nullify` accept anything. Only `null` and the three empty
+collections are empty; `0`, `false` and `"abc"` are values like any other,
+exactly as they are for `??` and `:?`. Pairing `nullify` with `:?` is how an
+entry disappears when the context supplies nothing useful for it:
+
+```yaml
+labels:? nullify($$?.labels)
+```
+
+With a context of `{labels: {}}` that entry is left out, while `{labels: {app:
+web}}` renders it.
+
+Bindings are found before built-ins, so a `local` named after one shadows it
+and a template that already uses the name keeps working:
+
+```yaml
+local size(v) = "mine"
+a: size([1, 2])   # "mine"
+```
+
+Built-ins are bare names, which is why there are few of them and why they are
+about values in general rather than any one kind of value. The library modules
+to come — string, encoding and formatting helpers — will be namespaced
+instead, so that growing the library cannot take a bare name out from under a
+template.
 
 ## Missing values
 

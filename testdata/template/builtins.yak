@@ -1,0 +1,41 @@
+#local The standard library built-ins are called by their bare names.
+ports: [80, 443, 8080]
+
+sizes:
+  ports: size($.ports)
+  labels: size($$.selector)
+  string: size("café")
+  none: size([])
+  named: size(value = "abcd")
+
+#local A hidden entry counts too: size describes the value rather than what
+#local the renderer writes out.
+local defaults =
+  image: "alpine"
+  tag:: "3.20"
+hidden-counted: size(defaults)
+
+#local Only null and the three empty collections are empty.
+emptiness:
+  absent: empty($$?.absent)
+  mapping: empty($$.labels)
+  sequence: empty([])
+  string: empty("")
+  zero: empty(0)
+  flag: empty(false)
+  ports: empty($.ports)
+
+#local nullify turns an empty value into null, which ":?" then drops.
+service:
+  labels:? nullify($$.labels)
+  selector:? nullify($$.selector)
+  region:? nullify($$?.region)
+
+#local A built-in is a value, so it can be passed to a function.
+local apply(fn, to) = fn(to)
+applied: apply(size, $.ports)
+
+#local A binding of the same name shadows a built-in.
+shadowed:
+  local size(v) = "not the built-in"
+  value: size($.ports)
