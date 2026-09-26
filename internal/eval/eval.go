@@ -6,6 +6,7 @@ import (
 
 	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/token"
+	"github.com/daluz/yak/internal/version"
 )
 
 // docState holds the per-document state shared by every environment inside
@@ -13,6 +14,9 @@ import (
 type docState struct {
 	root    *Thunk
 	context Value
+	// yak is the mapping "$yak" answers. It describes the run, so every
+	// document of a stream sees the same thing.
+	yak Value
 	// stack records the positions currently being evaluated so that a cycle
 	// can be reported as the chain of references that formed it.
 	stack []token.Pos
@@ -100,14 +104,36 @@ func (e *Env) bindingNames() []string {
 	return names
 }
 
-// Document evaluates a single document against the given context value. The
-// returned value is fully constructed but its leaves are still lazy; use
-// Force to resolve them.
-func Document(doc *ast.Document, context Value) (Value, error) {
+// Run describes the rendering itself, which the language reads as "$yak".
+type Run struct {
+	// FilePath is the template as the command line named it. Input read
+	// from standard input is called "<stdin>", as it is in diagnostics.
+	FilePath string
+	// ContextPaths are the context files in the order they were given.
+	ContextPaths []string
+}
+
+// yakMapping builds the mapping "$yak" answers.
+func yakMapping(run Run) *Object {
+	paths := make([]*Elem, len(run.ContextPaths))
+	for i, p := range run.ContextPaths {
+		paths[i] = Item(String(p))
+	}
+	o := NewObject()
+	o.Set("version", false, Done(String(version.Current)))
+	o.Set("filepath", false, Done(String(run.FilePath)))
+	o.Set("contextpaths", false, Done(NewArray(paths)))
+	return o
+}
+
+// Document evaluates a single document against the given context value and
+// the description of the run behind "$yak". The returned value is fully
+// constructed but its leaves are still lazy; use Force to resolve them.
+func Document(doc *ast.Document, context Value, run Run) (Value, error) {
 	if context == nil {
 		context = NewObject()
 	}
-	ds := &docState{context: context}
+	ds := &docState{context: context, yak: yakMapping(run)}
 	env := &Env{doc: ds}
 	root := &Thunk{node: doc.Body, env: env, pos: doc.Pos()}
 	ds.root = root
@@ -136,6 +162,8 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 		return env.doc.root.Value()
 	case *ast.Context:
 		return env.doc.context, nil
+	case *ast.Yak:
+		return env.doc.yak, nil
 	case *ast.Field:
 		return evalField(node, env)
 	case *ast.Index:
@@ -339,8 +367,7 @@ func evalString(node *ast.String, env *Env) (Value, error) {
 
 func evalSelf(node *ast.Self, env *Env) (Value, error) {
 	if node.Up >= len(env.self) {
-		return nil, errorf(node.Pos(), "%q reaches past the outermost mapping of the document",
-			strings.Repeat(".", node.Up+1))
+		return nil, errorf(node.Pos(), "%q reaches past the outermost mapping of the document", node.Src)
 	}
 	return env.self[node.Up], nil
 }

@@ -53,6 +53,8 @@ func dump(n ast.Node) string {
 		return "root"
 	case *ast.Context:
 		return "context"
+	case *ast.Yak:
+		return "yak"
 	case *ast.Field:
 		return dump(t.X) + optional(t.Optional) + "." + t.Name
 	case *ast.Index:
@@ -206,8 +208,16 @@ func TestParseReferences(t *testing.T) {
 		{"grandparent field", "a: ...b\n", `{"a":self+2.b}`},
 		{"root", "a: $\n", `{"a":root}`},
 		{"root field", "a: $.b\n", `{"a":root.b}`},
+		{"root long", "a: $root\n", `{"a":root}`},
+		{"root long field", "a: $root.b\n", `{"a":root.b}`},
+		{"self long", "a: $self\n", `{"a":self+0}`},
+		{"self long field", "a: $self.b\n", `{"a":self+0.b}`},
 		{"context long", "a: $context.b\n", `{"a":context.b}`},
 		{"context short", "a: $$.b\n", `{"a":context.b}`},
+		{"yak", "a: $yak\n", `{"a":yak}`},
+		{"yak field", "a: $yak.version\n", `{"a":yak.version}`},
+		{"yak index", "a: $yak.contextpaths[0]\n", `{"a":yak.contextpaths[0]}`},
+		{"yak in an interpolation", `a: "{$yak.filepath}"`, `{"a":concat(yak.filepath)}`},
 		{"index", "a: $.b[0]\n", `{"a":root.b[0]}`},
 		{"string index", `a: $.b["c"]`, `{"a":root.b["c"]}`},
 		{"chained index", "a: $.b[0].c\n", `{"a":root.b[0].c}`},
@@ -594,6 +604,7 @@ func TestParseErrors(t *testing.T) {
 		{"dots in postfix", "a: $.b..c\n", "may only begin a reference"},
 		{"dangling dot", "a: $. b\n", "expected a field name"},
 		{"unknown special variable", "a: $ctx\n", "unknown special variable"},
+		{"super", "a: $super.b\n", `"$super" is not implemented yet`},
 		{"empty interpolation", `a: "{}"`, "empty string interpolation"},
 		{"junk in interpolation", `a: "{.b .c}"`, "unexpected"},
 		{"double bang is still a tag", "a: !!true\n", "tags are not supported"},

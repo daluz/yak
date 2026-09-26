@@ -8,6 +8,9 @@ nested:
   name: inner
   self: inner
   parent: root
+  # "$self" and "$root" are "." and "$" written out in full.
+  self-long: inner
+  root-long: root
   deeper:
     name: deepest
     own: deepest

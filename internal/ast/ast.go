@@ -176,13 +176,23 @@ type Null struct{ Base }
 type Self struct {
 	Base
 	Up int
+	// Src is how the reference was written, either a run of dots or
+	// "$self". A reference that reaches past the outermost mapping is
+	// reported with the spelling it was written in.
+	Src string
 }
 
-// Root is "$", the root node of the enclosing document.
+// Root is "$", or "$root" written out in full: the root node of the enclosing
+// document.
 type Root struct{ Base }
 
 // Context is "$context" or its "$$" shorthand: the merged context data.
 type Context struct{ Base }
+
+// Yak is "$yak", a mapping that describes the run rather than the document:
+// the version rendering it, the template's path, and the context files it
+// was given.
+type Yak struct{ Base }
 
 // Field is an "x.name" access.
 type Field struct {

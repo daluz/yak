@@ -230,11 +230,7 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		return &ast.Context{Base: ast.At(t.Pos)}, nil
 
 	case token.DollarIdent:
-		p.next()
-		if t.Lit != "context" {
-			return nil, p.errorf(t.Pos, "unknown special variable %q; the only one is %q", "$"+t.Lit, "$context")
-		}
-		return &ast.Context{Base: ast.At(t.Pos)}, nil
+		return p.parseSpecial()
 
 	case token.LBracket:
 		return p.parseFlowSequence()
@@ -298,12 +294,38 @@ func (p *parser) parseIdent() (ast.Node, error) {
 	return &ast.Ident{Base: ast.At(t.Pos), Name: t.Lit}, nil
 }
 
+// specialVariables names every "$name" variable, so that a misspelled one is
+// answered with the list of the real ones.
+const specialVariables = `"$root", "$self", "$context", "$yak"`
+
+// parseSpecial parses a "$name" variable. Three of them are a sigil written
+// out in full and mean exactly what the sigil does, so "$root" is "$",
+// "$self" is "." and "$context" is "$$". "$yak" describes the run rather
+// than the document.
+func (p *parser) parseSpecial() (ast.Node, error) {
+	t := p.next()
+	switch t.Lit {
+	case "root":
+		return &ast.Root{Base: ast.At(t.Pos)}, nil
+	case "self":
+		return &ast.Self{Base: ast.At(t.Pos), Src: "$self"}, nil
+	case "context":
+		return &ast.Context{Base: ast.At(t.Pos)}, nil
+	case "yak":
+		return &ast.Yak{Base: ast.At(t.Pos)}, nil
+	case "super":
+		return nil, p.errorf(t.Pos, "%q is not implemented yet", "$super")
+	}
+	return nil, p.errorf(t.Pos, "unknown special variable %q; the ones that exist are %s",
+		"$"+t.Lit, specialVariables)
+}
+
 // parseSelf parses a leading run of dots. A run of n dots walks n-1 mappings
 // outwards, so "." is the current mapping and ".." is its parent. A field name
 // written immediately after the dots binds to that mapping.
 func (p *parser) parseSelf() (ast.Node, error) {
 	dots := p.next()
-	self := &ast.Self{Base: ast.At(dots.Pos), Up: len(dots.Lit) - 1}
+	self := &ast.Self{Base: ast.At(dots.Pos), Up: len(dots.Lit) - 1, Src: dots.Lit}
 	if name, ok := p.adjacentFieldName(dots); ok {
 		return &ast.Field{Base: ast.At(dots.Pos), X: self, Name: name}, nil
 	}

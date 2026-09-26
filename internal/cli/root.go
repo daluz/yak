@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/daluz/yak/internal/version"
 	"github.com/spf13/cobra"
 )
-
-// version is overridden at build time with -ldflags "-X ...cli.version=...".
-var version = "dev"
 
 // NewRootCommand builds the yak command tree.
 func NewRootCommand() *cobra.Command {
@@ -18,7 +16,7 @@ func NewRootCommand() *cobra.Command {
 		Short: "Templatize YAML with a small, explicit language",
 		Long: "yak renders YAML templates written in a restricted, unambiguous\n" +
 			"dialect of YAML with string interpolation and relative references.",
-		Version:       version,
+		Version:       version.Current,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

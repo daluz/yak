@@ -158,12 +158,19 @@ any other. An entry that is left out takes its comments with it.
 
 | Syntax | Meaning |
 | --- | --- |
-| `.` | The enclosing mapping. |
+| `.` / `$self` | The enclosing mapping. |
 | `.name` | The `name` field of the enclosing mapping. |
 | `..` / `..name` | The parent mapping, and its fields. |
 | `...` / `...name` | The grandparent, and so on for each added dot. |
-| `$` / `$.name` | The root of the current document. |
+| `$` / `$root` | The root of the current document. |
+| `$.name` | The `name` field of that root. |
 | `$context` / `$$` | The merged context data. |
+
+`$self`, `$root` and `$context` are the sigils written out in full and mean
+exactly what `.`, `$` and `$$` do, so `$self.name` is `.name`. A template that
+refers to a mapping once may read better for saying which one it means. Only
+`$self` has a long spelling: walking outwards takes dots. `$super` is reserved
+and writing it today is a "not implemented yet" error.
 
 Sequences do not count as a level, so `..` always names the nearest enclosing
 mapping:
@@ -196,6 +203,37 @@ name: "web"
 
 A value that ends up depending on itself is reported as a circular reference,
 with the chain of positions that formed the cycle.
+
+## The run
+
+`$yak` is a mapping describing the rendering rather than the document. Its
+fields are read like any other mapping's.
+
+| Field | Meaning |
+| --- | --- |
+| `$yak.version` | The version of yak doing the rendering. |
+| `$yak.filepath` | The template's path, exactly as it was given to the tool. |
+| `$yak.contextpaths` | The context files, in the order they were given. |
+
+```yaml
+# rendering: yak template deploy/app.yak -c base.yaml -c prod.yaml
+a: $yak.filepath            # "deploy/app.yak"
+b: $yak.contextpaths[0]     # "base.yaml"
+c: "built by yak {$yak.version}"
+```
+
+The path is reported as it was written rather than resolved against the
+working directory, so a template says the same thing a diagnostic about it
+would. A template read from standard input is called `<stdin>`, again matching
+its diagnostics. `contextpaths` is a sequence that is empty rather than absent
+when no context file was given, so a comprehension over it needs no guard.
+
+Everything here describes the run, so unlike `$` every document of a stream
+sees the same `$yak`. An unstamped build calls itself `dev`, so `version` is
+only as meaningful as the build that reads it. Writing any of these into
+output makes that output depend on where the template was on disk and on
+which yak rendered it, which is worth doing for a provenance note and worth
+avoiding elsewhere.
 
 ## Statements
 
@@ -717,7 +755,8 @@ any other value.
 
 `yak template -c a.yaml -c b.yaml` merges context files left to right. Mappings
 merge key by key; sequences and scalars from a later file replace what came
-before. The result is available as `$context`, or `$$` for short.
+before. The result is available as `$context`, or `$$` for short, and the
+paths that produced it as [`$yak.contextpaths`](#the-run).
 
 Context files are plain YAML or JSON, not yak, so they may use anchors and
 unquoted strings. They must have a mapping at the top level.
@@ -858,9 +897,10 @@ entry       := key sep value
 loop        := "for" identifier "in" value ("if" value)?
 key         := identifier | string | "[" value "]"
 literal     := string | int | float | "true" | "false" | "null"
-reference   := (dots | "$" | "$context" | "$$" | identifier) postfix*
+reference   := (dots | special | identifier) postfix*
 postfix     := "?"? ("." identifier | "[" value "]") | args
 args        := "(" (arg ("," arg)* ","?)? ")"
 arg         := (identifier "=")? value
 dots        := "." | ".." | "..."  ...
+special     := "$" | "$$" | "$root" | "$self" | "$context" | "$yak"
 ```

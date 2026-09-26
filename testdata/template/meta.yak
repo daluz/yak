@@ -1,0 +1,10 @@
+# "$yak" describes the run rather than the document. The path is whatever was
+# handed to the tool, which here is the path the tests glob with, and the
+# context files are listed in the order they were given.
+path: $yak.filepath
+contexts: $yak.contextpaths
+first-context: $yak.contextpaths[0]
+note: "rendered from {$yak.filepath}"
+# "$yak.version" answers the version the build stamped in, so this golden can
+# only say that there is one. internal/eval checks the string itself.
+stamped: $yak.version != ""

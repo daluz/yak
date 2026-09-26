@@ -7,7 +7,9 @@ import (
 
 	"github.com/daluz/yak/internal/ctxfile"
 	"github.com/daluz/yak/internal/engine"
+	"github.com/daluz/yak/internal/eval"
 	"github.com/daluz/yak/internal/render"
+	"github.com/daluz/yak/internal/version"
 )
 
 // renderSource evaluates a template against an optional YAML context and
@@ -19,7 +21,8 @@ func renderSource(t *testing.T, src, contextYAML string) (string, error) {
 		t.Fatalf("decoding context: %v", err)
 	}
 	var buf bytes.Buffer
-	err = engine.Render("test.yak", []byte(src), context, &buf, render.DefaultOptions())
+	run := eval.Run{FilePath: "test.yak"}
+	err = engine.Render(run, []byte(src), context, &buf, render.DefaultOptions())
 	return buf.String(), err
 }
 
@@ -659,6 +662,39 @@ func TestRootIsPerDocument(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `no field "a"`) {
 		t.Errorf("error = %q, want a missing field error", err)
+	}
+}
+
+// TestYakDescribesTheRun checks the mapping behind "$yak". The version is
+// whatever the build stamped in, so the test reads it rather than naming one.
+func TestYakDescribesTheRun(t *testing.T) {
+	var buf bytes.Buffer
+	run := eval.Run{FilePath: "deploy/app.yak", ContextPaths: []string{"base.yaml", "prod.yaml"}}
+	src := []byte("path: $yak.filepath\nversion: $yak.version\ncontexts: $yak.contextpaths\n")
+	if err := engine.Render(run, src, nil, &buf, render.DefaultOptions()); err != nil {
+		t.Fatalf("rendering: %v", err)
+	}
+	want := "path: deploy/app.yak\nversion: " + version.Current + "\ncontexts:\n  - base.yaml\n  - prod.yaml\n"
+	if buf.String() != want {
+		t.Errorf("rendered:\n%s\nwant:\n%s", buf.String(), want)
+	}
+}
+
+// TestYakContextPathsAreEmptyWithoutAny checks that a run given no context
+// files still answers a sequence, so a template may walk it unconditionally.
+func TestYakContextPathsAreEmptyWithoutAny(t *testing.T) {
+	got := mustRender(t, "n: size($yak.contextpaths)\n", "")
+	if want := "n: 0\n"; got != want {
+		t.Errorf("rendered %q, want %q", got, want)
+	}
+}
+
+// TestYakIsSharedByEveryDocument checks that "$yak" describes the run rather
+// than the document, unlike "$".
+func TestYakIsSharedByEveryDocument(t *testing.T) {
+	got := mustRender(t, "a: $yak.filepath\n---\nb: $yak.filepath\n", "")
+	if want := "a: test.yak\n---\nb: test.yak\n"; got != want {
+		t.Errorf("rendered %q, want %q", got, want)
 	}
 }
 

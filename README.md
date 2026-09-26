@@ -94,7 +94,11 @@ $ yak template app.yak -o rendered.json     # the extension chooses JSON
   tags return with schemas, and `!` means boolean `not` in the meantime.
 - **Relative references.** `.name` is a sibling, `..name` the parent's,
   `...name` the grandparent's, `$.name` the document root's, and `$$.name` the
-  context's.
+  context's. `$self`, `$root` and `$context` spell the first, fourth and fifth
+  of those out in full.
+- **The run is a value.** `$yak` is a mapping holding the `version` doing the
+  rendering, the template's `filepath` as given, and the `contextpaths` it was
+  handed, which is enough for a provenance note.
 - **Hidden fields.** Write `::` instead of `:` to keep a value available to
   references but out of the output, or `:?` to drop an entry only when its
   value is null.

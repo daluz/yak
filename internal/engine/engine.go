@@ -38,19 +38,21 @@ func Template(req TemplateRequest) error {
 	if err != nil {
 		return err
 	}
-	return Render(name, src, context, req.Out, req.Options)
+	run := eval.Run{FilePath: name, ContextPaths: req.ContextPaths}
+	return Render(run, src, context, req.Out, req.Options)
 }
 
 // Render parses, evaluates and writes a source buffer. It is the seam used by
-// tests and by future commands that already hold their input in memory.
-func Render(name string, src []byte, context eval.Value, w io.Writer, opts render.Options) error {
-	stream, err := parser.Parse(name, src)
+// tests and by future commands that already hold their input in memory. The
+// run names the source and is what "$yak" reports.
+func Render(run eval.Run, src []byte, context eval.Value, w io.Writer, opts render.Options) error {
+	stream, err := parser.Parse(run.FilePath, src)
 	if err != nil {
 		return err
 	}
 	docs := make([]eval.Value, 0, len(stream.Docs))
 	for _, doc := range stream.Docs {
-		v, err := eval.Document(doc, context)
+		v, err := eval.Document(doc, context, run)
 		if err != nil {
 			return err
 		}

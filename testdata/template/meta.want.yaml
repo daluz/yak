@@ -1,0 +1,12 @@
+# "$yak" describes the run rather than the document. The path is whatever was
+# handed to the tool, which here is the path the tests glob with, and the
+# context files are listed in the order they were given.
+path: ../../testdata/template/meta.yak
+contexts:
+  - ../../testdata/template/meta.ctx1.yaml
+  - ../../testdata/template/meta.ctx2.yaml
+first-context: ../../testdata/template/meta.ctx1.yaml
+note: rendered from ../../testdata/template/meta.yak
+# "$yak.version" answers the version the build stamped in, so this golden can
+# only say that there is one. internal/eval checks the string itself.
+stamped: true
