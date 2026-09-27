@@ -13,7 +13,9 @@ added on top.
 ## Files
 
 yak files use the `.yak` extension. A file holds one or more documents
-separated by `---`, optionally terminated by `...`, exactly as in YAML.
+separated by `---`, optionally terminated by `...`, exactly as in YAML. The
+name may carry the extension of an [output format](#output) ahead of `.yak`,
+as `app.toml.yak` does, which is how a template says what it renders to.
 
 ## What changed from YAML
 
@@ -93,6 +95,9 @@ error that tells you to use `true`/`false` or add quotes.
 references and `local` bindings. Tags will return with schemas; `!` on its
 own is the boolean `not` operator, so only the `!!` form still names a tag.
 
+YAML's `<<` survives the loss of the anchors it used to name, and merges any
+mapping an expression can produce.
+
 ### Keys
 
 A key is one of:
@@ -153,6 +158,65 @@ replicas: 3
 
 Only `null` hides the entry; `false`, `0`, `""`, `[]` and `{}` are values like
 any other. An entry that is left out takes its comments with it.
+
+### Merging with `<<`
+
+Writing `<<` where a key belongs merges the mapping on the right into the one
+being written, which is what YAML's merge key does without needing an anchor
+to name:
+
+```yaml
+local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+
+container:
+  <<: defaults
+  tag: "1.27"
+  limits:
+    memory: 512
+```
+
+renders as:
+
+```yaml
+container:
+  image: nginx
+  tag: "1.27"
+  limits:
+    cpu: 1
+    memory: 512
+```
+
+A mapping reads top to bottom, and that is what decides an override: the
+merge overrides the entries above it, and the entries below it override the
+merge. `limits` is written below, so it wins, and because both sides hold a
+mapping the two merge rather than one replacing the other — `memory` comes
+from the entry and `cpu` from the merge, however deep that goes. Anything
+that is not a mapping on both sides is replaced outright.
+
+A key the merge brings in takes the place the `<<` was written at, and a key
+that was already there keeps the place it had. Several `<<` may appear in one
+mapping, and a later one overrides an earlier one, as anything written later
+does.
+
+The modifiers mean what they do on any other entry, applied to the merge
+itself. `<<::` hides everything it brings in, which leaves it readable by a
+reference and out of the output. `<<:?` merges nothing when what it names is
+null rather than failing, which is how an override the context may not carry
+is read:
+
+```yaml
+container:
+  <<:: defaults            # readable by a reference, never rendered
+  <<:? $$?.overrides       # nothing to merge when the context omits it
+  cpu: .limits.cpu         # 1, read out of what the merge brought in
+```
+
+`<<` has to know the keys it is merging in order to place them, so the
+mapping it names is evaluated where the `<<` is written rather than when the
+merged mapping is read, as is any entry of the same mapping that it decides.
+
+`"<<"` in quotes is an ordinary key, which is how a mapping that has to carry
+one is written.
 
 ## References
 
@@ -583,52 +647,19 @@ name: $$.app + "-web"     # "shop-web"
 ports: [80] + [443]       # [80, 443]
 ```
 
-Two mappings merge, and the one on the right decides. A key held by both
-takes its value from the right and keeps the position it has on the left, so
-an override leaves the shape of the original recognisable:
+Mappings are the one kind `+` leaves alone, because merging two of them is
+`<<`, and an error says so rather than picking a depth. Adding two values of
+different kinds is an error naming both, and so is adding two of a kind that
+`+` does not join, such as two booleans.
 
-```yaml
-local defaults = {image: "nginx", tag: "1.25"}
-
-container: defaults + {tag: "1.27", port: 8080}
-```
-
-That renders as:
-
-```yaml
-container:
-  image: nginx
-  tag: "1.27"
-  port: 8080
-```
-
-The merge is one level deep. A key whose value is a mapping on both sides is
-replaced outright rather than merged, which keeps what `+` did readable from
-the two mappings alone; `++` below is the operator that goes deeper. An entry
-also carries over whatever the mapping it came from said about it, so a `::`
-on the right hides an entry the left would have rendered.
-
-Merging builds a third mapping and leaves both operands as they were. An
-entry that came through a merge still reads the mapping it was written in, so
-overriding a key does not reach back into a sibling that referred to it:
-
-```yaml
-local base = {name: "web", label: "{.name}-1"}
-
-v: (base + {name: "api"}).label   # "web-1", not "api-1"
-```
-
-Adding two values of different kinds is an error naming both, and so is
-adding two of a kind that `+` does not join, such as two booleans.
-
-`++` merges two mappings at every depth. A key whose value is a mapping on
-both sides is merged rather than replaced, which is the one thing it does
-differently:
+`<<` merges two mappings, and the one on the right decides. A key held by
+both takes its value from the right and keeps the position it has on the
+left, so an override leaves the shape of the original recognisable:
 
 ```yaml
 local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
 
-container: defaults ++ {limits: {memory: 512}, port: 8080}
+container: defaults << {limits: {memory: 512}, port: 8080}
 ```
 
 That renders as:
@@ -642,15 +673,31 @@ container:
   port: 8080
 ```
 
-Only a mapping merges. A key holding a sequence or a scalar still takes its
-value from the right, so `[80] ++ [443]` is not what appends a port. `++`
-joins nothing but mappings, and two values of any other kind are an error
-naming both.
+The merge goes as deep as the two mappings do: a key whose value is a mapping
+on both sides merges rather than being replaced, which is what `limits` shows
+above. Anything else the right hand side holds replaces what the left one
+held, so `[80] << [443]` is not what appends a port — `<<` joins nothing but
+mappings, and two values of any other kind are an error naming both. An entry
+also carries over whatever the mapping it came from said about it, so a `::`
+on the right hides an entry the left would have rendered.
+
+Merging builds a third mapping and leaves both operands as they were. An
+entry that came through a merge still reads the mapping it was written in, so
+overriding a key does not reach back into a sibling that referred to it:
+
+```yaml
+local base = {name: "web", label: "{.name}-1"}
+
+v: (base << {name: "api"}).label   # "web-1", not "api-1"
+```
 
 Telling a mapping from anything else means resolving the value, so a key held
-by both sides is evaluated where the `++` is written rather than where the
-merged mapping is read. That is the one way `++` is stricter than `+`; what
-it renders is the same either way.
+by both sides is evaluated where the `<<` is written rather than where the
+merged mapping is read. That is the one way `<<` is stricter than the
+operators around it; what it renders is the same either way.
+
+Written where a key belongs rather than between two values, `<<` merges into
+the mapping it is written in; "Merging with `<<`" above covers that form.
 
 Comparisons answer a boolean:
 
@@ -680,7 +727,7 @@ level is left associative:
 &&
 ==  !=
 <  <=  >  >=
-+  ++  -
++  <<  -
 *  /  %
 !  -
 ```
@@ -860,8 +907,17 @@ nothing at all, or a body written as `null`, is left out.
 `--keep-null-documents` writes it instead. Dropping every document leaves the
 output empty, which the single-document formats report as an error.
 
-`--format` selects another encoding, and naming an output file with a known
-extension selects the matching one:
+The output goes to standard output unless `--output` names a file to write.
+`--automatic-output` names that file after the template: the `.yak` extension
+is dropped and the one belonging to the format written takes its place, so
+`app.toml.yak` yields `app.toml` and `app.yak` yields `app.yaml`. Reading the
+template from standard input leaves nothing to name the file after and is an
+error. `--output-dir` places the file in another directory, creating it if it
+is missing.
+
+`--format` selects another encoding. Without it the extension of the output
+file selects one, and failing that the extension the template's own name
+carries ahead of `.yak`, so that `app.toml.yak` writes TOML:
 
 | Format  | Also known as                 | Documents | Comments |
 | ------- | ----------------------------- | --------- | -------- |
@@ -924,7 +980,7 @@ unary       := ("!" | "-")* operand
 operand     := literal | reference | flowSeq | flowMap | "(" value ")"
 flowSeq     := "[" ((value loop) | (value ("," value)*)? ","?) "]"
 flowMap     := "{" ((entry loop) | (entry ("," entry)*)?) "}"
-entry       := key sep value
+entry       := (key | "<<") sep value
 loop        := "for" identifier "in" value ("if" value)?
 key         := identifier | string | "[" value "]"
 literal     := string | int | float | "true" | "false" | "null"

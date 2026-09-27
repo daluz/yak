@@ -91,14 +91,20 @@ type Comments struct {
 	Foot []string
 }
 
-// Entry is one key/value pair of a Mapping.
+// Entry is one key/value pair of a Mapping, or the "<<" of a merge written
+// where a key belongs.
 type Entry struct {
 	Comments
 	// Key is a *String for literal keys (bare identifiers are normalized into
 	// strings) or an arbitrary expression for computed keys written as [expr].
+	// A merge entry has no key.
 	Key Node
 	// Computed records that the key was written in bracket form.
 	Computed bool
+	// Merge records that the entry was written "<<" instead of with a key,
+	// which merges the mapping it names into the one being built rather
+	// than adding an entry of its own.
+	Merge bool
 	// Hidden records that the entry was written with "::" and must be omitted
 	// from rendered output while remaining visible to references.
 	Hidden bool

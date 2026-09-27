@@ -1,0 +1,3 @@
+container:
+  <<: "nginx"
+  tag: "1.27"

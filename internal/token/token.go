@@ -46,8 +46,9 @@ const (
 	// negation. Which one it is depends on where it appears.
 	Dash
 	Plus
-	// DoublePlus is the "++" of a deep merge.
-	DoublePlus
+	// Merge is the "<<" of a deep merge, written either between two
+	// mappings or where the key of an entry belongs.
+	Merge
 	Star
 	Slash
 	Percent
@@ -94,7 +95,7 @@ var kindNames = map[Kind]string{
 	ColonQuestion: `":?"`,
 	Dash:          `"-"`,
 	Plus:          `"+"`,
-	DoublePlus:    `"++"`,
+	Merge:         `"<<"`,
 	Star:          `"*"`,
 	Slash:         `"/"`,
 	Percent:       `"%"`,

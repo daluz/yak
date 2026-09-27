@@ -3,7 +3,8 @@
 Done so far: the restricted YAML parser, string interpolation, relative
 references, hidden fields, context files, the `template` command, `local`
 bindings, functions, the `size`, `empty` and `nullify` built-ins, the `??` and
-`?.` operators, arithmetic, comparison and boolean operators,
+`?.` operators, arithmetic, comparison and boolean operators, the `<<` merge
+in both of its forms,
 `if`/`then`/`else`, sequence and mapping comprehensions, and the YAML, KYAML,
 JSON, TOML and line-delimited output formats. What follows is the planned
 order of the remaining work.
@@ -95,8 +96,12 @@ They slot into `internal/cli` beside `template`, and both can reuse
   style if that becomes worth honouring.
 - An `--indent` flag. `render.Options` already carries the width and every
   format reads it; nothing exposes it yet.
-- `$super`, the mapping on the left of a `+` read from the one on the right.
+- `$super`, the mapping on the left of a `<<` read from the one on the right.
   The name is reserved and `parser.parseSpecial` rejects it for now. What it
-  needs is a decision first: `+` is lexical today, so a merged entry reads the
-  mapping it was written in, and a `$super` that matched jsonnet's would have
-  to be bound when the merge happens rather than where it is written.
+  needs is a decision first: `<<` is lexical today, so a merged entry reads
+  the mapping it was written in, and a `$super` that matched jsonnet's would
+  have to be bound when the merge happens rather than where it is written.
+- A built-in for merges that `<<` does not cover, such as a shallow one or a
+  sequence that appends rather than being replaced. `<<` is the one merge the
+  language spells, and the rest belong in the standard library where the
+  choice can be named.

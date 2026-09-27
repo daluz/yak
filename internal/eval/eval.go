@@ -199,7 +199,8 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 // Keys are resolved in two passes. Literal keys are registered first so that a
 // computed key may refer to a sibling; computed keys are resolved afterwards.
 // Slots are reserved up front, which keeps the output in source order no
-// matter which pass names them.
+// matter which pass names them. A "<<" folds in after both passes, once every
+// key the mapping writes for itself is known.
 func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 	obj := NewObject()
 	child := env.pushSelf(obj)
@@ -212,6 +213,11 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 
 	slots := make([]*Field, len(node.Entries))
 	for i, e := range node.Entries {
+		// A merge holds no entry of its own, so it reserves nothing; it
+		// folds into the mapping once every key in it is known.
+		if e.Merge {
+			continue
+		}
 		slots[i] = obj.reserve(comments(e.Comments), e.Hidden, e.HideNull,
 			&Thunk{node: e.Value, env: child, pos: e.Value.Pos()})
 	}
@@ -223,6 +229,9 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 		}
 	}
 	for i, e := range node.Entries {
+		if e.Merge {
+			continue
+		}
 		if _, ok := literalKey(e); ok {
 			continue
 		}
@@ -238,12 +247,93 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 			return nil, errorf(e.KeyPos, "%s", err.Error())
 		}
 	}
+	// Merges come last, so that a key the mapping writes itself is known
+	// however it was written, and a merged key can be told from one it
+	// wrote. Each one folds in at the position it was written at, which is
+	// the number of entries above it plus whatever earlier merges added.
+	written, added := 0, 0
+	for _, e := range node.Entries {
+		if !e.Merge {
+			written++
+			continue
+		}
+		n, err := applyMerge(obj, written+added, e, child)
+		if err != nil {
+			return nil, err
+		}
+		added += n
+	}
 	return obj, nil
+}
+
+// applyMerge folds the mapping a "<<" entry names into the one being built,
+// at the position "at" the entry was written at. What the merge brings in
+// overrides the entries above it and is overridden by the ones below, so a
+// mapping reads top to bottom however its entries got there. It answers how
+// many entries the merge added.
+func applyMerge(o *Object, at int, e *ast.Entry, env *Env) (int, error) {
+	v, err := evalNode(e.Value, env)
+	if err != nil {
+		return 0, err
+	}
+	// ":?" makes the merge itself optional, which is what reading an
+	// override out of the context with "$$?.name" needs.
+	if _, null := v.(Null); null && e.HideNull {
+		return 0, nil
+	}
+	src, ok := v.(*Object)
+	if !ok {
+		return 0, errorf(e.KeyPos, "%q needs a mapping to merge, found %s", "<<", v.TypeName())
+	}
+	c := comments(e.Comments)
+	added, carried := 0, false
+	for _, f := range src.Fields() {
+		q, held := o.index[f.Name]
+		var target *Field
+		switch {
+		case !held:
+			brought := *f
+			brought.Hidden = brought.Hidden || e.Hidden
+			o.insertAt(at+added, &brought)
+			added++
+			target = &brought
+		case q < at+added:
+			// The merge overrides an entry written above it. That entry
+			// keeps the place and the comments it was written with; the
+			// merge decides its value and whether it is hidden.
+			value, err := combined(o.fields[q], f)
+			if err != nil {
+				return 0, err
+			}
+			target = o.fields[q]
+			target.Value, target.Hidden, target.HideNull = value, f.Hidden || e.Hidden, f.HideNull
+		default:
+			// The entry below was written after the merge, so it wins,
+			// and keeps everything it says about itself.
+			value, err := combined(f, o.fields[q])
+			if err != nil {
+				return 0, err
+			}
+			target = o.fields[q]
+			target.Value = value
+		}
+		if !carried {
+			// The comments written on the "<<" belong to the first entry
+			// it decides, as the ones on a "local" belong to whatever
+			// follows the binding.
+			target.Head = append(append([]string(nil), c.Head...), target.Head...)
+			if target.Line == "" {
+				target.Line = c.Line
+			}
+			carried = true
+		}
+	}
+	return added, nil
 }
 
 // literalKey returns the name of a key that is known without evaluation.
 func literalKey(e *ast.Entry) (string, bool) {
-	if e.Computed {
+	if e.Merge || e.Computed {
 		return "", false
 	}
 	s, ok := e.Key.(*ast.String)

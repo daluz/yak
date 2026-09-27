@@ -1,0 +1,57 @@
+# "<<" merges two mappings at every depth, and the one on the right decides.
+# "limits" is merged rather than replaced, and "port" is appended.
+container:
+  image: nginx
+  limits:
+    cpu: 1
+    memory: 512
+  port: 8080
+# Both operands are left as they were.
+untouched:
+  cpu: 1
+  memory: 256
+# The merge goes as deep as the two mappings do.
+deep:
+  a:
+    b:
+      c: 1
+      d: 3
+      e: 4
+# Only a mapping merges. A key that holds anything else takes its value from
+# the right, so a sequence overrides rather than joining.
+overridden:
+  expose:
+    - 443
+  tag: "1.27"
+# A merged entry still reads the mapping it was written in, however deep the
+# merge reached, so overriding "name" leaves "label" alone.
+scope: web-1
+# A merged entry keeps what the mapping on the right said about it, so "::"
+# there hides an entry the left would have rendered.
+hiding:
+  kept:
+    a: 1
+  added: 4
+# Written where a key belongs, "<<" merges into the mapping it is written in.
+# The entries above it are overridden and the ones below it override, so the
+# mapping reads top to bottom: the merge decides "image", and the "limits"
+# written below it decides the memory while keeping the cpu it merged.
+entry:
+  # the defaults for every container
+  image: nginx
+  tag: "1.27"
+  limits:
+    cpu: 1
+    memory: 512
+# "::" hides everything the merge brings in, which leaves it readable by a
+# reference and out of the output.
+hidden:
+  ref: nginx:1
+# ":?" merges nothing when what it names is null, which is how an override
+# the context may not carry is read.
+optional:
+  port: 8080
+# "<<" in quotes is an ordinary key, and comes back out quoted so that what
+# was written stays a key rather than reading as a merge.
+quoted:
+  "<<": 1

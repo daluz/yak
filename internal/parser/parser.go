@@ -277,35 +277,46 @@ func (p *parser) parseBlockMapping(col int) (*ast.Mapping, error) {
 func (p *parser) parseMappingEntry(col int) (*ast.Entry, error) {
 	start := p.i
 	head := p.takeHead()
-	keyPos := p.cur().Pos
-	key, computed, err := p.parseKey()
+	entry, err := p.parseEntryHead()
 	if err != nil {
 		return nil, err
-	}
-	var hidden, hideNull bool
-	switch p.cur().Kind {
-	case token.Colon:
-	case token.DoubleColon:
-		hidden = true
-	case token.ColonQuestion:
-		hideNull = true
-	default:
-		return nil, p.errorf(p.cur().Pos, "expected %q, %q or %q after mapping key, found %s", ":", "::", ":?", p.cur())
 	}
 	colon := p.next()
 	value, err := p.parseEntryValue(col, colon)
 	if err != nil {
 		return nil, err
 	}
-	return &ast.Entry{
-		Comments: ast.Comments{Head: head, Line: p.takeLine(start)},
-		Key:      key,
-		Computed: computed,
-		Hidden:   hidden,
-		HideNull: hideNull,
-		Value:    value,
-		KeyPos:   keyPos,
-	}, nil
+	entry.Comments = ast.Comments{Head: head, Line: p.takeLine(start)}
+	entry.Value = value
+	return entry, nil
+}
+
+// parseEntryHead parses everything an entry has before its value: a key, or
+// the "<<" that stands where a key belongs, and the separator after it. The
+// separator is left as the current token, since a block entry needs it to
+// find its value.
+func (p *parser) parseEntryHead() (*ast.Entry, error) {
+	entry := &ast.Entry{KeyPos: p.cur().Pos}
+	if p.at(token.Merge) {
+		p.next()
+		entry.Merge = true
+	} else {
+		key, computed, err := p.parseKey()
+		if err != nil {
+			return nil, err
+		}
+		entry.Key, entry.Computed = key, computed
+	}
+	switch p.cur().Kind {
+	case token.Colon:
+	case token.DoubleColon:
+		entry.Hidden = true
+	case token.ColonQuestion:
+		entry.HideNull = true
+	default:
+		return nil, p.errorf(p.cur().Pos, "expected %q, %q or %q after mapping key, found %s", ":", "::", ":?", p.cur())
+	}
+	return entry, nil
 }
 
 // parseEntryValue parses the value that follows a mapping key, which is either
@@ -575,7 +586,7 @@ func (p *parser) looksLikeEntry() bool {
 // or -1 if no key can start there.
 func (p *parser) keyEnd(i int) int {
 	switch p.toks[i].Kind {
-	case token.Ident, token.String, token.Int, token.Float:
+	case token.Ident, token.String, token.Int, token.Float, token.Merge:
 		return i + 1
 	case token.LBracket:
 		depth := 0

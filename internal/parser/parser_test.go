@@ -112,7 +112,10 @@ func dumpEntry(e *ast.Entry) string {
 	case e.HideNull:
 		sep = ":?"
 	}
-	key := dump(e.Key)
+	key := "<<"
+	if !e.Merge {
+		key = dump(e.Key)
+	}
 	if e.Computed {
 		key = "[" + key + "]"
 	}
@@ -168,6 +171,11 @@ func TestParseBlockStructures(t *testing.T) {
 		{"floats", "a: 1.5\n", `{"a":1.5}`},
 		{"hidden field", "a:: 1\n", `{"a"::1}`},
 		{"hidden if null field", "a:? 1\n", `{"a":?1}`},
+		{"merge entry", "<<: x\na: 1\n", `{<<:ident(x) "a":1}`},
+		{"hidden merge entry", "<<:: x\n", `{<<::ident(x)}`},
+		{"optional merge entry", "<<:? x\n", `{<<:?ident(x)}`},
+		{"flow merge entry", "a: {<<: x, b: 1}\n", `{"a":{<<:ident(x) "b":1}}`},
+		{"a quoted merge is an ordinary key", `"<<": 1`, `{"<<":1}`},
 		{"quoted key", `"a b": 1`, `{"a b":1}`},
 		{"kebab key", "a-b: 1\n", `{"a-b":1}`},
 		{"computed key", "[$$.k]: 1\n", `{[context.k]:1}`},
@@ -357,7 +365,8 @@ func TestParseOperators(t *testing.T) {
 		{"division binds tighter than subtraction", "a: 1 - 4 / 2\n", `{"a":(1-(4/2))}`},
 		{"addition binds tighter than comparison", "a: 1 + 2 < 4\n", `{"a":((1+2)<4)}`},
 		{"arithmetic is left associative", "a: 1 - 2 - 3\n", `{"a":((1-2)-3)}`},
-		{"deep merge binds like addition", "a: x + y ++ z\n", `{"a":((ident(x)+ident(y))++ident(z))}`},
+		{"merge binds like addition", "a: x + y << z\n", `{"a":((ident(x)+ident(y))<<ident(z))}`},
+		{"merge binds tighter than comparison", "a: x << y == z\n", `{"a":((ident(x)<<ident(y))==ident(z))}`},
 		{"negating a reference", "a: -x\n", `{"a":-ident(x)}`},
 		{"a negative literal keeps its sign", "a: -1\n", `{"a":-1}`},
 		{"subtracting a negation", "a: 1 - -x\n", `{"a":(1--ident(x))}`},

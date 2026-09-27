@@ -77,7 +77,7 @@ func evalBinary(node *ast.Binary, env *Env) (Value, error) {
 			return nil, errorf(node.OpPos, "%s", err.Error())
 		}
 		return v, nil
-	case token.DoublePlus:
+	case token.Merge:
 		a, aok := x.(*Object)
 		b, bok := y.(*Object)
 		if !aok || !bok {
@@ -142,7 +142,7 @@ func condition(n ast.Node, env *Env, what string) (bool, error) {
 }
 
 // arith applies an arithmetic operator. Every operator wants two numbers;
-// "+" also joins two strings, two sequences or two mappings.
+// "+" also joins two strings or two sequences.
 //
 // Two integers answer an integer, except under "/", which always answers a
 // float so that 7 / 2 is 3.5 rather than a silently truncated 3. A float on
@@ -159,8 +159,8 @@ func arith(op token.Kind, x, y Value) (Value, error) {
 				return concat(a, b), nil
 			}
 		case *Object:
-			if b, ok := y.(*Object); ok {
-				return merge(a, b), nil
+			if _, ok := y.(*Object); ok {
+				return nil, fmt.Errorf("cannot add two mappings; %q merges them", "<<")
 			}
 		}
 	}
@@ -211,80 +211,64 @@ func concat(x, y *Array) *Array {
 	return NewArray(append(items, y.items...))
 }
 
-// merge joins two mappings. A key held by both takes its value from y and
-// keeps the position it has in x, which is what makes "+" an override: the
-// mapping on the right decides, and the shape of the one on the left stays
-// recognisable.
+// deepMerge joins two mappings. The one on the right decides: a key held by
+// both takes its value from y and keeps the position it has in x, so the
+// shape of the mapping on the left stays recognisable.
 //
-// The merge is one level deep. A key whose value is a mapping on both sides
-// is replaced outright rather than merged, so what "+" does can be read off
-// the two mappings without resolving anything.
-func merge(x, y *Object) *Object {
-	o := NewObject()
-	for _, f := range x.fields {
-		o.add(f)
-	}
-	for _, f := range y.fields {
-		o.add(f)
-	}
-	return o
-}
-
-// deepMerge joins two mappings the way merge does, except that a key whose
-// value is a mapping on both sides merges rather than being replaced.
-// Anything else the right hand side holds still replaces what the left one
+// A key whose value is a mapping on both sides merges rather than being
+// replaced, however deep that goes. Anything else y holds replaces what x
 // held, so a sequence or a scalar overrides rather than combining.
-//
-// Telling a mapping from anything else means resolving the value, so unlike
-// "+" a key held by both sides is evaluated where the merge is written
-// rather than where the merged mapping is read.
 func deepMerge(x, y *Object) (*Object, error) {
 	o := NewObject()
 	for _, f := range x.fields {
 		o.add(f)
 	}
 	for _, f := range y.fields {
-		nested, err := mergedField(o, f)
-		if err != nil {
-			return nil, err
+		if prev, held := o.Lookup(f.Name); held {
+			value, err := combined(prev, f)
+			if err != nil {
+				return nil, err
+			}
+			// The entry keeps everything else the right hand side said
+			// about it; only its value is combined.
+			copied := *f
+			copied.Value = value
+			o.add(&copied)
+			continue
 		}
-		o.add(nested)
+		o.add(f)
 	}
 	return o, nil
 }
 
-// mergedField returns the field to carry over for f, which is f itself
-// unless o already holds that key with a mapping on both sides.
-func mergedField(o *Object, f *Field) (*Field, error) {
-	prev, ok := o.Lookup(f.Name)
+// combined answers the value a key takes when a merge finds it on both
+// sides: the two mappings merge, and anything else new replaces old.
+//
+// Telling a mapping from anything else means resolving the value, which is
+// why a key held by both sides is evaluated where the merge is written
+// rather than where the merged mapping is read.
+func combined(old, new *Field) (*Thunk, error) {
+	prev, err := old.Value.Value()
+	if err != nil {
+		return nil, err
+	}
+	a, ok := prev.(*Object)
 	if !ok {
-		return f, nil
+		return new.Value, nil
 	}
-	old, err := prev.Value.Value()
+	next, err := new.Value.Value()
 	if err != nil {
 		return nil, err
 	}
-	a, aok := old.(*Object)
-	if !aok {
-		return f, nil
-	}
-	v, err := f.Value.Value()
-	if err != nil {
-		return nil, err
-	}
-	b, bok := v.(*Object)
-	if !bok {
-		return f, nil
+	b, ok := next.(*Object)
+	if !ok {
+		return new.Value, nil
 	}
 	merged, err := deepMerge(a, b)
 	if err != nil {
 		return nil, err
 	}
-	// The entry keeps everything else the right hand side said about it,
-	// as it would under "+"; only its value is combined.
-	copied := *f
-	copied.Value = Done(merged)
-	return &copied, nil
+	return Done(merged), nil
 }
 
 // equal compares two values for "==". Values of different types are never

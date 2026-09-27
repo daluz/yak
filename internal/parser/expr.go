@@ -66,7 +66,7 @@ var precedence = [][]token.Kind{
 	{token.And},
 	{token.Eq, token.Ne},
 	{token.Lt, token.Le, token.Gt, token.Ge},
-	{token.Plus, token.DoublePlus, token.Dash},
+	{token.Plus, token.Merge, token.Dash},
 	{token.Star, token.Slash, token.Percent},
 }
 
@@ -479,29 +479,16 @@ func (p *parser) parseFlowMapping() (ast.Node, error) {
 			p.next()
 			return m, nil
 		}
-		keyPos := p.cur().Pos
-		key, computed, err := p.parseKey()
+		entry, err := p.parseEntryHead()
 		if err != nil {
 			return nil, err
-		}
-		var hidden, hideNull bool
-		switch p.cur().Kind {
-		case token.Colon:
-		case token.DoubleColon:
-			hidden = true
-		case token.ColonQuestion:
-			hideNull = true
-		default:
-			return nil, p.errorf(p.cur().Pos, "expected %q, %q or %q after mapping key, found %s", ":", "::", ":?", p.cur())
 		}
 		p.next()
 		value, err := p.parseExpr()
 		if err != nil {
 			return nil, err
 		}
-		entry := &ast.Entry{
-			Key: key, Computed: computed, Hidden: hidden, HideNull: hideNull, Value: value, KeyPos: keyPos,
-		}
+		entry.Value = value
 		if len(m.Entries) == 0 && p.atKeyword(token.KeywordFor) {
 			return p.parseMapComp(open, entry)
 		}
@@ -536,6 +523,9 @@ func (p *parser) parseSeqComp(open token.Token, item ast.Node) (ast.Node, error)
 // parseMapComp parses the rest of "{key: value for name in source}", with the
 // entry already parsed and the current token being "for".
 func (p *parser) parseMapComp(open token.Token, entry *ast.Entry) (ast.Node, error) {
+	if entry.Merge {
+		return nil, p.errorf(entry.KeyPos, "a comprehension needs an entry of its own, so it cannot start with %q", "<<")
+	}
 	loop, err := p.parseLoop(open.Pos)
 	if err != nil {
 		return nil, err

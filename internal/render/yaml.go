@@ -85,11 +85,11 @@ func toNode(v eval.Value) (*yaml.Node, error) {
 			}
 			// An entry's comments go on its key, which is where they
 			// were written and where they come out again.
-			keyNode := stringNode(f.Name)
-			keyNode.HeadComment = joinComments(f.Head)
-			keyNode.LineComment = f.Line
-			keyNode.FootComment = joinComments(f.Foot)
-			node.Content = append(node.Content, keyNode, valNode)
+			key := keyNode(f.Name)
+			key.HeadComment = joinComments(f.Head)
+			key.LineComment = f.Line
+			key.FootComment = joinComments(f.Foot)
+			node.Content = append(node.Content, key, valNode)
 		}
 		return node, nil
 
@@ -167,6 +167,18 @@ func closing(n *yaml.Node) *yaml.Node {
 
 // stringNode emits a string, choosing a literal block for multi-line text so
 // that rendered output stays readable.
+// keyNode builds the node for an entry's key. A key that would read back as
+// another type is quoted by the encoder, which goes by the "!!str" tag, but
+// "<<" reads back as YAML's merge key rather than as another type, so it
+// takes quotes of its own to stay the key it was written as.
+func keyNode(name string) *yaml.Node {
+	n := stringNode(name)
+	if name == "<<" {
+		n.Style = yaml.DoubleQuotedStyle
+	}
+	return n
+}
+
 func stringNode(s string) *yaml.Node {
 	n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s}
 	if !strings.Contains(s, "\n") {

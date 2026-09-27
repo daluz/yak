@@ -14,28 +14,9 @@ ungrouped: 4
 # A "-" written against its operand negates instead of subtracting.
 offset: -1
 balanced: 3
-# Strings and sequences join with "+".
+# Strings and sequences join with "+". Mappings do not: "<<" merges them.
 name: shop-web
 ports:
   - 80
   - 443
   - 8443
-# Mappings merge, and the one on the right decides. "tag" is overridden and
-# keeps the position it holds on the left, while "port" is appended.
-container:
-  image: nginx
-  tag: "1.27"
-  limits:
-    cpu: 1
-  port: 8080
-# The merge is one level deep, so "limits" is replaced rather than merged.
-shallow:
-  image: nginx
-  tag: "1.25"
-  limits:
-    memory: 512
-# A merged entry keeps what the mapping it came from said about it, so "::"
-# on the right hides an entry the left would have rendered.
-hiding:
-  kept: 1
-  added: 3

@@ -133,7 +133,7 @@ func (o *Object) Set(name string, hidden bool, v *Thunk) {
 
 // add appends a copy of f, or replaces an existing field of the same name
 // while keeping its position. Unlike Set it carries the whole field over,
-// which is what merging two mappings with "+" needs.
+// which is what merging two mappings with "<<" needs.
 func (o *Object) add(f *Field) {
 	copied := *f
 	if i, ok := o.index[f.Name]; ok {
@@ -142,6 +142,18 @@ func (o *Object) add(f *Field) {
 	}
 	o.index[f.Name] = len(o.fields)
 	o.fields = append(o.fields, &copied)
+}
+
+// insertAt inserts f before the field at position i, which is how a "<<"
+// written among the entries of a mapping brings its keys in where it stands
+// rather than at the end.
+func (o *Object) insertAt(i int, f *Field) {
+	o.fields = append(o.fields, nil)
+	copy(o.fields[i+1:], o.fields[i:])
+	o.fields[i] = f
+	for j := i; j < len(o.fields); j++ {
+		o.index[o.fields[j].Name] = j
+	}
 }
 
 // reserve appends an unnamed slot, preserving source order while the key is

@@ -233,6 +233,11 @@ func (l *lexer) scanToken() error {
 			l.emit(token.Token{Kind: token.Le, Lit: "<=", Pos: start})
 			return nil
 		}
+		if l.peek() == '<' {
+			l.advance()
+			l.emit(token.Token{Kind: token.Merge, Lit: "<<", Pos: start})
+			return nil
+		}
 		l.emit(token.Token{Kind: token.Lt, Lit: "<", Pos: start})
 		return nil
 	case isIdentStart(c):
@@ -249,11 +254,6 @@ func (l *lexer) scanToken() error {
 		return nil
 	case c == '+':
 		l.advance()
-		if l.peek() == '+' {
-			l.advance()
-			l.emit(token.Token{Kind: token.DoublePlus, Lit: "++", Pos: start})
-			return nil
-		}
 		l.emit(token.Token{Kind: token.Plus, Lit: "+", Pos: start})
 		return nil
 	case c == '/':

@@ -1,5 +1,4 @@
 local scale = $$.scale
-local defaults = {image: "nginx", tag: "1.25", limits: {cpu: 1}}
 
 # Two integers answer an integer.
 replicas: scale.base + scale.extra
@@ -22,17 +21,6 @@ ungrouped: scale.base + 1 * 2
 offset: -scale.extra
 balanced: scale.base - -scale.extra
 
-# Strings and sequences join with "+".
+# Strings and sequences join with "+". Mappings do not: "<<" merges them.
 name: $$.app + "-web"
 ports: [80] + $$.extraPorts
-
-# Mappings merge, and the one on the right decides. "tag" is overridden and
-# keeps the position it holds on the left, while "port" is appended.
-container: defaults + {tag: "1.27", port: 8080}
-
-# The merge is one level deep, so "limits" is replaced rather than merged.
-shallow: defaults + {limits: {memory: 512}}
-
-# A merged entry keeps what the mapping it came from said about it, so "::"
-# on the right hides an entry the left would have rendered.
-hiding: {kept: 1, dropped: 2} + {dropped:: 2, added: 3}

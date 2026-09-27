@@ -377,22 +377,32 @@ func TestLogicalOperatorsShortCircuit(t *testing.T) {
 	}
 }
 
-// TestMergeLeavesItsOperandsAlone checks that "+" builds a third mapping
+// TestMergeLeavesItsOperandsAlone checks that "<<" builds a third mapping
 // rather than writing into either of the two it was given.
 func TestMergeLeavesItsOperandsAlone(t *testing.T) {
-	src := "local base = {a: 1}\nlocal over = {a: 2}\nmerged: (base + over).a\nbase: base.a\nover: over.a\n"
+	src := "local base = {a: 1}\nlocal over = {a: 2}\nmerged: (base << over).a\nbase: base.a\nover: over.a\n"
 	want := "merged: 2\nbase: 1\nover: 2\n"
 	if got := mustRender(t, src, ""); got != want {
 		t.Errorf("rendered %q, want %q", got, want)
 	}
 }
 
-// TestMergedFieldKeepsItsOwnScope checks that a field carried through "+"
+// TestMergedFieldKeepsItsOwnScope checks that a field carried through "<<"
 // still reads the mapping it was written in, so overriding "name" does not
 // reach back into a sibling that referred to it.
 func TestMergedFieldKeepsItsOwnScope(t *testing.T) {
-	src := "local base = {name: \"web\", label: \"{.name}-1\"}\nv: (base + {name: \"api\"}).label\n"
+	src := "local base = {name: \"web\", label: \"{.name}-1\"}\nv: (base << {name: \"api\"}).label\n"
 	want := "v: web-1\n"
+	if got := mustRender(t, src, ""); got != want {
+		t.Errorf("rendered %q, want %q", got, want)
+	}
+}
+
+// TestMergedEntryLeavesTheMappingItNamedAlone checks that a "<<" written
+// among the entries of a mapping does not write into the mapping it merged.
+func TestMergedEntryLeavesTheMappingItNamedAlone(t *testing.T) {
+	src := "local base = {a: {p: 1}}\nout:\n  <<: base\n  a:\n    q: 2\nagain: base.a\n"
+	want := "out:\n  a:\n    p: 1\n    q: 2\nagain:\n  p: 1\n"
 	if got := mustRender(t, src, ""); got != want {
 		t.Errorf("rendered %q, want %q", got, want)
 	}
@@ -735,6 +745,7 @@ func TestEvalErrors(t *testing.T) {
 		{"ordering mismatched types", `a: "x" < 1` + "\n", "", "cannot compare string with integer"},
 		{"comparing collections", "a: [1] == [1]\n", "", "cannot compare a sequence"},
 		{"adding mismatched types", `a: [1] + {b: 2}` + "\n", "", "cannot add mapping to sequence"},
+		{"adding two mappings", `a: {b: 1} + {c: 2}` + "\n", "", `cannot add two mappings; "<<" merges them`},
 		{"adding a null", "a: 1 + null\n", "", "cannot add null to integer"},
 		{"subtracting a string", `a: 1 - "x"` + "\n", "", `"-" needs two numbers, found integer and string`},
 		{"multiplying a sequence", "a: [1] * 2\n", "", `"*" needs two numbers, found sequence and integer`},

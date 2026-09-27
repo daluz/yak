@@ -45,7 +45,8 @@ $ go build ./cmd/yak
 ## Usage
 
 ```console
-$ yak template FILE.yak [-c context.yaml|context.json]... [-f FORMAT] [-o output.yaml]
+$ yak template FILE.yak [-c context.yaml|context.json]... [-f FORMAT]
+                        [-o FILE | -O] [--output-dir DIR]
 ```
 
 Context files are merged in the order given, with later files taking
@@ -53,10 +54,17 @@ precedence, and are available to the template as `$context` or its `$$`
 shorthand. They may be YAML or JSON, mixed freely; a `.json` extension selects
 the JSON parser. Pass `-` as the file to read a template from standard input.
 
+The rendered output goes to standard output unless `-o` names a file to write.
+`-O` names that file after the template instead: the `.yak` extension is
+dropped and the one belonging to the format written takes its place, so
+`app.toml.yak` yields `app.toml` and `app.yak` yields `app.yaml`.
+`--output-dir` places the file in another directory, creating it if it is
+missing.
+
 ## Output formats
 
-`-f` picks the encoding, and naming an output file with a known extension
-picks it too:
+`-f` picks the encoding. Without it the name of the output file decides, and
+failing that the name of the template, so `app.toml.yak` writes TOML:
 
 | Format  | Also known as               | Documents | Comments |
 | ------- | --------------------------- | --------- | -------- |
@@ -79,7 +87,9 @@ so a null value is an error naming the key it came from.
 
 ```console
 $ yak template app.yak -c production.yaml -f kyaml
-$ yak template app.yak -o rendered.json     # the extension chooses JSON
+$ yak template app.yak -o rendered.json            # the extension chooses JSON
+$ yak template app.toml.yak -O                     # writes app.toml
+$ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
 ```
 
 ## What makes it different from YAML
@@ -110,10 +120,12 @@ $ yak template app.yak -o rendered.json     # the extension chooses JSON
   whether there is anything in one, and `nullify` turns an empty value into
   `null` for `:?` to drop.
 - **Arithmetic, and a `+` that does more.** `+`, `-`, `*`, `/` and `%` work
-  on numbers, and `+` also joins two strings or two sequences and merges two
-  mappings, where the one on the right overrides: `defaults + {tag: "1.27"}`.
-  `++` merges two mappings at every depth, so a key holding a mapping on both
-  sides is merged too: `defaults ++ {limits: {memory: 512}}`.
+  on numbers, and `+` also joins two strings or two sequences.
+- **Merging.** `<<` merges two mappings at every depth, and the one on the
+  right decides: `defaults << {limits: {memory: 512}}`. Written where a key
+  belongs it merges into the mapping it is written in, which is YAML's merge
+  key without the anchor: a `<<: defaults` among the entries is overridden by
+  the ones below it and overrides the ones above.
 - **Optional access and defaults.** `?.` and `?[` give `null` where a field or
   an index is missing, and `??` supplies the value to use instead.
 - **Conditionals.** `if $$.env == "prod" then 5 else 1`, built on the usual

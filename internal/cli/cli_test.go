@@ -250,6 +250,169 @@ func TestTemplateKeepsYAMLForAnUnknownExtension(t *testing.T) {
 	}
 }
 
+func TestTemplateInfersFormatFromTemplateName(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
+
+	out, err := run(t, "template", tmpl)
+	if err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	if out != "name = \"web\"\n" {
+		t.Errorf("stdout = %q, want TOML", out)
+	}
+}
+
+func TestTemplateOutputExtensionBeatsTemplateName(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
+	dest := filepath.Join(dir, "out.json")
+
+	if _, err := run(t, "template", tmpl, "-o", dest); err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "{\n  \"name\": \"web\"\n}\n" {
+		t.Errorf("file contents = %q, want JSON", got)
+	}
+}
+
+func TestTemplateNameHoldsForAnUnknownOutputExtension(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
+	dest := filepath.Join(dir, "out.txt")
+
+	if _, err := run(t, "template", tmpl, "-o", dest); err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "name = \"web\"\n" {
+		t.Errorf("file contents = %q, want TOML", got)
+	}
+}
+
+func TestTemplateAutomaticOutput(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
+
+	out, err := run(t, "template", tmpl, "-O")
+	if err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	if out != "" {
+		t.Errorf("stdout = %q, want it to be empty when -O is used", out)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "app.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "name = \"web\"\n" {
+		t.Errorf("file contents = %q, want TOML", got)
+	}
+}
+
+func TestTemplateAutomaticOutputNamesTheFormat(t *testing.T) {
+	for _, tc := range []struct {
+		template string
+		args     []string
+		want     string
+	}{
+		{"app.yak", nil, "app.yaml"},
+		{"app.toml.yak", nil, "app.toml"},
+		{"app.yml.yak", nil, "app.yaml"},
+		{"app.toml.yak", []string{"-f", "json"}, "app.json"},
+	} {
+		t.Run(tc.template+strings.Join(tc.args, " "), func(t *testing.T) {
+			dir := t.TempDir()
+			tmpl := write(t, dir, tc.template, "name: \"web\"\n")
+			args := append([]string{"template", tmpl, "-O"}, tc.args...)
+
+			if _, err := run(t, args...); err != nil {
+				t.Fatalf("template returned error: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(dir, tc.want)); err != nil {
+				t.Errorf("want %s to have been written: %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestTemplateAutomaticOutputRejectsStandardInput(t *testing.T) {
+	_, err := run(t, "template", "-", "-O")
+	if err == nil || !strings.Contains(err.Error(), "--automatic-output needs a .yak template") {
+		t.Errorf("error = %v, want a complaint about the template name", err)
+	}
+}
+
+func TestTemplateRejectsOutputAndAutomaticOutputTogether(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
+
+	if _, err := run(t, "template", tmpl, "-O", "-o", filepath.Join(dir, "out.yaml")); err == nil {
+		t.Error("expected an error when both -o and -O are given")
+	}
+}
+
+func TestTemplateOutputDirCreatesTheDirectory(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
+	outDir := filepath.Join(dir, "build", "nested")
+
+	if _, err := run(t, "template", tmpl, "-O", "--output-dir", outDir); err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(outDir, "app.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "name = \"web\"\n" {
+		t.Errorf("file contents = %q, want TOML", got)
+	}
+}
+
+func TestTemplateOutputDirJoinsTheOutputPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	write(t, dir, "app.yak", "name: \"web\"\n")
+
+	if _, err := run(t, "template", "app.yak", "-o", "sub/out.json", "--output-dir", "build"); err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "build", "sub", "out.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "{\n  \"name\": \"web\"\n}\n" {
+		t.Errorf("file contents = %q, want JSON", got)
+	}
+}
+
+func TestTemplateOutputDirRejectsAnAbsoluteOutput(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
+
+	_, err := run(t, "template", tmpl, "-o", filepath.Join(dir, "out.yaml"), "--output-dir", dir)
+	if err == nil || !strings.Contains(err.Error(), "absolute path") {
+		t.Errorf("error = %v, want a complaint about the absolute output path", err)
+	}
+}
+
+func TestTemplateOutputDirNeedsAnOutputFile(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
+
+	_, err := run(t, "template", tmpl, "--output-dir", dir)
+	if err == nil || !strings.Contains(err.Error(), "--output-dir needs") {
+		t.Errorf("error = %v, want a complaint about the missing output file", err)
+	}
+}
+
 func TestBuildAndValidateAreNotRegisteredYet(t *testing.T) {
 	for _, name := range []string{"build", "validate"} {
 		if _, err := run(t, name); err == nil {
