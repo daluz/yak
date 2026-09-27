@@ -230,7 +230,7 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		return &ast.Context{Base: ast.At(t.Pos)}, nil
 
 	case token.DollarIdent:
-		return p.parseSpecial()
+		return p.parseBuiltin()
 
 	case token.LBracket:
 		return p.parseFlowSequence()
@@ -294,15 +294,15 @@ func (p *parser) parseIdent() (ast.Node, error) {
 	return &ast.Ident{Base: ast.At(t.Pos), Name: t.Lit}, nil
 }
 
-// specialVariables names every "$name" variable, so that a misspelled one is
+// builtinVariables names every "$name" variable, so that a misspelled one is
 // answered with the list of the real ones.
-const specialVariables = `"$root", "$self", "$context", "$yak"`
+const builtinVariables = `"$root", "$self", "$context", "$yak"`
 
-// parseSpecial parses a "$name" variable. Three of them are a sigil written
+// parseBuiltin parses a "$name" variable. Three of them are a sigil written
 // out in full and mean exactly what the sigil does, so "$root" is "$",
 // "$self" is "." and "$context" is "$$". "$yak" describes the run rather
 // than the document.
-func (p *parser) parseSpecial() (ast.Node, error) {
+func (p *parser) parseBuiltin() (ast.Node, error) {
 	t := p.next()
 	switch t.Lit {
 	case "root":
@@ -316,8 +316,8 @@ func (p *parser) parseSpecial() (ast.Node, error) {
 	case "super":
 		return nil, p.errorf(t.Pos, "%q is not implemented yet", "$super")
 	}
-	return nil, p.errorf(t.Pos, "unknown special variable %q; the ones that exist are %s",
-		"$"+t.Lit, specialVariables)
+	return nil, p.errorf(t.Pos, "unknown builtin variable %q; the ones that exist are %s",
+		"$"+t.Lit, builtinVariables)
 }
 
 // parseSelf parses a leading run of dots. A run of n dots walks n-1 mappings

@@ -613,7 +613,7 @@ func TestParseErrors(t *testing.T) {
 		{"unterminated flow mapping", "a: {b: 1\n", "unterminated flow mapping"},
 		{"dots in postfix", "a: $.b..c\n", "may only begin a reference"},
 		{"dangling dot", "a: $. b\n", "expected a field name"},
-		{"unknown special variable", "a: $ctx\n", "unknown special variable"},
+		{"unknown builtin variable", "a: $ctx\n", "unknown builtin variable"},
 		{"super", "a: $super.b\n", `"$super" is not implemented yet`},
 		{"empty interpolation", `a: "{}"`, "empty string interpolation"},
 		{"junk in interpolation", `a: "{.b .c}"`, "unexpected"},

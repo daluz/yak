@@ -222,19 +222,33 @@ one is written.
 
 | Syntax | Meaning |
 | --- | --- |
-| `.` / `$self` | The enclosing mapping. |
+| `.` | The enclosing mapping. |
 | `.name` | The `name` field of the enclosing mapping. |
 | `..` / `..name` | The parent mapping, and its fields. |
 | `...` / `...name` | The grandparent, and so on for each added dot. |
-| `$` / `$root` | The root of the current document. |
+| `$` | The root of the current document. |
 | `$.name` | The `name` field of that root. |
-| `$context` / `$$` | The merged context data. |
+| `$$` | The merged context data. |
 
-`$self`, `$root` and `$context` are the sigils written out in full and mean
-exactly what `.`, `$` and `$$` do, so `$self.name` is `.name`. A template that
-refers to a mapping once may read better for saying which one it means. Only
-`$self` has a long spelling: walking outwards takes dots. `$super` is reserved
-and writing it today is a "not implemented yet" error.
+### Builtin variables
+
+A name written with a leading `$` is a builtin variable. These are the only
+names the language supplies; every other name is a field, a binding or a
+parameter. Three of them have a sigil as a shorter alias, and the two
+spellings mean exactly the same thing, so `$self.name` is `.name`:
+
+| Variable | Alias | Meaning |
+| --- | --- | --- |
+| `$self` | `.` | The enclosing mapping. |
+| `$root` | `$` | The root of the current document. |
+| `$context` | `$$` | The merged [context](#context-files) data. |
+| `$yak` | | The [run](#the-run) rather than the document. |
+
+A template that refers to a mapping once may read better for saying which one
+it means. `$yak` has no alias, and of the dot references only `.` has a long
+spelling: walking outwards takes dots. `$super` is reserved and writing it
+today is a "not implemented yet" error, and any other `$name` is an error
+naming the variables that do exist.
 
 Sequences do not count as a level, so `..` always names the nearest enclosing
 mapping:
@@ -270,8 +284,8 @@ with the chain of positions that formed the cycle.
 
 ## The run
 
-`$yak` is a mapping describing the rendering rather than the document. Its
-fields are read like any other mapping's.
+The builtin variable `$yak` is a mapping describing the rendering rather than
+the document. Its fields are read like any other mapping's.
 
 | Field | Meaning |
 | --- | --- |
@@ -984,10 +998,10 @@ entry       := (key | "<<") sep value
 loop        := "for" identifier "in" value ("if" value)?
 key         := identifier | string | "[" value "]"
 literal     := string | int | float | "true" | "false" | "null"
-reference   := (dots | special | identifier) postfix*
+reference   := (dots | builtin | identifier) postfix*
 postfix     := "?"? ("." identifier | "[" value "]") | args
 args        := "(" (arg ("," arg)* ","?)? ")"
 arg         := (identifier "=")? value
 dots        := "." | ".." | "..."  ...
-special     := "$" | "$$" | "$root" | "$self" | "$context" | "$yak"
+builtin     := "$" | "$$" | "$root" | "$self" | "$context" | "$yak"
 ```

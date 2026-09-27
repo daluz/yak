@@ -97,7 +97,7 @@ They slot into `internal/cli` beside `template`, and both can reuse
 - An `--indent` flag. `render.Options` already carries the width and every
   format reads it; nothing exposes it yet.
 - `$super`, the mapping on the left of a `<<` read from the one on the right.
-  The name is reserved and `parser.parseSpecial` rejects it for now. What it
+  The name is reserved and `parser.parseBuiltin` rejects it for now. What it
   needs is a decision first: `<<` is lexical today, so a merged entry reads
   the mapping it was written in, and a `$super` that matched jsonnet's would
   have to be bound when the merge happens rather than where it is written.

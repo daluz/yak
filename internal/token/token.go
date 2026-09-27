@@ -86,7 +86,7 @@ var kindNames = map[Kind]string{
 	DocStart:      `"---"`,
 	DocEnd:        `"..."`,
 	Ident:         "identifier",
-	DollarIdent:   "special variable",
+	DollarIdent:   "builtin variable",
 	Int:           "integer",
 	Float:         "float",
 	String:        "string",
