@@ -74,7 +74,7 @@ env: $$.env                 # "prod", from prod.yaml
 region: $$?.region ?? "us-east-1"
 ```
 
-The paths are readable as [`$yak.contextpaths`](SPEC.md#the-run), in the order
+The paths are readable as [`$yak.contextpaths`](SPEC.md#builtin-variables), in the order
 they were given.
 
 Context files are plain YAML or JSON rather than yak, so they may use anchors

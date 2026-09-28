@@ -16,7 +16,7 @@ workers:
   # The queue worker comes first.
   - name: queue # each item keeps its own comments
   - name: cron
-#localhost is a word, not the marker, so this comment is kept.
+### A banner is not the marker, so this comment is kept.
 endpoint: https://example.com/
 # Whatever is left at the end comes out at the end.
 ---

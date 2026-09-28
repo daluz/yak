@@ -245,7 +245,7 @@ spellings mean exactly the same thing, so `$self.name` is `.name`:
 | `$self` | `.` | The enclosing mapping. |
 | `$root` | `$` | The root of the current document. |
 | `$context` | `$$` | The merged [context](#context) data. |
-| `$yak` | | The [run](#the-run) rather than the document. |
+| `$yak` | | Runtime information rather than the document. |
 
 A template that refers to a mapping once may read better for saying which one
 it means. `$yak` has no alias, and of the dot references only `.` has a long
@@ -273,22 +273,8 @@ c: $$["key with space"]
 d: $.nested.deeper.name
 ```
 
-### Evaluation order
-
-Values are evaluated lazily, so a reference may point forwards:
-
-```yaml
-alias: .name   # fine: evaluated after name is known
-name: "web"
-```
-
-A value that ends up depending on itself is reported as a circular reference,
-with the chain of positions that formed the cycle.
-
-## The run
-
-The builtin variable `$yak` is a mapping describing the rendering rather than
-the document. Its fields are read like any other mapping's.
+`$yak` is a mapping of runtime information: it describes the rendering rather
+than the document, and its fields are read like any other mapping's.
 
 | Field | Meaning |
 | --- | --- |
@@ -309,12 +295,24 @@ would. A template read from standard input is called `<stdin>`, again matching
 its diagnostics. `contextpaths` is a sequence that is empty rather than absent
 when no context file was given, so a comprehension over it needs no guard.
 
-Everything here describes the run, so unlike `$` every document of a stream
+This is all runtime information, so unlike `$` every document of a stream
 sees the same `$yak`. An unstamped build calls itself `dev`, so `version` is
 only as meaningful as the build that reads it. Writing any of these into
 output makes that output depend on where the template was on disk and on
 which yak rendered it, which is worth doing for a provenance note and worth
 avoiding elsewhere.
+
+### Evaluation order
+
+Values are evaluated lazily, so a reference may point forwards:
+
+```yaml
+alias: .name   # fine: evaluated after name is known
+name: "web"
+```
+
+A value that ends up depending on itself is reported as a circular reference,
+with the chain of positions that formed the cycle.
 
 ## Statements
 
@@ -876,10 +874,10 @@ any other value.
 
 ## Context
 
-`$context`, or `$$` for short, is a mapping of data handed to the run from
-outside the template. It is read like any other mapping, it is shared by every
-document of a file, and the paths it came from are
-[`$yak.contextpaths`](#the-run).
+`$context`, or `$$` for short, is a mapping of data supplied to the rendering
+from outside the template. It is read like any other mapping, it is shared by
+every document of a file, and the paths it came from are
+[`$yak.contextpaths`](#builtin-variables).
 
 Context data is plain YAML or JSON rather than yak, so none of it is a
 template: a `{` in a context string is a `{`, and an unquoted scalar there is
@@ -924,17 +922,18 @@ Two kinds of comment are left out of the output:
 - Anything written **inside a `local`**: in a `local { ... }` block, or in
   the value of a binding. A binding renders nothing, so there is nowhere to
   put them, and its value may be used in several places at once.
-- Any comment that starts with **`#local`**, wherever it is written. This is
+- Any comment that starts with **`## `**, wherever it is written. This is
   how to address the next person to edit the template rather than whoever
-  reads the output. A word boundary is required after the marker, so
-  `#localhost` is an ordinary comment.
+  reads the output. A space has to follow the marker, so `##note` and a
+  `### banner` are ordinary comments, while a bare `##` is the marker with
+  nothing written on it.
 
 ```yaml
 local {
   # Dropped: this describes the bindings, not the output.
   region = "us-east-1"
 }
-#local Revisit when the cluster moves.
+## Revisit when the cluster moves.
 region: region
 ```
 

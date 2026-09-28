@@ -1,12 +1,12 @@
-#local Functions: positional and named arguments, and parameter defaults.
+## Functions: positional and named arguments, and parameter defaults.
 local url(host, port = 8080, scheme = "https") = "{scheme}://{host}:{port}"
 local { shout(s) = "{s}!", tier(replicas) = if replicas > 3 then "gold" else "bronze" }
 
-#local A default may name a parameter declared before it.
+## A default may name a parameter declared before it.
 local span(from, to = from) = "{from}..{to}"
 
-#local The body may be an indented block, and it sees what was in scope where
-#local it was written rather than where it is called.
+## The body may be an indented block, and it sees what was in scope where
+## it was written rather than where it is called.
 local region = $$.region
 local endpoint(name) =
   host: "{name}.{region}.example.com"
@@ -31,9 +31,9 @@ spans:
   - span("a", "b")
   - span(to = "z", from = "a")
 
-#local Functions are values, so one may be passed to another.
+## Functions are values, so one may be passed to another.
 local apply(fn, to) = fn(to)
 applied: apply(shout, "x")
 
-#local A function that is never called is never evaluated.
+## A function that is never called is never evaluated.
 local unused(a) = $$.absent

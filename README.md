@@ -106,9 +106,9 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
   `...name` the grandparent's, `$.name` the document root's, and `$$.name` the
   context's. `$self`, `$root` and `$context` spell the first, fourth and fifth
   of those out in full.
-- **The run is a value.** `$yak` is a mapping holding the `version` doing the
-  rendering, the template's `filepath` as given, and the `contextpaths` it was
-  handed, which is enough for a provenance note.
+- **Runtime information is a value.** `$yak` is a mapping holding the
+  `version` doing the rendering, the template's `filepath` as given, and the
+  `contextpaths` it was handed, which is enough for a provenance note.
 - **Hidden fields.** Write `::` instead of `:` to keep a value available to
   references but out of the output, or `:?` to drop an entry only when its
   value is null.
@@ -135,7 +135,7 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
 - **Comprehensions.** `[p.name for p in $$.ports if p.tls]` builds a
   sequence, and `{[p.name]: p.number for p in $$.ports}` a mapping.
 - **Comments survive.** They are carried into the output, except the ones
-  written inside a `local` and the ones starting with `#local`, which are
+  written inside a `local` and the ones starting with `## `, which are
   notes about the template. Every output format that can hold a comment
   gets them, JSON dialects and TOML included.
 

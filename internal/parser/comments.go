@@ -6,9 +6,9 @@ import (
 	"github.com/daluz/yak/internal/token"
 )
 
-// localMarker introduces a comment addressed to whoever reads the template
+// noteMarker introduces a comment addressed to whoever reads the template
 // rather than to whoever reads the rendered YAML.
-const localMarker = "#local"
+const noteMarker = "##"
 
 // commentSet hands the comments of a file to the nodes they belong to.
 //
@@ -84,21 +84,17 @@ func (c *commentSet) drop(start, end int) {
 	}
 }
 
-// rendered reports the text a comment contributes to the output. A "#local"
+// rendered reports the text a comment contributes to the output. A "## "
 // comment contributes nothing: it is a note about the template.
 func rendered(text string) (string, bool) {
-	rest, marked := strings.CutPrefix(text, localMarker)
+	rest, marked := strings.CutPrefix(text, noteMarker)
 	if !marked {
 		return text, true
 	}
-	// A word boundary is required, so that "#localhost" stays a comment.
-	if rest != "" && isWordByte(rest[0]) {
+	// A space has to follow the marker, so that "##note" and a "###" banner
+	// stay comments. A bare "##" is the note with nothing written on it.
+	if rest != "" && rest[0] != ' ' {
 		return text, true
 	}
 	return "", false
-}
-
-func isWordByte(c byte) bool {
-	return c == '_' || c == '-' || (c >= '0' && c <= '9') ||
-		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }

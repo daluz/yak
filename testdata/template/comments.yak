@@ -5,7 +5,7 @@ service:
   name: "web"        # so do the ones written after a value
   replicas: 2
 
-  #local A note for whoever edits this file, left out of the output.
+  ## A note for whoever edits this file, left out of the output.
   port: 8080
 
 local {
@@ -37,7 +37,7 @@ credentials::
   # Dropped along with the hidden entry it describes.
   user: "admin"
 
-#localhost is a word, not the marker, so this comment is kept.
+### A banner is not the marker, so this comment is kept.
 endpoint: "https://{$$.host}/"
 
 # Whatever is left at the end comes out at the end.

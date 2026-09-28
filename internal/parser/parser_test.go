@@ -551,10 +551,11 @@ func TestParseComments(t *testing.T) {
 		{"inside a local block", "local {\n  # c\n  x = 1\n}\na: x\n", ""},
 		{"above a binding in a block", "a:\n  # c\n  local x = 1\n  b: x\n", `"b" head # c`},
 
-		{"marked for the template", "#local c\na: 1\n", ""},
-		{"marked beside an entry", "a: 1 #local c\n", ""},
-		{"marked with no text", "#local\na: 1\n", ""},
-		{"a word that starts with local", "#localhost c\na: 1\n", `"a" head #localhost c`},
+		{"marked for the template", "## c\na: 1\n", ""},
+		{"marked beside an entry", "a: 1 ## c\n", ""},
+		{"marked with no text", "##\na: 1\n", ""},
+		{"no space after the marker", "##c\na: 1\n", `"a" head ##c`},
+		{"a banner of three hashes", "### c\na: 1\n", `"a" head ### c`},
 	}
 
 	for _, tc := range tests {
