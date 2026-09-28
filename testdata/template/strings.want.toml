@@ -37,3 +37,12 @@ indented-block = """
 outer
   inner indented
 """
+block-items = ["""
+one
+""", """
+two
+""", """
+three
+""", """
+four
+"""]

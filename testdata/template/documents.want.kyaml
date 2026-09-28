@@ -5,6 +5,9 @@
   name: "checkout-config",
   data: {
     self-kind: "ConfigMap",
+    note: "\
+       a block scalar may end right above the marker\n\
+      ",
   },
 }
 ---

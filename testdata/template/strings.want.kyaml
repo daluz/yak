@@ -39,4 +39,18 @@
      outer\n\
     \  inner indented\n\
     ",
+  block-items: [
+    "\
+       one\n\
+      ",
+    "\
+       two\n\
+      ",
+    "\
+       three\n\
+      ",
+    "\
+       four\n\
+      ",
+  ],
 }

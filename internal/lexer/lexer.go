@@ -108,7 +108,14 @@ func (l *lexer) advance() byte {
 // emit records a token. It is always called immediately after the token's
 // characters have been consumed, so the current position is its end.
 func (l *lexer) emit(t token.Token) {
-	t.End = l.pos()
+	l.emitEnd(t, l.pos())
+}
+
+// emitEnd records a token that ended somewhere other than the current
+// position. A block scalar is the one such token: reading it means reading
+// the line that terminated it, which is not part of it.
+func (l *lexer) emitEnd(t token.Token, end token.Pos) {
+	t.End = end
 	l.toks = append(l.toks, t)
 	l.bol = false
 }

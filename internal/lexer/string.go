@@ -120,7 +120,7 @@ func (l *lexer) scanQuotedAt(start token.Pos, raw bool) error {
 	if !closed {
 		return l.errorf(start, "unterminated string literal")
 	}
-	return l.emitString(start, d, raw)
+	return l.emitString(start, l.pos(), d, raw)
 }
 
 // copyByte moves one source byte into the decoded buffer unchanged.
@@ -313,6 +313,9 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 	if !l.eof() && l.peek() != '\n' {
 		return l.errorf(l.pos(), "unexpected content after block scalar header; the block body must start on the next line")
 	}
+	// end tracks where the scalar's own text stops, which stays behind the
+	// lexer once the line that terminated the body has been read.
+	end := l.pos()
 	if !l.eof() {
 		l.advance()
 	}
@@ -324,7 +327,7 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 	var lines []blockLine
 	for !l.eof() {
 		offSave, lineSave, colSave, bolSave := l.off, l.line, l.col, l.bol
-		bl := l.readBlockLine()
+		bl, lineEnd := l.readBlockLine()
 		if !bl.blank {
 			if contentIndent < 0 {
 				contentIndent = bl.indent
@@ -339,6 +342,7 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 			}
 		}
 		lines = append(lines, bl)
+		end = lineEnd
 	}
 	if contentIndent < 0 {
 		contentIndent = headerIndent + 1
@@ -385,7 +389,13 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 			d.addByte('\n', body[len(body)-1].pos, false)
 		}
 	}
-	return l.emitString(start, d, raw)
+	if err := l.emitString(start, end, d, raw); err != nil {
+		return err
+	}
+	// The body ran to the end of a line, so the next token begins one and
+	// may be a document marker or an indented comment.
+	l.bol = l.col == 1
+	return nil
 }
 
 // foldLines implements folded ("greater than") block scalars: a single line
@@ -435,13 +445,15 @@ func stripIndent(bl blockLine, indent int) blockLine {
 	}
 }
 
-// readBlockLine consumes one physical line, including its terminator.
-func (l *lexer) readBlockLine() blockLine {
+// readBlockLine consumes one physical line, including its terminator, and
+// reports where the line's text ended.
+func (l *lexer) readBlockLine() (blockLine, token.Pos) {
 	pos := l.pos()
 	var sb strings.Builder
 	for !l.eof() && l.peek() != '\n' {
 		sb.WriteByte(l.advance())
 	}
+	end := l.pos()
 	if !l.eof() {
 		l.advance()
 	}
@@ -452,7 +464,7 @@ func (l *lexer) readBlockLine() blockLine {
 		pos:    pos,
 		indent: len(text) - len(trimmed),
 		blank:  strings.TrimSpace(text) == "",
-	}
+	}, end
 }
 
 // lineIndent returns the number of leading spaces on the line the lexer is
@@ -469,9 +481,9 @@ func (l *lexer) lineIndent() int {
 	return n
 }
 
-func (l *lexer) emitString(start token.Pos, d *decoded, raw bool) error {
+func (l *lexer) emitString(start, end token.Pos, d *decoded, raw bool) error {
 	if raw {
-		l.emit(token.Token{Kind: token.String, Lit: string(d.buf), Pos: start})
+		l.emitEnd(token.Token{Kind: token.String, Lit: string(d.buf), Pos: start}, end)
 		return nil
 	}
 	chunks, err := splitInterpolations(d)
@@ -480,11 +492,11 @@ func (l *lexer) emitString(start token.Pos, d *decoded, raw bool) error {
 	}
 	switch {
 	case len(chunks) == 0:
-		l.emit(token.Token{Kind: token.String, Lit: "", Pos: start})
+		l.emitEnd(token.Token{Kind: token.String, Lit: "", Pos: start}, end)
 	case len(chunks) == 1 && !chunks[0].IsExpr:
-		l.emit(token.Token{Kind: token.String, Lit: chunks[0].Text, Pos: start})
+		l.emitEnd(token.Token{Kind: token.String, Lit: chunks[0].Text, Pos: start}, end)
 	default:
-		l.emit(token.Token{Kind: token.String, Chunks: chunks, Pos: start})
+		l.emitEnd(token.Token{Kind: token.String, Chunks: chunks, Pos: start}, end)
 	}
 	return nil
 }

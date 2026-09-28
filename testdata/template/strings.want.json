@@ -21,5 +21,11 @@
   "folded-block": "these lines become one\nthis is a second paragraph\n",
   "folded-strip": "folded without a trailing newline",
   "raw-block": "{untouched}\n",
-  "indented-block": "outer\n  inner indented\n"
+  "indented-block": "outer\n  inner indented\n",
+  "block-items": [
+    "one\n",
+    "two\n",
+    "three\n",
+    "four\n"
+  ]
 }

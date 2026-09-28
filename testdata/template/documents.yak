@@ -3,6 +3,8 @@ kind: "ConfigMap"
 name: "{$$.app}-config"
 data:
   self-kind: ..kind
+  note: |
+    a block scalar may end right above the marker
 ---
 kind: "Service"
 name: "{$$.app}-svc"
