@@ -305,6 +305,11 @@ func (l *lexer) scanToken() error {
 			l.emit(token.Token{Kind: token.Eq, Lit: "==", Pos: start})
 			return nil
 		}
+		if l.peek() == '>' {
+			l.advance()
+			l.emit(token.Token{Kind: token.Arrow, Lit: "=>", Pos: start})
+			return nil
+		}
 		l.emit(token.Token{Kind: token.Assign, Lit: "=", Pos: start})
 		return nil
 	case c == ',':

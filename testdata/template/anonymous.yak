@@ -1,0 +1,32 @@
+#local An anonymous function is written "(params) => body". It is a value like
+#local any other, so it can be handed to a function that calls it.
+local apply(fn, to) = fn(to)
+local twice(fn, to) = fn(fn(to))
+local call(fn) = fn()
+
+applied: apply((s) => "{s}!", "web")
+twiced: twice((s) => "{s}{s}", "ab")
+nullary: call(() => "no parameters")
+
+#local The parameters are the ones a binding declares, defaults included, and
+#local the function itself may be given by name.
+defaulted: apply((s, mark = "?") => "{s}{mark}", "hm")
+named: apply(fn = (s) => "{s}!", to = "api")
+
+#local One may be bound to a name, and it sees what was in scope where it was
+#local written rather than where it is called.
+local shout = (s) => "{s}!"
+bound: shout("api")
+
+name: "shop"
+local label = (suffix) => "{.name}-{suffix}"
+lexical: label("web")
+
+#local A function may return one, which keeps the arguments of the call that
+#local made it.
+local adder = (n) => (x) => x + n
+curried: adder(5)(3)
+
+#local Called where it is written, and once for every item of a comprehension.
+immediate: ((x) => x * 2)(21)
+doubled: [((x) => x * 2)(n) for n in [1, 2, 3]]

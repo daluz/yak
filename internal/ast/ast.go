@@ -52,8 +52,9 @@ type Binding struct {
 }
 
 // Function is the value of a binding whose name was followed by a parameter
-// list. Name is the name of that binding, which is what diagnostics about a
-// call report.
+// list, or of a "(params) => body" written where a value belongs. Name is the
+// name of the binding, which is what diagnostics about a call report, and is
+// empty for the anonymous form.
 type Function struct {
 	Base
 	Name   string

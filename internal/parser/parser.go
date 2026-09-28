@@ -467,19 +467,29 @@ func (p *parser) parseSignature(name token.Token) (*ast.Function, error) {
 	if !p.at(token.LParen) {
 		return nil, nil
 	}
-	open := p.next()
 	fn := &ast.Function{Base: ast.At(name.Pos), Name: name.Lit}
+	if err := p.parseParams(fn); err != nil {
+		return nil, err
+	}
+	return fn, nil
+}
+
+// parseParams parses the parameter list of fn, which the current token must
+// open. A named function and an anonymous one declare their parameters the
+// same way, so both come through here.
+func (p *parser) parseParams(fn *ast.Function) error {
+	open := p.next()
 	for {
 		if p.at(token.EOF) {
-			return nil, p.errorf(open.Pos, "unterminated parameter list: missing %q", ")")
+			return p.errorf(open.Pos, "unterminated parameter list: missing %q", ")")
 		}
 		if p.at(token.RParen) {
 			p.next()
-			return fn, nil
+			return nil
 		}
 		param, err := p.parseParam(fn)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		fn.Params = append(fn.Params, param)
 		if p.at(token.Comma) {
@@ -487,10 +497,10 @@ func (p *parser) parseSignature(name token.Token) (*ast.Function, error) {
 			continue
 		}
 		if p.at(token.EOF) {
-			return nil, p.errorf(open.Pos, "unterminated parameter list: missing %q", ")")
+			return p.errorf(open.Pos, "unterminated parameter list: missing %q", ")")
 		}
 		if !p.at(token.RParen) {
-			return nil, p.errorf(p.cur().Pos, "expected %q or %q in a parameter list, found %s", ",", ")", p.cur())
+			return p.errorf(p.cur().Pos, "expected %q or %q in a parameter list, found %s", ",", ")", p.cur())
 		}
 	}
 }

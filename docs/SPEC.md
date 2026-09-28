@@ -4,7 +4,9 @@ This describes the language as it exists today, together with the `import`
 statement, which is specified here but not implemented yet. Everything else
 that is planned is listed in [ROADMAP.md](ROADMAP.md); using one of the
 keywords held for it produces an explicit "not implemented yet" error rather
-than a confusing parse failure.
+than a confusing parse failure. The tool that renders the language — its
+commands, its flags and the formats it writes — is documented in
+[CLI.md](CLI.md).
 
 yak is a restricted dialect of YAML. Everything that YAML does ambiguously has
 been either removed or made explicit, and a small expression language has been
@@ -14,8 +16,9 @@ added on top.
 
 yak files use the `.yak` extension. A file holds one or more documents
 separated by `---`, optionally terminated by `...`, exactly as in YAML. The
-name may carry the extension of an [output format](#output) ahead of `.yak`,
-as `app.toml.yak` does, which is how a template says what it renders to.
+name may carry the extension of an [output format](CLI.md#output-formats)
+ahead of `.yak`, as `app.toml.yak` does, which is how a template says what it
+renders to.
 
 ## What changed from YAML
 
@@ -241,7 +244,7 @@ spellings mean exactly the same thing, so `$self.name` is `.name`:
 | --- | --- | --- |
 | `$self` | `.` | The enclosing mapping. |
 | `$root` | `$` | The root of the current document. |
-| `$context` | `$$` | The merged [context](#context-files) data. |
+| `$context` | `$$` | The merged [context](#context) data. |
 | `$yak` | | The [run](#the-run) rather than the document. |
 
 A template that refers to a mapping once may read better for saying which one
@@ -504,6 +507,34 @@ v: apply(twice, "ab")   # abab
 No output format can hold a function, so one that reaches the output is an
 error rather than something rendered. Calling anything that is not a function
 is an error naming what was found instead.
+
+### Anonymous functions
+
+A function written where a value belongs has no binding to take its name
+from. Its parameters go in parentheses, and `=>` separates them from the body:
+
+```yaml
+local apply(fn, to) = fn(to)
+
+v: apply((s) => "{s}{s}", "ab")   # abab
+```
+
+The parameters are the ones a binding declares, defaults included, and
+everything in [What a function sees](#what-a-function-sees) holds here too:
+the body is evaluated where it was written, so it reads the bindings and the
+`.name` fields around it, and a function that returns one keeps the arguments
+of the call that made it.
+
+```yaml
+local adder = (n) => (x) => x + n
+v: adder(5)(3)                    # 8
+```
+
+The parentheses are not optional, so `s => "{s}"` is an error rather than a
+function of one parameter, and the body is a single expression. A function
+whose body wants a block of its own is written as a binding, which also gives
+it a name: a diagnostic about a call reports the name it was declared under,
+and says where an anonymous function was written when there is none.
 
 ## Standard library
 
@@ -843,19 +874,26 @@ The source is walked as the comprehension is built, and so is the filter,
 which means both are resolved eagerly; the element itself stays as lazy as
 any other value.
 
-## Context files
+## Context
 
-`yak template -c a.yaml -c b.yaml` merges context files left to right. Mappings
-merge key by key; sequences and scalars from a later file replace what came
-before. The result is available as `$context`, or `$$` for short, and the
-paths that produced it as [`$yak.contextpaths`](#the-run).
+`$context`, or `$$` for short, is a mapping of data handed to the run from
+outside the template. It is read like any other mapping, it is shared by every
+document of a file, and the paths it came from are
+[`$yak.contextpaths`](#the-run).
 
-Context files are plain YAML or JSON, not yak, so they may use anchors and
-unquoted strings. They must have a mapping at the top level.
+Context data is plain YAML or JSON rather than yak, so none of it is a
+template: a `{` in a context string is a `{`, and an unquoted scalar there is
+the string YAML reads it as. Several sources merge into the one mapping, with
+a later one winning; how they are given and merged is the tool's business, and
+[CLI.md](CLI.md#context-files) covers it.
 
-A `.json` file is read by the JSON parser, so all of JSON is accepted,
-including escapes such as `\/` that YAML rejects. Every other file is read as
-YAML, which accepts most JSON as well.
+Because what a context carries varies from one run to the next, a template
+usually reads it through the operators for a value that may not be there:
+
+```yaml
+replicas: $$?.replicas ?? 1
+selector:? $$?.selector
+```
 
 ## Comments
 
@@ -912,63 +950,24 @@ context files are not carried over at all.
 
 ## Output
 
-`yak template` writes YAML by default: source key order is preserved,
-comments are kept, hidden fields are dropped, and documents are separated by
-`---`. Nothing is written unless every document evaluates successfully.
+A document renders in the order it was written: source key order is
+preserved, comments come with the entries they were written on, hidden fields
+are dropped, and so is an entry whose `:?` value turned out to be null. A
+document that evaluates to `null` — one holding nothing but bindings, nothing
+at all, or a body written as `null` — renders nothing, and a file of several
+documents renders each of them in turn.
 
-A document that evaluates to `null`, whether it held nothing but bindings,
-nothing at all, or a body written as `null`, is left out.
-`--keep-null-documents` writes it instead. Dropping every document leaves the
-output empty, which the single-document formats report as an error.
+Which encodings that output can be written in, and how one of them is
+chosen, is the tool's business: [CLI.md](CLI.md#output-formats) covers the
+formats and the flags that select them. What the language guarantees is the
+same in all of them — key order, hidden fields, and nothing written at all
+unless every document renders successfully — and comments reach every format
+that has somewhere to put them.
 
-The output goes to standard output unless `--output` names a file to write.
-`--automatic-output` names that file after the template: the `.yak` extension
-is dropped and the one belonging to the format written takes its place, so
-`app.toml.yak` yields `app.toml` and `app.yak` yields `app.yaml`. Reading the
-template from standard input leaves nothing to name the file after and is an
-error. `--output-dir` places the file in another directory, creating it if it
-is missing.
-
-`--format` selects another encoding. Without it the extension of the output
-file selects one, and failing that the extension the template's own name
-carries ahead of `.yak`, so that `app.toml.yak` writes TOML:
-
-| Format  | Also known as                 | Documents | Comments |
-| ------- | ----------------------------- | --------- | -------- |
-| `yaml`  | `yml`                         | many      | yes      |
-| `kyaml` |                               | many      | yes      |
-| `json`  |                               | one       | no       |
-| `jsonc` |                               | one       | `//`     |
-| `jwcc`  | `jsoncc`, `hujson`, `json5`   | one       | `//`     |
-| `jsonl` | `ndjson`                      | many      | no       |
-| `toml`  |                               | one       | yes      |
-
-Key order, hidden fields and the all-or-nothing rule are the same everywhere.
-Comments are carried into every format that has somewhere to put them; the
-ones that do not simply leave them out.
-
-`kyaml` is the Kubernetes dialect of YAML from KEP-5295: flow style
-throughout, every string value double-quoted, keys left bare unless they
-could be read as something else, trailing commas, and a `---` header on every
-document. It is a subset of YAML, so any YAML parser reads it. Unlike
-`kubectl`, yak writes the keys in the order they were written rather than
-sorting them.
-
-`jsonc` adds comments to JSON, and `jwcc` ("JSON with commas and comments")
-adds trailing commas on top of them. `json5` names `jwcc` because everything
-yak writes reads as JSON5, even though JSON5 as a language allows more than
-yak ever emits. `jsonl` writes one compact document per line and is the way
-to get a stream of documents out as JSON. The three single-document formats
-report an error rather than picking one when a template produced several.
-
-TOML is the one format that cannot hold everything yak can say:
-
-- A document must be a mapping, and there can only be one of them.
-- There is no null. A null value is an error naming the key it was found
-  at; `??` supplies something else, and `:?` drops the key instead.
-- Sub-tables have to follow the plain keys of the table they belong to, so
-  keys come out grouped by whether they open a table. Within each group the
-  source order holds.
+A value the chosen format cannot hold is an error rather than an
+approximation. A function is the one value no format can hold; TOML, which
+has no null, is the format that refuses the most of what the language can
+otherwise say.
 
 ## Grammar sketch
 
@@ -986,12 +985,13 @@ import      := "import" module | "import" "{" module+ "}"   -- not implemented
 module      := (identifier "=")? identifier ("." identifier)*
 params      := "(" (param ("," param)* ","?)? ")"
 param       := identifier ("=" value)?
+lambda      := params "=>" value
 value       := conditional | coalesce
 conditional := "if" coalesce "then" value ("else" value)?
 coalesce    := binary ("??" binary)*
 binary      := unary (op unary)*                  -- see the precedence list
 unary       := ("!" | "-")* operand
-operand     := literal | reference | flowSeq | flowMap | "(" value ")"
+operand     := literal | reference | flowSeq | flowMap | lambda | "(" value ")"
 flowSeq     := "[" ((value loop) | (value ("," value)*)? ","?) "]"
 flowMap     := "{" ((entry loop) | (entry ("," entry)*)?) "}"
 entry       := (key | "<<") sep value

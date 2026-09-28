@@ -258,6 +258,10 @@ func TestOperatorTokens(t *testing.T) {
 		{"assignment is still one character", "local x = 1\n", []token.Kind{
 			token.Ident, token.Ident, token.Assign, token.Int, token.EOF,
 		}},
+		{"arrow", "a: (x) => x\n", []token.Kind{
+			token.Ident, token.Colon, token.LParen, token.Ident, token.RParen,
+			token.Arrow, token.Ident, token.EOF,
+		}},
 		{"inequality", "a: 1 != 2\n", []token.Kind{
 			token.Ident, token.Colon, token.Int, token.Ne, token.Int, token.EOF,
 		}},

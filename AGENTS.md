@@ -5,7 +5,9 @@ the CLI entry point is `cmd/yak`, and everything else lives under `internal/`
 (`lexer`, `parser`, `ast`, `eval`, `engine`, `render`, `ctxfile`, `cli`).
 
 [docs/SPEC.md](docs/SPEC.md) defines the language and is the source of truth
-for behavior.
+for behavior. [docs/CLI.md](docs/CLI.md) documents the command line tool —
+its commands, flags, context file handling and output formats — and is the
+source of truth for those.
 
 ## Commands
 

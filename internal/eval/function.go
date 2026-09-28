@@ -1,9 +1,11 @@
 package eval
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/daluz/yak/internal/ast"
+	"github.com/daluz/yak/internal/token"
 )
 
 // maxCallDepth bounds how deeply calls may nest, so that a function that ends
@@ -23,6 +25,21 @@ type Function struct {
 
 // TypeName implements Value.
 func (*Function) TypeName() string { return "function" }
+
+// callee names the function a diagnostic is about. An anonymous function has
+// no name to give, so it is placed by where it was written instead. The text
+// is built only when something has gone wrong.
+type callee struct {
+	name string
+	pos  token.Pos
+}
+
+func (c callee) String() string {
+	if c.name == "" {
+		return fmt.Sprintf("the function at %d:%d", c.pos.Line, c.pos.Col)
+	}
+	return fmt.Sprintf("function %q", c.name)
+}
 
 func evalCall(node *ast.Call, env *Env) (Value, error) {
 	target, err := evalNode(node.Fn, env)
@@ -47,11 +64,12 @@ func evalCall(node *ast.Call, env *Env) (Value, error) {
 // parameters share one frame, so a default may name another parameter.
 func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
 	doc := f.env.doc
+	who := callee{name: f.decl.Name, pos: f.decl.Pos()}
 	if doc.depth >= maxCallDepth {
-		return nil, errorf(node.Pos(), "function %q is nested more than %d calls deep and may not terminate",
-			f.decl.Name, maxCallDepth)
+		return nil, errorf(node.Pos(), "%s is nested more than %d calls deep and may not terminate",
+			who, maxCallDepth)
 	}
-	args, err := matchArguments(f.decl.Name, f.decl.Params, node, env)
+	args, err := matchArguments(who, f.decl.Params, node, env)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +82,7 @@ func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
 		case p.Default != nil:
 			s.binds[p.Name] = &Thunk{node: p.Default, env: inner, pos: p.Default.Pos()}
 		default:
-			return nil, missingArgument(f.decl.Name, p.Name, node)
+			return nil, missingArgument(who, p.Name, node)
 		}
 	}
 	doc.depth++
@@ -76,22 +94,22 @@ func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
 // parameters they supply, leaving each one behind a thunk of the calling
 // environment. A user function and a built-in are called the same way, so
 // both go through here.
-func matchArguments(fn string, params []*ast.Param, node *ast.Call, env *Env) (map[string]*Thunk, error) {
+func matchArguments(fn callee, params []*ast.Param, node *ast.Call, env *Env) (map[string]*Thunk, error) {
 	args := make(map[string]*Thunk, len(node.Args))
 	for i, arg := range node.Args {
 		name := arg.Name
 		switch {
 		case name == "" && i >= len(params):
-			return nil, errorf(arg.Value.Pos(), "function %q takes at most %s, found %d",
+			return nil, errorf(arg.Value.Pos(), "%s takes at most %s, found %d",
 				fn, argumentCount(len(params)), len(node.Args))
 		case name == "":
 			name = params[i].Name
 		case paramNamed(params, name) == nil:
-			return nil, errorf(arg.NamePos, "function %q has no parameter named %q%s",
+			return nil, errorf(arg.NamePos, "%s has no parameter named %q%s",
 				fn, name, parameterNames(params))
 		}
 		if _, dup := args[name]; dup {
-			return nil, errorf(arg.Value.Pos(), "parameter %q of function %q is given twice",
+			return nil, errorf(arg.Value.Pos(), "parameter %q of %s is given twice",
 				name, fn)
 		}
 		args[name] = &Thunk{node: arg.Value, env: env, pos: arg.Value.Pos()}
@@ -101,8 +119,8 @@ func matchArguments(fn string, params []*ast.Param, node *ast.Call, env *Env) (m
 
 // missingArgument reports a parameter that the call left out and that has no
 // default to fall back on.
-func missingArgument(fn, param string, node *ast.Call) error {
-	return errorf(node.Pos(), "function %q needs an argument for parameter %q", fn, param)
+func missingArgument(fn callee, param string, node *ast.Call) error {
+	return errorf(node.Pos(), "%s needs an argument for parameter %q", fn, param)
 }
 
 // argumentCount counts arguments for a diagnostic.

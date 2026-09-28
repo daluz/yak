@@ -1,0 +1,3 @@
+local apply(fn, to) = fn(to)
+
+label: apply((s, mark) => "{s}{mark}", "web")

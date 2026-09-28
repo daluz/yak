@@ -49,6 +49,12 @@ func (p *parser) parseCoalesce() (ast.Node, error) {
 	if p.cur().Line() == p.prevEnd.Line && (p.at(token.Dash) || p.atSignedNumber()) {
 		return nil, p.errorf(p.cur().Pos, "a subtraction needs whitespace on both sides of its %q", "-")
 	}
+	// An arrow left over here follows something that was not a parameter
+	// list, which is how a function written without parentheses reads.
+	if p.at(token.Arrow) && p.cur().Line() == p.prevEnd.Line {
+		return nil, p.errorf(p.cur().Pos,
+			"an anonymous function needs its parameters in parentheses, as in %q", "(x) => x")
+	}
 	return x, nil
 }
 
@@ -239,6 +245,9 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		return p.parseFlowMapping()
 
 	case token.LParen:
+		if p.atLambda() {
+			return p.parseLambda()
+		}
 		p.next()
 		x, err := p.parseExpr()
 		if err != nil {
@@ -258,6 +267,48 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 	default:
 		return nil, p.errorf(t.Pos, "expected a value, found %s", t)
 	}
+}
+
+// atLambda reports whether the "(" at the current position opens the
+// parameter list of an anonymous function rather than a parenthesised
+// expression. Nothing before the matching ")" tells the two apart, so this
+// looks for the "=>" after it. A ")" can only appear inside a string or
+// balanced against a "(", so counting parentheses finds the right one.
+func (p *parser) atLambda() bool {
+	depth := 0
+	for i := p.i; i < len(p.toks); i++ {
+		switch p.toks[i].Kind {
+		case token.LParen:
+			depth++
+		case token.RParen:
+			depth--
+			if depth == 0 {
+				return p.toks[i+1].Kind == token.Arrow
+			}
+		case token.EOF:
+			return false
+		}
+	}
+	return false
+}
+
+// parseLambda parses "(params) => body", a function with no name. The
+// parameters are the ones a binding declares, defaults included, and the body
+// is an expression: a function whose body needs a block of its own has a name
+// to hang it on.
+func (p *parser) parseLambda() (ast.Node, error) {
+	fn := &ast.Function{Base: ast.At(p.cur().Pos)}
+	if err := p.parseParams(fn); err != nil {
+		return nil, err
+	}
+	// atLambda already found the arrow that follows the parameters.
+	p.next()
+	body, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	fn.Body = body
+	return fn, nil
 }
 
 // unsupportedKeywords maps the statement keywords that are planned but not

@@ -1,0 +1,14 @@
+applied: web!
+twiced: abababab
+nullary: no parameters
+defaulted: hm?
+named: api!
+bound: api!
+name: shop
+lexical: shop-web
+curried: 8
+immediate: 42
+doubled:
+  - 2
+  - 4
+  - 6

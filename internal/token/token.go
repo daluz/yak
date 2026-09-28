@@ -64,6 +64,8 @@ const (
 	DoubleDollar
 	// Assign separates the name and the value of a "local" binding.
 	Assign
+	// Arrow separates the parameters and the body of an anonymous function.
+	Arrow
 	// Coalesce is the "??" operator.
 	Coalesce
 	// Question is the "?" of an optional access, always followed directly by
@@ -110,6 +112,7 @@ var kindNames = map[Kind]string{
 	Dollar:        `"$"`,
 	DoubleDollar:  `"$$"`,
 	Assign:        `"="`,
+	Arrow:         `"=>"`,
 	Coalesce:      `"??"`,
 	Question:      `"?"`,
 	Not:           `"!"`,

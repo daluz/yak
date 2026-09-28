@@ -1,0 +1,1 @@
+anonymous-parens.yak:3:16: an anonymous function needs its parameters in parentheses, as in "(x) => x"

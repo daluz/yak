@@ -59,7 +59,7 @@ The rendered output goes to standard output unless `-o` names a file to write.
 dropped and the one belonging to the format written takes its place, so
 `app.toml.yak` yields `app.toml` and `app.yak` yields `app.yaml`.
 `--output-dir` places the file in another directory, creating it if it is
-missing.
+missing. [docs/CLI.md](docs/CLI.md) describes the command line in full.
 
 ## Output formats
 
@@ -115,7 +115,8 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
 - **Local bindings.** `local name = "web"`, or a `local { ... }` block of
   them. They are named, scoped, and produce no output.
 - **Functions.** `local url(host, port = 8080) = "https://{host}:{port}"`,
-  called with arguments by position or by name: `url("web", port = 443)`.
+  called with arguments by position or by name: `url("web", port = 443)`. An
+  anonymous one is written `(x) => x * 2`.
 - **Built-ins.** `size` measures a sequence, mapping or string, `empty` asks
   whether there is anything in one, and `nullify` turns an empty value into
   `null` for `:?` to drop.
@@ -138,7 +139,8 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
   notes about the template. Every output format that can hold a comment
   gets them, JSON dialects and TOML included.
 
-[docs/SPEC.md](docs/SPEC.md) is the full language description.
+[docs/SPEC.md](docs/SPEC.md) is the full language description, and
+[docs/CLI.md](docs/CLI.md) the tool that renders it.
 
 ## Status
 

@@ -24,7 +24,8 @@ type Builtin struct {
 func (*Builtin) TypeName() string { return "function" }
 
 func (b *Builtin) call(node *ast.Call, env *Env) (Value, error) {
-	matched, err := matchArguments(b.name, b.params, node, env)
+	who := callee{name: b.name}
+	matched, err := matchArguments(who, b.params, node, env)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +33,7 @@ func (b *Builtin) call(node *ast.Call, env *Env) (Value, error) {
 	for i, p := range b.params {
 		t, ok := matched[p.Name]
 		if !ok {
-			return nil, missingArgument(b.name, p.Name, node)
+			return nil, missingArgument(who, p.Name, node)
 		}
 		args[i] = t
 	}

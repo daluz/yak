@@ -2,7 +2,8 @@
 
 Done so far: the restricted YAML parser, string interpolation, relative
 references, hidden fields, context files, the `template` command, `local`
-bindings, functions, the `size`, `empty` and `nullify` built-ins, the `??` and
+bindings, functions named and anonymous, the `size`, `empty` and `nullify`
+built-ins, the `??` and
 `?.` operators, arithmetic, comparison and boolean operators, the `<<` merge
 in both of its forms,
 `if`/`then`/`else`, sequence and mapping comprehensions, and the YAML, KYAML,
@@ -78,8 +79,10 @@ message that says so.
 
 ## 4. Remaining commands
 
+`template` is the only command so far; [CLI.md](CLI.md) documents it.
+
 - `build` renders a multi-file project rather than a single template.
-- `validate` checks inputs and outputs against a schema.
+- `check` checks inputs and outputs against a schema.
 - `fmt` formats yak files following best practices.
 - `mod` controls yak.mod and yak.lock files.
 
