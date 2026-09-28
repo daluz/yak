@@ -1,0 +1,52 @@
+## References: reaching a sibling, a parent, the document root, and the data
+## the context files supply.
+##
+##   yak template examples/02-references.yak -c examples/02-references.ctx.yaml
+
+name: "shop"
+region: "us-east-1"
+
+metadata:
+  app: ..name             ## the parent mapping's "name"
+  label: "{.app}-web"     ## a sibling of this entry, via "."
+  same: $self.label       ## "$self" is the long spelling of "."
+  annotations:
+    root: $.name          ## "$" is the root of this document
+    grandparent: ...region
+
+## A sequence is not a level, so ".." inside an item names the nearest
+## enclosing mapping rather than the sequence.
+ports:
+  - name: "http"
+    number: 80
+    owner: ..name
+  - name: "https"
+    number: 443
+    owner: ..name
+
+## Field and index access chain, and are written without spaces. A negative
+## index counts from the end.
+first-port: $.ports[0].number
+last-port: $.ports[-1].name
+
+## The context is "$context", or "$$" for short.
+env: $$.env
+host: $context.host
+spaced-key: $$["with space"]
+
+## "?." and "?[" answer null instead of failing when a field or an index is
+## missing, and "??" supplies what to use in its place. Each "?" covers one
+## step, so a chain that may break anywhere needs one at every step.
+replicas: $$?.replicas ?? 1
+tls: $$?.tls?.enabled ?? false
+third-zone: $$.zones?[2] ?? "none"
+
+## Values resolve lazily, so a reference may point at something written later.
+alias: .trailer
+trailer: "written last, read first"
+
+## "$yak" describes the rendering rather than the document.
+provenance:
+  version: $yak.version
+  template: $yak.filepath
+  contexts: $yak.contextpaths

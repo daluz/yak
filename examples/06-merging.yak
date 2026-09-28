@@ -1,0 +1,45 @@
+## Merging mappings with "<<", in both of the places it can be written.
+##
+##   yak template examples/06-merging.yak
+
+local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+
+## Between two values, "<<" merges them and the right side decides. The merge
+## goes as deep as both sides hold a mapping: "limits" merges, keeping the
+## cpu it was not told about, while "port" is simply added.
+container: defaults << {limits: {memory: 512}, port: 8080}
+
+## Both operands are left as they were.
+untouched: defaults.limits
+
+## Anything that is not a mapping on both sides is replaced outright, so a
+## sequence on the right overrides rather than joining.
+overridden: {expose: [80], tag: "1.25"} << {expose: [443], tag: "1.27"}
+
+## Written where a key belongs, "<<" merges into the mapping it is written
+## in. The mapping reads top to bottom, so the merge overrides the entries
+## above it and the entries below it override the merge.
+pod:
+  image: "alpine"   ## replaced by the "nginx" the merge brings in
+  <<: defaults
+  tag: "1.27"
+  limits:
+    memory: 512     ## wins over the merged 256, while cpu survives
+
+## The modifiers mean on a merge what they mean on any other entry. "<<::"
+## hides everything it brings in and leaves it readable by a reference;
+## "<<:?" merges nothing when what it names is null, so an override the
+## context may not carry costs no guard.
+sidecar:
+  <<:: defaults
+  <<:? $$?.overrides
+  cpu: .limits.cpu
+
+## "+" joins two strings or two sequences. Mappings are the one kind it
+## leaves alone, because merging them is what "<<" is for.
+name: "shop" + "-web"
+ports: [80] + [443]
+
+## A quoted "<<" is an ordinary key.
+raw:
+  "<<": 1

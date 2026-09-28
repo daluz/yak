@@ -1,0 +1,46 @@
+## Strings: every quoting form, and the interpolation that runs through all
+## of them. Notes like this one start with "## " and never reach the output.
+##
+##   yak template examples/01-strings.yak
+
+local service = "web"
+
+## An unquoted scalar is an expression rather than a string, so text is
+## always quoted and the other literals stand on their own.
+name: "web"
+port: 8080
+ratio: 0.75
+enabled: true
+nothing: null
+
+## Both quoting styles interpolate. Double a brace to write a literal one.
+greeting: "hello, {service}"
+single: 'hello, {service}'
+literal-braces: "{{not an expression}}"
+lone-close: "a } closes nothing"
+
+## Double quotes process backslash escapes; in single quotes the only escape
+## is a doubled quote.
+escaped: "a tab:\there\nand a second line"
+unicode: "caf\u00e9"
+apostrophe: 'it''s quoted'
+
+## An "r" prefix turns interpolation and backslash escapes off, which is what
+## text dense with braces wants. A raw double-quoted string has no escapes
+## and so cannot hold a '"'; use r'...' or a raw block scalar for that.
+selector: r"app={{ .Values.name }}"
+pattern: r'^\d+\.\d+$'
+
+## Block scalars keep (|) or fold (>) their line breaks, and interpolate like
+## any other string. The chomping indicators are YAML's: - strips the final
+## newline, + keeps the blank lines below.
+notes: |
+  {service} listens on port {.port}.
+  Line breaks are preserved here.
+description: >
+  These lines are folded
+  into a single one.
+oneliner: |-
+  no trailing newline
+script: r|
+  echo "${SHELL_VAR} stays a shell variable"

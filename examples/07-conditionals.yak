@@ -1,0 +1,42 @@
+## Conditionals, and the operators the condition is built from.
+##
+##   yak template examples/07-conditionals.yak -c examples/07-conditionals.ctx.yaml
+
+env: $$.env
+
+## The branch that is not taken is never evaluated.
+replicas: if .env == "prod" then 5 else 1
+
+## A chain is an "else" holding another conditional.
+tier: if .replicas > 3 then "gold" else if .replicas > 1 then "silver" else "bronze"
+
+## Leaving "else" out yields null when the condition is false, which ":?" is
+## there to drop. This context is staging, so "debug" is rendered.
+debug:? if .env != "prod" then true
+
+## A conditional may spread over several lines: "then" and "else" continue
+## the expression they belong to.
+banner:
+  if .env == "prod"
+  then "serving live traffic"
+  else "not for production use"
+
+## The condition has to be a boolean — yak has no truthiness — and "&&",
+## "||" and "!" combine them, short-circuiting as usual. "??" binds looser
+## than everything, so the fallback here needs its parentheses to belong to
+## the access rather than to the whole "&&".
+alerting: .env == "prod" && ($$?.alerts?.enabled ?? false)
+internal: !(.env == "prod") || $$.private
+
+## Arithmetic works on numbers. Two integers answer an integer, except that
+## "/" always answers a float rather than truncating. "." names the mapping
+## an entry is written in, so reaching "replicas" from in here takes "$".
+budget:
+  total: $.replicas * 512
+  half: $.replicas / 2
+  remainder: 7 % 2
+  negated: -$.replicas
+
+## A subtraction is written with whitespace on both sides, because "-" also
+## belongs inside an identifier and also negates what follows it.
+spare: 10 - .replicas

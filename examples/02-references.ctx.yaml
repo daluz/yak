@@ -1,0 +1,6 @@
+env: prod
+host: shop.example.com
+zones: [a, b]
+tls:
+  enabled: true
+with space: read with a bracketed key

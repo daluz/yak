@@ -1,0 +1,4 @@
+replicas: 3
+labels: {}
+annotations:
+  team: platform

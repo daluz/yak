@@ -1,0 +1,14 @@
+env: prod
+replicas: 5
+
+image:
+  tag: 1.4.0-rc.2
+
+ports:
+  - name: http
+    number: 8080
+  - name: metrics
+    number: 9090
+
+annotations:
+  owner: platform

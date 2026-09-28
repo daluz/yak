@@ -1,0 +1,53 @@
+## Functions: a binding whose name is followed by a parameter list.
+##
+##   yak template examples/04-functions.yak
+
+local url(host, port = 8080, scheme = "https") = "{scheme}://{host}:{port}"
+
+## Arguments go by position, by name, or by position and then by name. A
+## parameter with a default may be left out.
+endpoints:
+  default: url("web.example.com")
+  positional: url("web.example.com", 443)
+  named: url(port = 443, host = "api.example.com")
+  mixed: url("api.example.com", scheme = "http")
+
+## A default is evaluated at the call, in the same scope as the parameters,
+## so it may name a parameter declared before it.
+local span(from, to = from) = "{from}..{to}"
+spans:
+  - span("a")
+  - span("a", "z")
+
+## The body may be an indented block, and an entry of it may read its
+## siblings like any other mapping.
+local endpoint(name) =
+  host: "{name}.example.com"
+  address: url(.host, port = 443)
+
+web: endpoint("web")
+
+## A body is evaluated where it was written rather than where it is called,
+## so "." here names the mapping holding the declaration.
+service:
+  name: "shop"
+  local label(suffix) = "{.name}-{suffix}"
+  labels:
+    app: label("web")
+    tier: label("api")
+
+## A function is a value: it can be passed to another function, returned from
+## one, and bound to a second name.
+local apply(fn, to) = fn(to)
+local twice(s) = "{s}{s}"
+local shout = twice
+
+applied: apply(twice, "ab")
+rebound: shout("ho")
+
+## One written where a value belongs has no name to take, so its parameters
+## go in parentheses and "=>" separates them from the body.
+anonymous: apply((s) => "<{s}>", "tag")
+
+local adder = (n) => (x) => x + n
+curried: adder(5)(3)

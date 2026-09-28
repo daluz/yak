@@ -1,0 +1,65 @@
+## A pair of Kubernetes manifests assembled from two layered context files,
+## the later one winning:
+##
+##   yak template examples/10-deployment.yak \
+##     -c examples/10-deployment.base.yaml \
+##     -c examples/10-deployment.prod.yaml
+##
+## Drop the second -c to render the staging variant, or add -f kyaml to
+## write the Kubernetes dialect of YAML.
+
+local {
+  name = "{$$.app}-{$$.component}"
+  image = "{$$.image.repo}:{$$.image.tag}"
+  prod = $$.env == "prod"
+}
+
+local labels =
+  app: $$.app
+  component: $$.component
+  env: $$.env
+
+# Rendered by yak. Edit the template rather than this file.
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: name
+  labels: labels
+  annotations:? nullify($$?.annotations)
+spec:
+  replicas: if prod then $$?.replicas ?? 3 else 1
+  selector:
+    matchLabels: labels
+  template:
+    metadata:
+      labels: labels
+    spec:
+      containers:
+        - name: $$.component
+          image: image
+          ports: [{name: p.name, containerPort: p.number} for p in $$.ports]
+          env:
+            - name: "APP_ENV"
+              value: $$.env
+            - name: "LOG_LEVEL"
+              value: if prod then "info" else "debug"
+          resources:
+            requests: $$.resources
+            ## Production gets the headroom; everywhere else runs on what it
+            ## requested.
+            limits: if prod then $$.resources << {memory: "1Gi"} else $$.resources
+---
+## Nothing carries across a "---": each document has its own bindings and its
+## own "$". The context is the one thing they share.
+local name = "{$$.app}-{$$.component}"
+
+apiVersion: "v1"
+kind: "Service"
+metadata:
+  name: name
+  labels:
+    app: $$.app
+    component: $$.component
+spec:
+  selector: $.metadata.labels
+  ports: [{name: p.name, port: p.number, targetPort: p.name} for p in $$.ports]

@@ -1,0 +1,8 @@
+host: shop.example.com
+ports:
+  - name: http
+    number: 80
+  - name: metrics
+    number: 9090
+prefixes: [eu, us]
+suffixes: [east, west]

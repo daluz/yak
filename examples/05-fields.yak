@@ -1,0 +1,43 @@
+## Hidden and optional entries, and the built-ins that pair with them.
+##
+##   yak template examples/05-fields.yak -c examples/05-fields.ctx.yaml
+
+## "::" hides an entry from the output while leaving it visible to
+## references, which is how shared defaults sit beside the data using them.
+defaults::
+  image: "alpine"
+  tag: "3.20"
+
+services:
+  web:
+    image: "{$.defaults.image}:{$.defaults.tag}"
+
+## ":?" hides an entry only when its value turns out to be null, which is how
+## an entry the context may say nothing about is left out. This context
+## carries "replicas" but no "selector", so only the first is rendered.
+replicas:? $$?.replicas
+selector:? $$?.selector
+
+## Only null hides the entry. false, 0, "" and the empty collections are
+## values like any other, so all four of these are rendered.
+debug:? false
+count:? 0
+tags:? []
+extra:? {}
+
+## "nullify" turns an empty value into the null that ":?" drops. The context
+## has an empty "labels" and a populated "annotations", so this leaves one
+## key behind rather than two.
+labels:? nullify($$?.labels)
+annotations:? nullify($$?.annotations)
+
+## "size" counts items, entries or characters, and "empty" asks whether there
+## is anything to count. Hidden entries count, since both describe the value
+## rather than what the renderer writes out.
+ports: [80, 443]
+measurements:
+  port-count: size($.ports)
+  name-length: size("caf\u00e9")
+  defaults-size: size($.defaults)
+  ports-empty: empty($.ports)
+  blank-empty: empty("")

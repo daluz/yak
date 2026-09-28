@@ -1,0 +1,48 @@
+# Comments are carried into the rendered output, this one included. Every
+# format that has somewhere to put them gets them, JSON dialects and TOML
+# among them:
+#
+#   yak template examples/09-comments.yak
+#   yak template examples/09-comments.yak -f jwcc
+
+service:
+  # A comment above an entry stays above it.
+  name: "shop"      # and one written beside a value stays beside it
+  replicas: 2
+
+  ## A comment starting with "## " addresses whoever edits the template next
+  ## rather than whoever reads the output, so it is left out. The space after
+  ## the marker is required: "###" below is an ordinary banner.
+  port: 8080
+
+local {
+  # Dropped along with the block. A binding renders nothing, so a comment
+  # inside one has nowhere to go, and its value may be used in many places.
+  region = "us-east-1"
+}
+
+local defaults =
+  # Dropped too: this sits inside a binding's value.
+  tier: "shared"
+
+# A comment belongs to the next thing that is rendered, so one written above
+# a binding comes out above whatever follows it.
+local zone = "{region}a"
+
+placement:
+  region: region
+  zone: zone
+
+### A banner is not the marker, so this one is kept.
+defaults: defaults
+
+workers:
+  # Items keep their own comments.
+  - name: "queue"
+  - name: "cron"   # including the ones beside them
+
+credentials::
+  # Dropped with the hidden entry it describes.
+  user: "admin"
+
+# Comments with nothing after them come out at the end of the document.

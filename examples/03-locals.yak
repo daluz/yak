@@ -1,0 +1,55 @@
+## Local bindings: named values that render nothing of their own. They are
+## what replaces YAML's anchors.
+##
+##   yak template examples/03-locals.yak
+
+local region = "us-east-1"
+
+## Several bindings share a block, one per line or separated by commas.
+local {
+  zone = "{region}a"
+  cluster = "prod-{region}"
+}
+local { retries = 3, timeout = 30 }
+
+## A binding's value may be an indented block, exactly like a mapping value.
+local defaults =
+  image: "alpine"
+  tag: "3.20"
+
+placement:
+  region: region
+  zone: zone
+  cluster: cluster
+
+image: "{defaults.image}:{defaults.tag}"
+
+client:
+  retries: retries
+  timeout: timeout
+
+## Bindings resolve lazily, so one may be read above the line declaring it,
+## and two may refer to each other in any order.
+owner: team
+local team = "{group}-platform"
+local group = "infra"
+
+## A binding written among the entries of a mapping belongs to that whole
+## mapping, so it can read the mapping's own fields.
+service:
+  name: "shop"
+  local label = "{.name}-web"
+  labels:
+    app: label
+
+## A binding in an inner block shadows an outer one of the same name.
+local tier = "shared"
+web:
+  local tier = "frontend"
+  tier: tier
+api:
+  tier: tier
+
+## A binding that is never used is never evaluated, so this one's missing
+## field costs nothing.
+local unused = $$.absent
