@@ -2,7 +2,10 @@
 // positions attached to them.
 package token
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // Pos identifies a single character position in a source file. Lines and
 // columns are 1-based.
@@ -83,54 +86,78 @@ const (
 	Ge
 )
 
-var kindNames = map[Kind]string{
-	EOF:           "end of file",
-	DocStart:      `"---"`,
-	DocEnd:        `"..."`,
-	Ident:         "identifier",
-	DollarIdent:   "builtin variable",
-	Int:           "integer",
-	Float:         "float",
-	String:        "string",
-	Colon:         `":"`,
-	DoubleColon:   `"::"`,
-	ColonQuestion: `":?"`,
-	Dash:          `"-"`,
-	Plus:          `"+"`,
-	Merge:         `"<<"`,
-	Star:          `"*"`,
-	Slash:         `"/"`,
-	Percent:       `"%"`,
-	Comma:         `","`,
-	LBracket:      `"["`,
-	RBracket:      `"]"`,
-	LBrace:        `"{"`,
-	RBrace:        `"}"`,
-	LParen:        `"("`,
-	RParen:        `")"`,
-	Dots:          `"."`,
-	Dollar:        `"$"`,
-	DoubleDollar:  `"$$"`,
-	Assign:        `"="`,
-	Arrow:         `"=>"`,
-	Coalesce:      `"??"`,
-	Question:      `"?"`,
-	Not:           `"!"`,
-	And:           `"&&"`,
-	Or:            `"||"`,
-	Eq:            `"=="`,
-	Ne:            `"!="`,
-	Lt:            `"<"`,
-	Le:            `"<="`,
-	Gt:            `">"`,
-	Ge:            `">="`,
+// spelling is the source text of every kind that is written exactly one way.
+// Dots is listed by its shortest form: a run of them is written as many.
+var spelling = map[Kind]string{
+	DocStart:      "---",
+	DocEnd:        "...",
+	Colon:         ":",
+	DoubleColon:   "::",
+	ColonQuestion: ":?",
+	Dash:          "-",
+	Plus:          "+",
+	Merge:         "<<",
+	Star:          "*",
+	Slash:         "/",
+	Percent:       "%",
+	Comma:         ",",
+	LBracket:      "[",
+	RBracket:      "]",
+	LBrace:        "{",
+	RBrace:        "}",
+	LParen:        "(",
+	RParen:        ")",
+	Dots:          ".",
+	Dollar:        "$",
+	DoubleDollar:  "$$",
+	Assign:        "=",
+	Arrow:         "=>",
+	Coalesce:      "??",
+	Question:      "?",
+	Not:           "!",
+	And:           "&&",
+	Or:            "||",
+	Eq:            "==",
+	Ne:            "!=",
+	Lt:            "<",
+	Le:            "<=",
+	Gt:            ">",
+	Ge:            ">=",
 }
 
+// described names the kinds whose text varies, which a diagnostic has to
+// describe rather than quote.
+var described = map[Kind]string{
+	EOF:         "end of file",
+	Ident:       "identifier",
+	DollarIdent: "builtin variable",
+	Int:         "integer",
+	Float:       "float",
+	String:      "string",
+}
+
+// Text is the source spelling of a fixed kind, and "" for the kinds whose
+// text varies from one token to the next.
+func (k Kind) Text() string { return spelling[k] }
+
 func (k Kind) String() string {
-	if n, ok := kindNames[k]; ok {
-		return n
+	if s, ok := spelling[k]; ok {
+		return strconv.Quote(s)
+	}
+	if d, ok := described[k]; ok {
+		return d
 	}
 	return fmt.Sprintf("token(%d)", int(k))
+}
+
+// IsSeparator reports whether the kind separates a mapping key from its
+// value.
+func (k Kind) IsSeparator() bool {
+	switch k {
+	case Colon, DoubleColon, ColonQuestion:
+		return true
+	}
+	return false
 }
 
 // Chunk is one piece of a string literal: either literal text or an
@@ -185,14 +212,12 @@ func (t Token) Col() int { return t.Pos.Col }
 
 func (t Token) String() string {
 	switch t.Kind {
-	case Ident, Int, Float:
-		return fmt.Sprintf("%q", t.Lit)
+	case Ident, Int, Float, Dots:
+		return strconv.Quote(t.Lit)
 	case String:
 		return "string"
 	case DollarIdent:
-		return fmt.Sprintf("%q", "$"+t.Lit)
-	case Dots:
-		return fmt.Sprintf("%q", t.Lit)
+		return strconv.Quote("$" + t.Lit)
 	default:
 		return t.Kind.String()
 	}

@@ -182,6 +182,26 @@ func (l *lexer) prevIsSpace() bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
 }
 
+// operators lists the kinds the lexer reads straight from their spelling,
+// longest first so that the first match is the right one. Matching greedily
+// is safe: no value starts with "?", so the one written after a colon can
+// only be the tail of the ":?" separator.
+//
+// Every character that means different things in different places is dealt
+// with by scanToken before this table is reached. A "*" needs nothing: it
+// multiplies here and aliases where a value is expected, which only the
+// parser can tell apart.
+var operators = []token.Kind{
+	token.DoubleColon, token.ColonQuestion, token.Merge, token.DoubleDollar,
+	token.Arrow, token.Coalesce, token.And, token.Or,
+	token.Eq, token.Ne, token.Le, token.Ge,
+	token.Colon, token.Assign, token.Dash, token.Plus, token.Star,
+	token.Slash, token.Percent, token.Comma, token.Dollar,
+	token.LBracket, token.RBracket, token.LBrace, token.RBrace,
+	token.LParen, token.RParen,
+	token.Lt, token.Gt, token.Not, token.Question,
+}
+
 func (l *lexer) scanToken() error {
 	start := l.pos()
 	c := l.peek()
@@ -200,6 +220,8 @@ func (l *lexer) scanToken() error {
 		}
 	}
 
+	// Characters that start more than one kind of thing, in the order that
+	// tells them apart. What falls through is an operator and nothing else.
 	switch {
 	case c == '"' || c == '\'':
 		return l.scanQuoted(false)
@@ -209,198 +231,70 @@ func (l *lexer) scanToken() error {
 			return l.scanBlockScalar(start, true)
 		}
 		return l.scanQuotedAt(start, true)
-	case c == '|':
-		if l.peekAt(1) == '|' {
-			l.advance()
-			l.advance()
-			l.emit(token.Token{Kind: token.Or, Lit: "||", Pos: start})
-			return nil
-		}
+	case isIdentStart(c):
+		return l.scanIdent()
+	case isDigit(c) || (c == '-' && isDigit(l.peekAt(1))):
+		return l.scanNumber()
+	case c == '.':
+		return l.scanDots(start)
+	case c == '$' && isIdentStart(l.peekAt(1)):
+		l.advance()
+		l.emit(token.Token{Kind: token.DollarIdent, Lit: l.readIdent(), Pos: start})
+		return nil
+	case c == '|' && l.peekAt(1) != '|':
 		if !l.block {
 			return l.errorf(start, "unexpected %q", string(c))
 		}
 		return l.scanBlockScalar(start, false)
-	case c == '>':
-		if l.peekAt(1) == '=' {
-			l.advance()
-			l.advance()
-			l.emit(token.Token{Kind: token.Ge, Lit: ">=", Pos: start})
-			return nil
-		}
-		if l.block && l.blockScalarHeader() {
-			return l.scanBlockScalar(start, false)
-		}
-		l.advance()
-		l.emit(token.Token{Kind: token.Gt, Lit: ">", Pos: start})
-		return nil
-	case c == '<':
-		l.advance()
-		if l.peek() == '=' {
-			l.advance()
-			l.emit(token.Token{Kind: token.Le, Lit: "<=", Pos: start})
-			return nil
-		}
-		if l.peek() == '<' {
-			l.advance()
-			l.emit(token.Token{Kind: token.Merge, Lit: "<<", Pos: start})
-			return nil
-		}
-		l.emit(token.Token{Kind: token.Lt, Lit: "<", Pos: start})
-		return nil
-	case isIdentStart(c):
-		return l.scanIdent()
-	case isDigit(c):
-		return l.scanNumber()
-	case c == '-':
-		n := l.peekAt(1)
-		if isDigit(n) {
-			return l.scanNumber()
-		}
-		l.advance()
-		l.emit(token.Token{Kind: token.Dash, Lit: "-", Pos: start})
-		return nil
-	case c == '+':
-		l.advance()
-		l.emit(token.Token{Kind: token.Plus, Lit: "+", Pos: start})
-		return nil
-	case c == '/':
-		l.advance()
-		l.emit(token.Token{Kind: token.Slash, Lit: "/", Pos: start})
-		return nil
-	case c == '.':
-		n := 0
-		for l.peek() == '.' {
-			l.advance()
-			n++
-		}
-		l.emit(token.Token{Kind: token.Dots, Lit: strings.Repeat(".", n), Pos: start})
-		return nil
-	case c == '$':
-		l.advance()
-		if l.peek() == '$' {
-			l.advance()
-			l.emit(token.Token{Kind: token.DoubleDollar, Lit: "$$", Pos: start})
-			return nil
-		}
-		if isIdentStart(l.peek()) {
-			name := l.readIdent()
-			l.emit(token.Token{Kind: token.DollarIdent, Lit: name, Pos: start})
-			return nil
-		}
-		l.emit(token.Token{Kind: token.Dollar, Lit: "$", Pos: start})
-		return nil
-	case c == ':':
-		l.advance()
-		if l.peek() == ':' {
-			l.advance()
-			l.emit(token.Token{Kind: token.DoubleColon, Lit: "::", Pos: start})
-			return nil
-		}
-		// No value starts with "?", so a "?" here can only be the tail of
-		// the ":?" separator.
-		if l.peek() == '?' {
-			l.advance()
-			l.emit(token.Token{Kind: token.ColonQuestion, Lit: ":?", Pos: start})
-			return nil
-		}
-		l.emit(token.Token{Kind: token.Colon, Lit: ":", Pos: start})
-		return nil
-	case c == '=':
-		l.advance()
-		if l.peek() == '=' {
-			l.advance()
-			l.emit(token.Token{Kind: token.Eq, Lit: "==", Pos: start})
-			return nil
-		}
-		if l.peek() == '>' {
-			l.advance()
-			l.emit(token.Token{Kind: token.Arrow, Lit: "=>", Pos: start})
-			return nil
-		}
-		l.emit(token.Token{Kind: token.Assign, Lit: "=", Pos: start})
-		return nil
-	case c == ',':
-		l.advance()
-		l.emit(token.Token{Kind: token.Comma, Lit: ",", Pos: start})
-		return nil
-	case c == '[':
-		l.advance()
-		l.emit(token.Token{Kind: token.LBracket, Lit: "[", Pos: start})
-		return nil
-	case c == ']':
-		l.advance()
-		l.emit(token.Token{Kind: token.RBracket, Lit: "]", Pos: start})
-		return nil
-	case c == '{':
-		l.advance()
-		l.emit(token.Token{Kind: token.LBrace, Lit: "{", Pos: start})
-		return nil
-	case c == '}':
-		l.advance()
-		l.emit(token.Token{Kind: token.RBrace, Lit: "}", Pos: start})
-		return nil
-	case c == '(':
-		l.advance()
-		l.emit(token.Token{Kind: token.LParen, Lit: "(", Pos: start})
-		return nil
-	case c == ')':
-		l.advance()
-		l.emit(token.Token{Kind: token.RParen, Lit: ")", Pos: start})
-		return nil
-	case c == '?':
-		switch l.peekAt(1) {
-		case '?':
-			l.advance()
-			l.advance()
-			l.emit(token.Token{Kind: token.Coalesce, Lit: "??", Pos: start})
-			return nil
-		case '.', '[':
-			l.advance()
-			l.emit(token.Token{Kind: token.Question, Lit: "?", Pos: start})
-			return nil
-		}
+	case c == '>' && l.peekAt(1) != '=' && l.block && l.blockScalarHeader():
+		return l.scanBlockScalar(start, false)
+	case c == '?' && l.peekAt(1) != '?' && l.peekAt(1) != '.' && l.peekAt(1) != '[':
 		return l.errorf(start,
 			"explicit key indicators (%q) are not supported; use [expr] for a computed key, %q for an optional access, or %q for a default",
 			"?", "?.", "??")
-	case c == '&':
-		if l.peekAt(1) == '&' {
-			l.advance()
-			l.advance()
-			l.emit(token.Token{Kind: token.And, Lit: "&&", Pos: start})
-			return nil
-		}
+	case c == '&' && l.peekAt(1) != '&':
 		return l.errorf(start, "anchors and aliases are not supported in yak; use a local variable instead")
-	case c == '*':
-		// A "*" is multiplication here and an alias where a value is
-		// expected, which only the parser can tell apart.
-		l.advance()
-		l.emit(token.Token{Kind: token.Star, Lit: "*", Pos: start})
-		return nil
-	case c == '!':
+	case c == '!' && l.peekAt(1) == '!':
 		// "!!" can only be a tag: negating a boolean twice says nothing.
-		if l.peekAt(1) == '!' {
-			return l.errorf(start, "tags are not supported in yak yet; they will arrive with schemas")
-		}
-		l.advance()
-		if l.peek() == '=' {
-			l.advance()
-			l.emit(token.Token{Kind: token.Ne, Lit: "!=", Pos: start})
-			return nil
-		}
-		l.emit(token.Token{Kind: token.Not, Lit: "!", Pos: start})
-		return nil
-	case c == '%':
+		return l.errorf(start, "tags are not supported in yak yet; they will arrive with schemas")
+	case c == '%' && l.block && l.col == 1:
 		// A directive is written at the start of a line, which is the one
 		// place a "%" cannot be the remainder operator.
-		if l.block && l.col == 1 {
-			return l.errorf(start, "directives (%q) are not supported", "%")
-		}
-		l.advance()
-		l.emit(token.Token{Kind: token.Percent, Lit: "%", Pos: start})
-		return nil
-	default:
-		return l.errorf(start, "unexpected character %q", string(rune(c)))
+		return l.errorf(start, "directives (%q) are not supported", "%")
 	}
+
+	if l.scanOperator(start) {
+		return nil
+	}
+	return l.errorf(start, "unexpected character %q", string(rune(c)))
+}
+
+// scanOperator reads the operator standing at the current position and
+// reports whether one did.
+func (l *lexer) scanOperator(start token.Pos) bool {
+	rest := l.src[l.off:]
+	for _, k := range operators {
+		s := k.Text()
+		if len(rest) < len(s) || string(rest[:len(s)]) != s {
+			continue
+		}
+		for range len(s) {
+			l.advance()
+		}
+		l.emit(token.Token{Kind: k, Lit: s, Pos: start})
+		return true
+	}
+	return false
+}
+
+func (l *lexer) scanDots(start token.Pos) error {
+	n := 0
+	for l.peek() == '.' {
+		l.advance()
+		n++
+	}
+	l.emit(token.Token{Kind: token.Dots, Lit: strings.Repeat(".", n), Pos: start})
+	return nil
 }
 
 // blockScalarHeader reports whether the ">" at the current position opens a

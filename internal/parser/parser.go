@@ -80,11 +80,7 @@ func (p *parser) atKeyword(word string) bool {
 	if !p.at(token.Ident) || p.cur().Lit != word {
 		return false
 	}
-	switch p.toks[p.i+1].Kind {
-	case token.Colon, token.DoubleColon, token.ColonQuestion:
-		return false
-	}
-	return true
+	return !p.toks[p.i+1].Kind.IsSeparator()
 }
 
 func (p *parser) next() token.Token {
@@ -369,32 +365,23 @@ func (p *parser) parseLocalStatement(col int) ([]*ast.Binding, error) {
 func (p *parser) parseLocalBinding(col int) ([]*ast.Binding, error) {
 	kw := p.next()
 	// A colon here means the line was meant to be an entry keyed "local".
-	switch p.cur().Kind {
-	case token.Colon, token.DoubleColon, token.ColonQuestion:
+	if p.cur().Kind.IsSeparator() {
 		return nil, p.errorf(kw.Pos, "%q is a reserved word and must be quoted to be used as a key", kw.Lit)
 	}
 	if p.at(token.LBrace) {
 		return p.parseLocalBlock()
 	}
-	name, err := p.parseName("binding")
-	if err != nil {
-		return nil, err
-	}
-	fn, err := p.parseSignature(name)
-	if err != nil {
-		return nil, err
-	}
-	assign, err := p.expectAssign()
+	head, err := p.parseBindHead()
 	if err != nil {
 		return nil, err
 	}
 	// The value follows the "=" exactly as a mapping value follows its
 	// colon, so a binding may hold an indented block.
-	value, err := p.parseEntryValue(col, assign)
+	value, err := p.parseEntryValue(col, head.assign)
 	if err != nil {
 		return nil, err
 	}
-	return []*ast.Binding{bind(name, fn, value)}, nil
+	return []*ast.Binding{head.bind(value)}, nil
 }
 
 // parseLocalBlock parses the braced form. Bindings are written one per line,
@@ -419,22 +406,15 @@ func (p *parser) parseLocalBlock() ([]*ast.Binding, error) {
 		if !separated {
 			return nil, p.errorf(p.cur().Pos, "expected %q or a line break between bindings, found %s", ",", p.cur())
 		}
-		name, err := p.parseName("binding")
+		head, err := p.parseBindHead()
 		if err != nil {
-			return nil, err
-		}
-		fn, err := p.parseSignature(name)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expectAssign(); err != nil {
 			return nil, err
 		}
 		value, err := p.parseExpr()
 		if err != nil {
 			return nil, err
 		}
-		binds = append(binds, bind(name, fn, value))
+		binds = append(binds, head.bind(value))
 		if p.at(token.Comma) {
 			p.next()
 			continue
@@ -527,14 +507,41 @@ func (p *parser) parseParam(fn *ast.Function) (*ast.Param, error) {
 	return param, nil
 }
 
-// bind builds a binding of name to value, wrapping it in the function that
-// its parameter list declared.
-func bind(name token.Token, fn *ast.Function, value ast.Node) *ast.Binding {
-	if fn != nil {
-		fn.Body = value
-		value = fn
+// bindHead is everything a binding has before its value: its name, the
+// function that its parameter list declared, and the "=" that ends it.
+type bindHead struct {
+	name   token.Token
+	fn     *ast.Function
+	assign token.Token
+}
+
+// parseBindHead parses the name of a binding through to its "=", which is
+// written the same way whether the binding stands on its own or inside a
+// "local" block.
+func (p *parser) parseBindHead() (bindHead, error) {
+	name, err := p.parseName("binding")
+	if err != nil {
+		return bindHead{}, err
 	}
-	return &ast.Binding{Base: ast.At(name.Pos), Name: name.Lit, Value: value}
+	fn, err := p.parseSignature(name)
+	if err != nil {
+		return bindHead{}, err
+	}
+	assign, err := p.expectAssign()
+	if err != nil {
+		return bindHead{}, err
+	}
+	return bindHead{name: name, fn: fn, assign: assign}, nil
+}
+
+// bind builds the binding of the head to value, wrapping it in the function
+// that its parameter list declared.
+func (h bindHead) bind(value ast.Node) *ast.Binding {
+	if h.fn != nil {
+		h.fn.Body = value
+		value = h.fn
+	}
+	return &ast.Binding{Base: ast.At(h.name.Pos), Name: h.name.Lit, Value: value}
 }
 
 func (p *parser) expectAssign() (token.Token, error) {
@@ -588,8 +595,7 @@ func (p *parser) looksLikeEntry() bool {
 	if j < 0 || j >= len(p.toks) {
 		return false
 	}
-	k := p.toks[j].Kind
-	return k == token.Colon || k == token.DoubleColon || k == token.ColonQuestion
+	return p.toks[j].Kind.IsSeparator()
 }
 
 // keyEnd returns the index just past a key-shaped run of tokens starting at i,
