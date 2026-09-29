@@ -15,12 +15,16 @@ const (
 
 // Thunk is a value that is computed on first use and remembered afterwards.
 type Thunk struct {
-	node  ast.Node
-	env   *Env
-	pos   token.Pos
-	state thunkState
-	val   Value
-	err   error
+	node ast.Node
+	env  *Env
+	pos  token.Pos
+	// comments are the ones written on the binding this thunk holds, which
+	// travel to every entry that reads the binding back. They are empty
+	// for a thunk that is not a binding's.
+	comments Comments
+	state    thunkState
+	val      Value
+	err      error
 }
 
 // Done wraps an already computed value.

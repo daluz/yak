@@ -1,4 +1,3 @@
-# Bindings, defaults, and optional context lookups.
 service:
   name: shop-web
   labels:

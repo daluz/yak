@@ -134,10 +134,11 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
   condition yields `null`, which `:?` drops.
 - **Comprehensions.** `[p.name for p in $$.ports if p.tls]` builds a
   sequence, and `{[p.name]: p.number for p in $$.ports}` a mapping.
-- **Comments survive.** They are carried into the output, except the ones
-  written inside a `local` and the ones starting with `## `, which are
-  notes about the template. Every output format that can hold a comment
-  gets them, JSON dialects and TOML included.
+- **Comments survive.** They are carried into the output, and the ones
+  written on a `local` travel to wherever the binding is read. A comment
+  starting with `## ` is a note about the template and is left out. Every
+  output format that can hold a comment gets them, JSON dialects and TOML
+  included.
 
 [docs/SPEC.md](docs/SPEC.md) is the full language description, and
 [docs/CLI.md](docs/CLI.md) the tool that renders it.

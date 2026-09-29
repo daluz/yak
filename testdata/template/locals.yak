@@ -1,4 +1,4 @@
-# Bindings, defaults, and optional context lookups.
+## Bindings, defaults, and optional context lookups.
 local name = $$.app.name
 local {
   region = $$?.region ?? "us-east-1"

@@ -913,24 +913,60 @@ service:
   name: web # and its DNS label
 ```
 
-A comment belongs to the next thing that is rendered, so one written above a
-`local` comes out above whatever follows the binding. Comments with nothing
-after them come out at the end of the document.
+Comments with nothing after them come out at the end of the document.
 
-Two kinds of comment are left out of the output:
+### Comments on a binding
 
-- Anything written **inside a `local`**: in a `local { ... }` block, or in
-  the value of a binding. A binding renders nothing, so there is nowhere to
-  put them, and its value may be used in several places at once.
-- Any comment that starts with **`## `**, wherever it is written. This is
-  how to address the next person to edit the template rather than whoever
-  reads the output. A space has to follow the marker, so `##note` and a
-  `### banner` are ordinary comments, while a bare `##` is the marker with
-  nothing written on it.
+A `local` renders nothing of its own, so the comments written on one come out
+wherever the binding is read back. That covers a comment written above a
+binding, one written beside it, and the ones written inside a binding's
+value:
 
 ```yaml
 local {
-  # Dropped: this describes the bindings, not the output.
+  # Where everything lands.
+  region = "us-east-1"
+}
+
+local defaults =
+  # The image every service starts from.
+  image: "alpine"
+
+region: region
+container: defaults
+```
+
+renders as:
+
+```yaml
+# Where everything lands.
+region: us-east-1
+container:
+  # The image every service starts from.
+  image: alpine
+```
+
+Reading a binding back means writing its name as the whole value of an entry
+or of a sequence item. A binding named inside a larger expression, an
+interpolation among them, brings nothing along, because what comes out there
+is no longer the binding's value.
+
+The place the binding is read says its own piece first: a comment written
+there comes above whatever the binding brings, and one written beside the
+binding is used only where that place has none of its own. A binding read in
+several places brings its comments along to each of them, and one read by a
+hidden entry brings them nowhere, since `::` renders nothing at all.
+
+### Notes about the template
+
+A comment that starts with `## ` is left out of the output wherever it is
+written. This is how to address the next person to edit the template rather
+than whoever reads it, and it is how a comment on a binding says that it
+describes the binding rather than the value:
+
+```yaml
+local {
+  ## Describes the binding, not what it renders.
   region = "us-east-1"
 }
 ## Revisit when the cluster moves.
@@ -943,9 +979,10 @@ renders as:
 region: us-east-1
 ```
 
-Because a comment travels with the entry it was written on, a value that is
-used in several places brings its comments along to each of them. Comments in
-context files are not carried over at all.
+A space has to follow the marker, so `##note` and a `### banner` are ordinary
+comments, while a bare `##` is the marker with nothing written on it.
+
+Comments in context files are not carried over at all.
 
 ## Output
 

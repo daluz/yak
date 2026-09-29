@@ -47,6 +47,10 @@ type Mapping struct {
 // Binding is one "name = value" pair introduced by "local".
 type Binding struct {
 	Base
+	// Comments are the ones written on the binding itself. A binding
+	// renders nothing of its own, so they come out wherever it is read
+	// back instead.
+	Comments
 	Name  string
 	Value Node
 }
@@ -79,8 +83,8 @@ type Local struct {
 	Body  Node
 }
 
-// Comments are the source comments attached to a node that is rendered. The
-// renderer writes them back out around it.
+// Comments are the source comments attached to a node. The renderer writes
+// them back out around the entry or item that ends up carrying them.
 type Comments struct {
 	// Head holds the whole-line comments written above the node, in source
 	// order. Each keeps the "#" it was written with.

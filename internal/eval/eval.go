@@ -63,7 +63,12 @@ func (e *Env) pushBindings(binds []*ast.Binding) (*Env, error) {
 		if _, ok := s.binds[b.Name]; ok {
 			return nil, errorf(b.Pos(), "duplicate binding %q in the same scope", b.Name)
 		}
-		s.binds[b.Name] = &Thunk{node: b.Value, env: inner, pos: b.Value.Pos()}
+		s.binds[b.Name] = &Thunk{
+			node:     b.Value,
+			env:      inner,
+			pos:      b.Value.Pos(),
+			comments: comments(b.Comments),
+		}
 	}
 	return inner, nil
 }
@@ -218,7 +223,7 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 		if e.Merge {
 			continue
 		}
-		slots[i] = obj.reserve(comments(e.Comments), e.Hidden, e.HideNull,
+		slots[i] = obj.reserve(carried(comments(e.Comments), e.Value, child), e.Hidden, e.HideNull,
 			&Thunk{node: e.Value, env: child, pos: e.Value.Pos()})
 	}
 	for i, e := range node.Entries {
@@ -285,8 +290,8 @@ func applyMerge(o *Object, at int, e *ast.Entry, env *Env) (int, error) {
 	if !ok {
 		return 0, errorf(e.KeyPos, "%q needs a mapping to merge, found %s", "<<", v.TypeName())
 	}
-	c := comments(e.Comments)
-	added, carried := 0, false
+	c := carried(comments(e.Comments), e.Value, env)
+	added, placed := 0, false
 	for _, f := range src.Fields() {
 		q, held := o.index[f.Name]
 		var target *Field
@@ -317,15 +322,14 @@ func applyMerge(o *Object, at int, e *ast.Entry, env *Env) (int, error) {
 			target = o.fields[q]
 			target.Value = value
 		}
-		if !carried {
+		if !placed {
 			// The comments written on the "<<" belong to the first entry
-			// it decides, as the ones on a "local" belong to whatever
-			// follows the binding.
+			// it decides, ahead of whatever that entry carried in.
 			target.Head = append(append([]string(nil), c.Head...), target.Head...)
 			if target.Line == "" {
 				target.Line = c.Line
 			}
-			carried = true
+			placed = true
 		}
 	}
 	return added, nil
@@ -347,7 +351,7 @@ func evalSequence(node *ast.Sequence, env *Env) (Value, error) {
 	items := make([]*Elem, len(node.Items))
 	for i, item := range node.Items {
 		items[i] = &Elem{
-			Comments: comments(item.Comments),
+			Comments: carried(comments(item.Comments), item.Value, env),
 			Value:    &Thunk{node: item.Value, env: env, pos: item.Value.Pos()},
 		}
 	}
@@ -359,7 +363,10 @@ func evalSequence(node *ast.Sequence, env *Env) (Value, error) {
 func evalSeqComp(node *ast.SeqComp, env *Env) (Value, error) {
 	var items []*Elem
 	err := iterate(&node.Loop, env, func(child *Env) error {
-		items = append(items, &Elem{Value: &Thunk{node: node.Item, env: child, pos: node.Item.Pos()}})
+		items = append(items, &Elem{
+			Comments: carried(Comments{}, node.Item, child),
+			Value:    &Thunk{node: node.Item, env: child, pos: node.Item.Pos()},
+		})
 		return nil
 	})
 	if err != nil {
@@ -383,7 +390,7 @@ func evalMapComp(node *ast.MapComp, env *Env) (Value, error) {
 		if !ok {
 			return errorf(e.KeyPos, "mapping keys must be strings, found %s", key.TypeName())
 		}
-		slot := obj.reserve(comments(e.Comments), e.Hidden, e.HideNull,
+		slot := obj.reserve(carried(comments(e.Comments), e.Value, child), e.Hidden, e.HideNull,
 			&Thunk{node: e.Value, env: child, pos: e.Value.Pos()})
 		if err := obj.bind(slot, string(name)); err != nil {
 			return errorf(e.KeyPos, "two items of the comprehension produced the key %q", string(name))
@@ -430,6 +437,26 @@ func iterate(loop *ast.Loop, env *Env, yield func(*Env) error) error {
 // comments carries the comments of a syntax node through to the renderer.
 func comments(c ast.Comments) Comments {
 	return Comments{Head: c.Head, Line: c.Line, Foot: c.Foot}
+}
+
+// carried adds to c the comments written on the binding that node names. A
+// binding renders nothing of its own, so its comments come out on whatever
+// reads it back, below the comments that place was written with and beside
+// it only when it has no trailing comment of its own.
+func carried(c Comments, node ast.Node, env *Env) Comments {
+	id, ok := node.(*ast.Ident)
+	if !ok {
+		return c
+	}
+	t, ok := env.lookup(id.Name)
+	if !ok || (len(t.comments.Head) == 0 && t.comments.Line == "") {
+		return c
+	}
+	c.Head = append(append([]string(nil), c.Head...), t.comments.Head...)
+	if c.Line == "" {
+		c.Line = t.comments.Line
+	}
+	return c
 }
 
 func evalString(node *ast.String, env *Env) (Value, error) {

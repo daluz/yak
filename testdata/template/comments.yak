@@ -9,24 +9,26 @@ service:
   port: 8080
 
 local {
-  # A comment inside a "local" block is dropped with the block.
+  # A comment on a binding travels to wherever the binding is read.
   region = "us-east-1"
-  zone = "{region}a"
+  zone = "{region}a"   # so does one written beside it
 }
 
 local defaults =
-  # Dropped too: this one sits inside a binding's value.
+  # One written inside a binding's value travels with the value.
   tier: "shared"
 
-# A comment above a binding belongs to the next thing that is rendered.
-local owner = "platform"   # and one written beside it is dropped
+## A note on a binding is left out, like a note written anywhere else.
+local owner = "platform"
 
 placement:
+  # What the entry says itself comes first.
   region: region
   zone: zone
 
 team: owner
 defaults: defaults
+copy: defaults         # a second reading brings the same comments along
 
 workers:
   # The queue worker comes first.
@@ -36,6 +38,8 @@ workers:
 credentials::
   # Dropped along with the hidden entry it describes.
   user: "admin"
+
+spare:: defaults       # a hidden entry carries nothing out either
 
 ### A banner is not the marker, so this comment is kept.
 endpoint: "https://{$$.host}/"

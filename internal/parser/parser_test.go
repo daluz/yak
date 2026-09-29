@@ -499,8 +499,10 @@ func dumpComments(n ast.Node) []string {
 	var out []string
 	switch t := n.(type) {
 	case *ast.Local:
+		out = append(out, dumpBindings(t.Binds)...)
 		out = append(out, dumpComments(t.Body)...)
 	case *ast.Mapping:
+		out = append(out, dumpBindings(t.Binds)...)
 		for _, e := range t.Entries {
 			out = append(out, labelComments(dump(e.Key), e.Comments)...)
 			out = append(out, dumpComments(e.Value)...)
@@ -510,6 +512,17 @@ func dumpComments(n ast.Node) []string {
 			out = append(out, labelComments(fmt.Sprintf("[%d]", i), item.Comments)...)
 			out = append(out, dumpComments(item.Value)...)
 		}
+	}
+	return out
+}
+
+// dumpBindings lists the comments that the bindings of a block carry, which
+// travel to wherever each binding is read back.
+func dumpBindings(binds []*ast.Binding) []string {
+	var out []string
+	for _, b := range binds {
+		out = append(out, labelComments("local "+b.Name, b.Comments)...)
+		out = append(out, dumpComments(b.Value)...)
 	}
 	return out
 }
@@ -545,11 +558,13 @@ func TestParseComments(t *testing.T) {
 		{"at the end of a document", "a: 1\n# c\n", `"a" foot # c`},
 		{"at the end of the first document", "a: 1\n# c\n---\nb: 2\n", `"a" foot # c`},
 
-		{"above a binding", "# c\nlocal x = 1\na: x\n", `"a" head # c`},
-		{"beside a binding", "local x = 1 # c\na: x\n", ""},
-		{"inside a binding's value", "local x =\n  # c\n  b: 1\na: x\n", ""},
-		{"inside a local block", "local {\n  # c\n  x = 1\n}\na: x\n", ""},
-		{"above a binding in a block", "a:\n  # c\n  local x = 1\n  b: x\n", `"b" head # c`},
+		{"above a binding", "# c\nlocal x = 1\na: x\n", `local x head # c`},
+		{"beside a binding", "local x = 1 # c\na: x\n", `local x line # c`},
+		{"inside a binding's value", "local x =\n  # c\n  b: 1\na: x\n", `"b" head # c`},
+		{"inside a local block", "local {\n  # c\n  x = 1\n}\na: x\n", `local x head # c`},
+		{"above a local block", "# c\nlocal {\n  x = 1\n}\na: x\n", `local x head # c`},
+		{"beside a binding in a block", "local {\n  x = 1 # c\n  y = 2\n}\na: x\n", `local x line # c`},
+		{"above a binding in a block", "a:\n  # c\n  local x = 1\n  b: x\n", `local x head # c`},
 
 		{"marked for the template", "## c\na: 1\n", ""},
 		{"marked beside an entry", "a: 1 ## c\n", ""},

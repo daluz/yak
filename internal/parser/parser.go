@@ -40,33 +40,18 @@ type parser struct {
 	prevEnd token.Pos
 
 	comments *commentSet
-	// localDepth counts the "local" statements being parsed, and localStart
-	// is where the innermost of them began. A binding renders nothing, so
-	// the comments inside one have nowhere to go.
-	localDepth int
-	localStart int
 }
 
 // takeHead claims the comments written above the current token for the node
 // about to be parsed.
 func (p *parser) takeHead() []string {
-	if p.localDepth > 0 {
-		// Claim the comments written inside the binding and throw them
-		// away. The ones above it are left for what follows it.
-		p.comments.head(p.localStart, p.i)
-		return nil
-	}
-	return p.comments.head(-1, p.i)
+	return p.comments.head(p.i)
 }
 
 // takeLine claims the comment trailing a node that began at token start and
 // ends at the current position.
 func (p *parser) takeLine(start int) string {
-	line := p.comments.line(start, p.i)
-	if p.localDepth > 0 {
-		return ""
-	}
-	return line
+	return p.comments.line(start, p.i)
 }
 
 func (p *parser) cur() token.Token { return p.toks[p.i] }
@@ -207,7 +192,7 @@ func (p *parser) parseLocalScope(col int, bare bool) (ast.Node, error) {
 	pos := p.cur().Pos
 	var binds []*ast.Binding
 	for p.atLocal() && p.cur().Col() == col {
-		declared, err := p.parseLocalStatement(col)
+		declared, err := p.parseLocalBinding(col)
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +236,7 @@ func (p *parser) parseBlockMapping(col int) (*ast.Mapping, error) {
 			return nil, p.errorf(t.Pos, "unexpected indentation: expected a mapping key at column %d", col)
 		}
 		if p.atLocal() {
-			declared, err := p.parseLocalStatement(col)
+			declared, err := p.parseLocalBinding(col)
 			if err != nil {
 				return nil, err
 			}
@@ -347,46 +332,42 @@ func (p *parser) atLocal() bool {
 	return p.at(token.Ident) && p.cur().Lit == token.KeywordLocal
 }
 
-// parseLocalStatement parses one "local name = value" binding or a
+// parseLocalBinding parses one "local name = value" binding or a
 // "local { ... }" block of them.
 //
-// A binding renders nothing, so the comments written inside one are claimed
-// and dropped rather than left to drift onto the next entry.
-func (p *parser) parseLocalStatement(col int) ([]*ast.Binding, error) {
-	start := p.i
-	outer := p.localStart
-	p.localDepth, p.localStart = p.localDepth+1, start
-	binds, err := p.parseLocalBinding(col)
-	p.localDepth, p.localStart = p.localDepth-1, outer
-	p.comments.drop(start, p.i)
-	return binds, err
-}
-
+// The comments written on a binding are claimed by the binding itself rather
+// than left for whatever follows it, since a binding renders nothing of its
+// own and its comments travel to wherever it is read back.
 func (p *parser) parseLocalBinding(col int) ([]*ast.Binding, error) {
+	start := p.i
+	head := p.takeHead()
 	kw := p.next()
 	// A colon here means the line was meant to be an entry keyed "local".
 	if p.cur().Kind.IsSeparator() {
 		return nil, p.errorf(kw.Pos, "%q is a reserved word and must be quoted to be used as a key", kw.Lit)
 	}
 	if p.at(token.LBrace) {
-		return p.parseLocalBlock()
+		return p.parseLocalBlock(head)
 	}
-	head, err := p.parseBindHead()
+	bh, err := p.parseBindHead()
 	if err != nil {
 		return nil, err
 	}
 	// The value follows the "=" exactly as a mapping value follows its
 	// colon, so a binding may hold an indented block.
-	value, err := p.parseEntryValue(col, head.assign)
+	value, err := p.parseEntryValue(col, bh.assign)
 	if err != nil {
 		return nil, err
 	}
-	return []*ast.Binding{head.bind(value)}, nil
+	bind := bh.bind(value)
+	bind.Comments = ast.Comments{Head: head, Line: p.takeLine(start)}
+	return []*ast.Binding{bind}, nil
 }
 
 // parseLocalBlock parses the braced form. Bindings are written one per line,
-// or separated by commas when several share a line.
-func (p *parser) parseLocalBlock() ([]*ast.Binding, error) {
+// or separated by commas when several share a line. head holds the comments
+// written above the block, which belong to the first binding in it.
+func (p *parser) parseLocalBlock(head []string) ([]*ast.Binding, error) {
 	open := p.next()
 	var binds []*ast.Binding
 	// separated records that the previous binding ran to the end of its line
@@ -406,7 +387,12 @@ func (p *parser) parseLocalBlock() ([]*ast.Binding, error) {
 		if !separated {
 			return nil, p.errorf(p.cur().Pos, "expected %q or a line break between bindings, found %s", ",", p.cur())
 		}
-		head, err := p.parseBindHead()
+		start := p.i
+		above := p.takeHead()
+		if len(binds) == 0 {
+			above = append(head, above...)
+		}
+		bh, err := p.parseBindHead()
 		if err != nil {
 			return nil, err
 		}
@@ -414,7 +400,9 @@ func (p *parser) parseLocalBlock() ([]*ast.Binding, error) {
 		if err != nil {
 			return nil, err
 		}
-		binds = append(binds, head.bind(value))
+		bind := bh.bind(value)
+		bind.Comments = ast.Comments{Head: above, Line: p.takeLine(start)}
+		binds = append(binds, bind)
 		if p.at(token.Comma) {
 			p.next()
 			continue

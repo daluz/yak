@@ -5,12 +5,17 @@ service:
   name: web # so do the ones written after a value
   replicas: 2
   port: 8080
-# A comment above a binding belongs to the next thing that is rendered.
 placement:
+  # What the entry says itself comes first.
+  # A comment on a binding travels to wherever the binding is read.
   region: us-east-1
-  zone: us-east-1a
+  zone: us-east-1a # so does one written beside it
 team: platform
 defaults:
+  # One written inside a binding's value travels with the value.
+  tier: shared
+copy: # a second reading brings the same comments along
+  # One written inside a binding's value travels with the value.
   tier: shared
 workers:
   # The queue worker comes first.

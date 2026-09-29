@@ -28,14 +28,12 @@ func newCommentSet(comments []token.Comment) *commentSet {
 
 // head claims the whole-line comments that have come due at the token at i:
 // the ones written directly above it, and any that a construct in between
-// left behind because it renders nothing. Comments at or before after are
-// left alone, which is how a comment written above a binding stays available
-// to whatever follows the binding.
-func (c *commentSet) head(after, i int) []string {
+// left behind because it renders nothing.
+func (c *commentSet) head(i int) []string {
 	var out []string
 	for n := range c.all {
 		cm := &c.all[n]
-		if c.claimed[n] || !cm.OwnLine || cm.Next <= after || cm.Next > i {
+		if c.claimed[n] || !cm.OwnLine || cm.Next > i {
 			continue
 		}
 		c.claimed[n] = true
@@ -64,24 +62,6 @@ func (c *commentSet) line(start, end int) string {
 		}
 	}
 	return out
-}
-
-// drop claims the comments written between the tokens from start to end
-// without handing them to anyone, so that a comment written where nothing is
-// rendered cannot drift onto a later node.
-//
-// A whole-line comment past the last of those tokens is left alone: it sits
-// below the construct and so belongs to whatever comes next.
-func (c *commentSet) drop(start, end int) {
-	for n := range c.all {
-		cm := &c.all[n]
-		if c.claimed[n] || cm.Next <= start || cm.Next > end {
-			continue
-		}
-		if cm.Next < end || !cm.OwnLine {
-			c.claimed[n] = true
-		}
-	}
 }
 
 // rendered reports the text a comment contributes to the output. A "## "

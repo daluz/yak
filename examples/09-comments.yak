@@ -16,25 +16,32 @@ service:
   port: 8080
 
 local {
-  # Dropped along with the block. A binding renders nothing, so a comment
-  # inside one has nowhere to go, and its value may be used in many places.
+  # A binding renders nothing of its own, so a comment written on one comes
+  # out wherever the binding is read back.
   region = "us-east-1"
+  zone = "{region}a"   # so does one written beside the binding
 }
 
 local defaults =
-  # Dropped too: this sits inside a binding's value.
+  # One written inside a binding's value travels with the value.
   tier: "shared"
 
-# A comment belongs to the next thing that is rendered, so one written above
-# a binding comes out above whatever follows it.
-local zone = "{region}a"
+## A note marks a comment that describes the binding rather than what it
+## renders, which is how a binding says nothing at the places that read it.
+local owner = "platform"
 
 placement:
+  # What the entry says itself comes first.
   region: region
   zone: zone
 
+team: owner
+
 ### A banner is not the marker, so this one is kept.
 defaults: defaults
+
+# A binding read in two places brings its comments along to both.
+copy: defaults
 
 workers:
   # Items keep their own comments.
