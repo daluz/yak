@@ -50,27 +50,83 @@ func (e *Env) pushSelf(o *Object) *Env {
 	return &Env{doc: e.doc, self: self, scope: e.scope}
 }
 
-// pushBindings returns an environment that adds a frame holding binds. The
-// bindings are evaluated in that same environment, so they may refer to each
-// other; a binding that ends up needing itself is reported as a cycle.
-func (e *Env) pushBindings(binds []*ast.Binding) (*Env, error) {
-	if len(binds) == 0 {
-		return e, nil
+// regions holds the environments a block's bindings create. A name may be
+// bound more than once in a block, so what a reference reads depends on where
+// it is written: envs[j] is in effect below the j'th binding, and envs[0]
+// above them all.
+type regions struct {
+	envs []*Env
+	// decl holds the position of each binding, so decl[j] opens envs[j+1].
+	// It is empty when one environment covers the whole block.
+	decl []token.Pos
+}
+
+// at returns the environment a node written at pos reads names in, which is
+// the one opened by the last binding declared above it.
+func (r *regions) at(pos token.Pos) *Env {
+	j := 0
+	for j < len(r.decl) && before(r.decl[j], pos) {
+		j++
 	}
-	s := &scope{outer: e.scope, binds: make(map[string]*Thunk, len(binds))}
-	inner := &Env{doc: e.doc, self: e.self, scope: s}
-	for _, b := range binds {
-		if _, ok := s.binds[b.Name]; ok {
-			return nil, errorf(b.Pos(), "duplicate binding %q in the same scope", b.Name)
-		}
-		s.binds[b.Name] = &Thunk{
+	return r.envs[j]
+}
+
+// last returns the environment below every binding of the block.
+func (r *regions) last() *Env { return r.envs[len(r.envs)-1] }
+
+// before reports whether a is written above b, or to its left on one line.
+func before(a, b token.Pos) bool {
+	if a.Line != b.Line {
+		return a.Line < b.Line
+	}
+	return a.Col < b.Col
+}
+
+// pushBindings returns the environments that binds create over e. A binding
+// is evaluated in the environment above its own line, so a rebinding reads
+// the binding it replaces while a lone one reads itself; a binding that ends
+// up needing itself is reported as a cycle.
+func (e *Env) pushBindings(binds []*ast.Binding) *regions {
+	if len(binds) == 0 {
+		return &regions{envs: []*Env{e}}
+	}
+	// The thunks come first because each binding's environment has to be
+	// able to name the bindings around it, including later ones.
+	thunks := make([]*Thunk, len(binds))
+	for i, b := range binds {
+		thunks[i] = &Thunk{
 			node:     b.Value,
-			env:      inner,
 			pos:      b.Value.Pos(),
 			comments: comments(b.Comments),
 		}
 	}
-	return inner, nil
+	// The outermost frame holds the first binding of every name, which is
+	// what a reference written above them all reads.
+	first := make(map[string]*Thunk, len(binds))
+	for i, b := range binds {
+		if _, ok := first[b.Name]; !ok {
+			first[b.Name] = thunks[i]
+		}
+	}
+	env := &Env{doc: e.doc, self: e.self, scope: &scope{outer: e.scope, binds: first}}
+	// With no name bound twice, that one frame covers the whole block and
+	// nothing has to care where it is read from.
+	if len(first) == len(binds) {
+		for _, t := range thunks {
+			t.env = env
+		}
+		return &regions{envs: []*Env{env}}
+	}
+	r := &regions{envs: make([]*Env, 1, len(binds)+1), decl: make([]token.Pos, len(binds))}
+	r.envs[0] = env
+	for i, b := range binds {
+		thunks[i].env = env
+		env = &Env{doc: e.doc, self: e.self,
+			scope: &scope{outer: env.scope, binds: map[string]*Thunk{b.Name: thunks[i]}}}
+		r.decl[i] = b.Pos()
+		r.envs = append(r.envs, env)
+	}
+	return r
 }
 
 // bindOne returns an environment that adds a frame holding a single binding,
@@ -208,13 +264,10 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 // key the mapping writes for itself is known.
 func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 	obj := NewObject()
-	child := env.pushSelf(obj)
 	// Bindings sit inside the mapping's own self frame, so a binding may
-	// read a field with ".name" just as an entry can.
-	child, err := child.pushBindings(node.Binds)
-	if err != nil {
-		return nil, err
-	}
+	// read a field with ".name" just as an entry can. An entry reads them
+	// as of its own line, which is all a rebinding changes.
+	binds := env.pushSelf(obj).pushBindings(node.Binds)
 
 	slots := make([]*Field, len(node.Entries))
 	for i, e := range node.Entries {
@@ -223,6 +276,7 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 		if e.Merge {
 			continue
 		}
+		child := binds.at(e.KeyPos)
 		slots[i] = obj.reserve(carried(comments(e.Comments), e.Value, child), e.Hidden, e.HideNull,
 			&Thunk{node: e.Value, env: child, pos: e.Value.Pos()})
 	}
@@ -240,7 +294,7 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 		if _, ok := literalKey(e); ok {
 			continue
 		}
-		key, err := evalNode(e.Key, child)
+		key, err := evalNode(e.Key, binds.at(e.KeyPos))
 		if err != nil {
 			return nil, err
 		}
@@ -262,7 +316,7 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 			written++
 			continue
 		}
-		n, err := applyMerge(obj, written+added, e, child)
+		n, err := applyMerge(obj, written+added, e, binds.at(e.KeyPos))
 		if err != nil {
 			return nil, err
 		}
@@ -489,12 +543,10 @@ func evalSelf(node *ast.Self, env *Env) (Value, error) {
 	return env.self[node.Up], nil
 }
 
+// evalLocal evaluates a body that is not a mapping. The body sits below every
+// binding of the block, so it reads the last of each.
 func evalLocal(node *ast.Local, env *Env) (Value, error) {
-	child, err := env.pushBindings(node.Binds)
-	if err != nil {
-		return nil, err
-	}
-	return evalNode(node.Body, child)
+	return evalNode(node.Body, env.pushBindings(node.Binds).last())
 }
 
 // yamlBooleans are the extra boolean spellings YAML accepts and yak does not.

@@ -201,6 +201,41 @@ func TestLocals(t *testing.T) {
 			want: "outer: outer\nchild:\n  inner: inner\n",
 		},
 		{
+			name: "a rebinding reads the binding it replaces",
+			src:  "local size = \"small\"\ndev: size\nlocal size = \"{size}-ish\"\nprod: size\n",
+			want: "dev: small\nprod: small-ish\n",
+		},
+		{
+			name: "a nested block reads a rebinding at its own lines",
+			src:  "local n = 1\nweb:\n  v: n\nlocal n = 2\napi:\n  v: n\n",
+			want: "web:\n  v: 1\napi:\n  v: 2\n",
+		},
+		{
+			name: "a read above every binding of a name finds the first",
+			src:  "v: n\nlocal n = 1\nlocal n = 2\nw: n\n",
+			want: "v: 1\nw: 2\n",
+		},
+		{
+			name: "a rebinding in a one-line block",
+			src:  "local { a = 1, a = a + 1 }\nv: a\n",
+			want: "v: 2\n",
+		},
+		{
+			name: "a rebound function calls the one it replaces",
+			src:  "local f(x) = x\nlocal f(x) = f(x) + 1\nv: f(1)\n",
+			want: "v: 2\n",
+		},
+		{
+			name: "a body that is not a mapping reads the last binding",
+			src:  "local a = 1\nlocal a = 2\n- a\n",
+			want: "- 2\n",
+		},
+		{
+			name: "a rebinding only covers the block it is written in",
+			src:  "local n = 1\nlocal n = 2\nchild:\n  v: n\n",
+			want: "child:\n  v: 2\n",
+		},
+		{
 			name: "a nested scope still sees the outer bindings",
 			src:  "local n = \"outer\"\nchild:\n  local m = \"inner\"\n  v: \"{n}-{m}\"\n",
 			want: "child:\n  v: outer-inner\n",
@@ -733,7 +768,7 @@ func TestEvalErrors(t *testing.T) {
 		{"duplicate computed key", "a: 1\n[\"a\"]: 2\n", "", `duplicate key "a"`},
 		{"self referential mapping", "a: .\n", "", "contains itself"},
 		{"unknown identifier lists bindings", "local host = \"h\"\na: hosts\n", "", `bindings in scope: "host"`},
-		{"duplicate binding", "local x = 1\nlocal x = 2\na: x\n", "", `duplicate binding "x"`},
+		{"a binding that names itself", "local a = a\nv: a\n", "", "circular reference"},
 		{"binding cycle", "local a = b\nlocal b = a\nv: a\n", "", "circular reference"},
 		{"a binding out of scope", "a:\n  local x = 1\n  b: x\nc: x\n", "", `unknown identifier "x"`},
 		{"coalesce does not hide a missing field", "a: $$.nope ?? 1\n", "", `no field "nope"`},

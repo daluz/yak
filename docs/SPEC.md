@@ -393,8 +393,7 @@ labels:
   app: label
 ```
 
-A binding in an inner block shadows an outer one of the same name. Two
-bindings of the same name in one block are an error:
+A binding in an inner block shadows an outer one of the same name:
 
 ```yaml
 local tier = "shared"
@@ -404,6 +403,25 @@ web:
 api:
   tier: tier           # "shared"
 ```
+
+A name may also be bound again in the block it is already bound in, which
+rebinds it from that line down. A reference reads the binding declared most
+recently above it, and the rebinding's own value reads the binding it
+replaces:
+
+```yaml
+local size = "small"
+dev:
+  tier: size           # "small"
+local size = "{size}-ish"
+prod:
+  tier: size           # "small-ish"
+```
+
+A nested block is read at the lines it is written on, which is why `dev` and
+`prod` above differ. Bindings written in one `local { ... }` block count in
+the order they appear. A reference written above every binding of a name
+reads the first one, so a name bound once can be read anywhere in its block.
 
 Every document has its own bindings; nothing carries across a `---`.
 
@@ -419,7 +437,9 @@ name: "web"
 
 Because they resolve lazily, bindings may refer to each other in any order,
 and a binding that ends up needing itself is reported as a circular reference.
-A binding that is never used is never evaluated.
+A rebinding names the binding it replaces rather than itself, so `local a = a`
+is a circular reference while a second `local a = a` is not. A binding that is
+never used is never evaluated.
 
 ## Functions
 
@@ -477,7 +497,8 @@ binding too, and shadows anything of its name that the function could
 otherwise see.
 
 The body is evaluated where the function was written, not where it is called,
-so `.name` inside one names the mapping that holds the declaration:
+so `.name` inside one names the mapping that holds the declaration, and a name
+it reads is the binding in effect at the declaration rather than at the call:
 
 ```yaml
 name: "shop"

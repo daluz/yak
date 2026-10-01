@@ -50,6 +50,15 @@ web:
 api:
   tier: tier
 
+## A name bound again in the same block is rebound from that line down, and
+## the rebinding reads the binding it replaces.
+local tag = "v1"
+staging:
+  image: "app:{tag}"
+local tag = "{tag}-patched"
+production:
+  image: "app:{tag}"
+
 ## A binding that is never used is never evaluated, so this one's missing
 ## field costs nothing.
 local unused = $$.absent

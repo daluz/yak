@@ -19,7 +19,7 @@ of the output, so what a template renders stays clean. The exception is
 | --- | --- |
 | [01-strings.yak](01-strings.yak) | Quoting forms, interpolation, raw strings, block scalars. |
 | [02-references.yak](02-references.yak) | `.`, `..`, `$`, `$$` and `$yak`, indexing, `?.` and `??`. |
-| [03-locals.yak](03-locals.yak) | `local` bindings: blocks, block values, scope and shadowing. |
+| [03-locals.yak](03-locals.yak) | `local` bindings: blocks, block values, scope, shadowing and rebinding. |
 | [04-functions.yak](04-functions.yak) | Parameters, defaults, named arguments, functions as values. |
 | [05-fields.yak](05-fields.yak) | Hidden `::` and optional `:?` entries, and the built-ins. |
 | [06-merging.yak](06-merging.yak) | `<<` as an operator and as a key, and what `+` joins. |

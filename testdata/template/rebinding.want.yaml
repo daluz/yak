@@ -1,0 +1,13 @@
+early: v1
+first: v1
+second: v1-patched
+staging:
+  image: app:v1-patched
+production:
+  image: app:latest
+third: latest
+bumped: 8
+# The platform team owns this.
+before: platform
+# Ownership moved to infra.
+after: infra
