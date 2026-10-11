@@ -1,2 +1,2 @@
-import std.strings
-a: strings.upper("x")
+import std.nope
+a: nope.upper("x")

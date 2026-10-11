@@ -1,0 +1,1 @@
+strings-join-item.yak:2:21: "join" needs a sequence of strings, found integer at index 1

@@ -1,0 +1,43 @@
+import std.strings
+
+name: "  Web-Frontend  "
+local name = strings.trim($.name)
+
+case:
+  upper: strings.upper(name)
+  lower: strings.lower(name)
+  accented: strings.upper("café")
+
+trimmed:
+  prefix: strings.trimPrefix("v1.2.3", "v")
+  suffix: strings.trimSuffix("app.yak", ".yak")
+  untouched: strings.trimPrefix("1.2.3", "v")
+
+tests:
+  contains: strings.contains(name, "Front")
+  starts: strings.startsWith(name, "Web")
+  ends: strings.endsWith(name, "web")
+
+replaced: strings.replace("a.b.c", ".", "/")
+repeated: strings.repeat("ab", 3)
+truncated:
+  long: strings.truncate("a-very-long-release-name", 10)
+  short: strings.truncate("short", 10)
+  characters: strings.truncate("café au lait", 4)
+
+split:
+  hosts: strings.split($$.hosts, ",")
+  characters: strings.split("abc", "")
+  empty: strings.split("", ",")
+
+## join is the reverse of split.
+joined: strings.join(strings.split($$.hosts, ","), " | ")
+named: strings.join(separator = "-", values = ["a", "b"])
+
+## Like any built-in, a module's functions are values.
+local apply(fn, to) = fn(to)
+applied: apply(strings.lower, "LOUD")
+
+## The module can be imported under another name.
+import str = std.strings
+renamed: str.upper("quiet")

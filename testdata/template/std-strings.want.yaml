@@ -1,0 +1,32 @@
+name: '  Web-Frontend  '
+case:
+  upper: WEB-FRONTEND
+  lower: web-frontend
+  accented: CAFÉ
+trimmed:
+  prefix: 1.2.3
+  suffix: app
+  untouched: 1.2.3
+tests:
+  contains: true
+  starts: true
+  ends: false
+replaced: a/b/c
+repeated: ababab
+truncated:
+  long: a-very-lon
+  short: short
+  characters: café
+split:
+  hosts:
+    - a.example.com
+    - b.example.com
+  characters:
+    - a
+    - b
+    - c
+  empty: []
+joined: a.example.com | b.example.com
+named: a-b
+applied: loud
+renamed: QUIET

@@ -600,10 +600,50 @@ a: size([1, 2])   # "mine"
 ```
 
 Built-ins are bare names, which is why there are few of them and why they are
-about values in general rather than any one kind of value. The library modules
-to come — string, encoding and formatting helpers — will be namespaced
-instead, so that growing the library cannot take a bare name out from under a
-template.
+about values in general rather than any one kind of value. Everything else
+lives in a module of the [standard library](#the-standard-library) and is
+reached through an import, so that growing the library cannot take a bare name
+out from under a template.
+
+### `std.strings`
+
+```yaml
+import std.strings
+
+name: strings.lower(strings.trim($$.name))
+hosts: strings.split($$.hosts, ",")
+```
+
+| Call | Answer |
+| --- | --- |
+| `upper(value)` | `value` in upper case. |
+| `lower(value)` | `value` in lower case. |
+| `trim(value)` | `value` without the whitespace at either end. |
+| `trimPrefix(value, prefix)` | `value` without `prefix` at its start, or `value` itself. |
+| `trimSuffix(value, suffix)` | `value` without `suffix` at its end, or `value` itself. |
+| `contains(value, substring)` | Whether `substring` appears in `value`. |
+| `startsWith(value, prefix)` | Whether `value` starts with `prefix`. |
+| `endsWith(value, suffix)` | Whether `value` ends with `suffix`. |
+| `replace(value, old, new)` | `value` with every `old` replaced by `new`. |
+| `repeat(value, count)` | `value` written `count` times over. |
+| `truncate(value, length)` | The first `length` characters of `value`, or all of it when it is shorter. |
+| `split(value, separator)` | The sequence of the pieces of `value` between each `separator`. |
+| `join(values, separator)` | The strings of a sequence written one after another, with `separator` between them. |
+
+Every argument but a count is a string, and anything else is an error naming
+the type that was found; `count` and `length` are integers of zero or more.
+Lengths are in characters rather than bytes, as they are for `size`, so
+`truncate("café", 3)` is `"caf"`.
+
+`split` with an empty separator splits `value` into its characters, and
+splitting `""` gives `[]`. `join` needs every item of the sequence to be a
+string already rather than converting it, so a number that ends up in the
+middle of a joined string is one the template wrote there on purpose:
+
+```yaml
+ports: [80, 443]
+list: strings.join(["{p}" for p in .ports], ",")   # "80,443"
+```
 
 ## Modules
 
@@ -689,8 +729,15 @@ works. A `yak.lock` that pins remote sources will come with them.
 
 Paths that begin with `std` name the standard library's modules. They never
 resolve to a file and a `yak.mod` cannot map them, so a library module can
-always be found under its own name. The library has no modules yet; the
-built-ins in [Standard library](#standard-library) are bare names.
+always be found under its own name, and a module added to the library cannot
+take a path a project already uses. Importing one binds a mapping of its
+functions under the last segment of its path, as for any other module;
+[Standard library](#standard-library) lists them beside the built-ins that are
+bare names. Rename the import to choose another namespace:
+
+```yaml
+import str = std.strings
+```
 
 ## Missing values
 

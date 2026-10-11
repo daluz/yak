@@ -1,0 +1,3 @@
+import std.strings
+replicas: 3
+label: strings.upper(.replicas)

@@ -1,0 +1,1 @@
+strings-not-a-string.yak:3:22: "upper" needs a string, found integer

@@ -1,1 +1,1 @@
-import-std.yak:1:8: the standard library has no module "std.strings"
+import-std.yak:1:8: the standard library has no module "std.nope"

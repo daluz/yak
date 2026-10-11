@@ -3,7 +3,7 @@
 Done so far: the restricted YAML parser, string interpolation, relative
 references, hidden fields, context files, the `template` command, `local`
 bindings, functions named and anonymous, the `size`, `empty` and `nullify`
-built-ins, the `??` and
+built-ins, the `std.strings` module, the `??` and
 `?.` operators, arithmetic, comparison and boolean operators, the `<<` merge
 in both of its forms,
 `if`/`then`/`else`, sequence and mapping comprehensions, `import` of local
@@ -27,12 +27,14 @@ a `local` shadows it. Built-ins are grouped into built-in modules under
 so its members are bare names; `size`, `empty` and `nullify` are the three
 that live there.
 
-What remains is the larger part of the library — string manipulation,
-encoding, and formatting — which will be namespaced rather than bare, so that
-adding a function cannot take a name a template is already using. Each of
-those is a built-in module registered under a dotted path beginning with `std`,
-which `import std.name` binds as a mapping of its built-ins; the `std`
-segment is one that no file or `yak.mod` can take.
+The rest of the library is namespaced rather than bare, so that adding a
+function cannot take a name a template is already using. Each module is a
+built-in module registered under a dotted path beginning with `std`, which
+`import std.name` binds as a mapping of its built-ins; the `std` segment is
+one that no file or `yak.mod` can take. `std.strings`, in `strings.go`, is the
+first; names that take more than one word are camelCase.
+
+What remains is encoding and formatting.
 
 `render` belongs here rather than among the statements: it will be a built-in,
 so the name stays an ordinary identifier until then.
