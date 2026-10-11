@@ -10,19 +10,40 @@ import (
 )
 
 // docState holds the per-document state shared by every environment inside
-// that document.
+// that document. A module it imports has a docState of its own, and shares
+// its session with the document that imported it.
 type docState struct {
-	root    *Thunk
+	root *Thunk
+	// yak is the mapping "$yak" answers. It describes the run and the file
+	// the document was read from.
+	yak     Value
+	session *Session
+}
+
+// Session is the state a document and every module it imports have in common.
+type Session struct {
+	run     Run
 	context Value
-	// yak is the mapping "$yak" answers. It describes the run, so every
-	// document of a stream sees the same thing.
-	yak Value
+	mods    Modules
+	// builtins are the members of the root module. They are found only after
+	// every binding in scope, so a local of the same name shadows one rather
+	// than colliding with it.
+	builtins map[string]*Builtin
 	// stack records the positions currently being evaluated so that a cycle
 	// can be reported as the chain of references that formed it.
 	stack []token.Pos
 	// depth counts the function calls being evaluated, which bounds a
 	// recursion that never ends.
 	depth int
+}
+
+// Modules supplies the modules a document can reach: the root module, whose
+// built-ins are bare names, and every module an import names.
+type Modules interface {
+	Root() []*Builtin
+	// Import answers the root of the module node names, which is evaluated
+	// in s the first time it is read.
+	Import(s *Session, node *ast.Import) (*Thunk, error)
 }
 
 // Env is the lexical environment of an expression.
@@ -188,17 +209,30 @@ func yakMapping(run Run) *Object {
 }
 
 // Document evaluates a single document against the given context value and
-// the description of the run behind "$yak". The returned value is fully
-// constructed but its leaves are still lazy; use Force to resolve them.
-func Document(doc *ast.Document, context Value, run Run) (Value, error) {
+// the description of the run behind "$yak", reaching modules through mods.
+// The returned value is fully constructed but its leaves are still lazy; use
+// Force to resolve them.
+func Document(doc *ast.Document, context Value, run Run, mods Modules) (Value, error) {
 	if context == nil {
 		context = NewObject()
 	}
-	ds := &docState{context: context, yak: yakMapping(run)}
-	env := &Env{doc: ds}
-	root := &Thunk{node: doc.Body, env: env, pos: doc.Pos()}
-	ds.root = root
-	return root.Value()
+	s := &Session{run: run, context: context, mods: mods, builtins: map[string]*Builtin{}}
+	for _, b := range mods.Root() {
+		s.builtins[b.Name] = b
+	}
+	return s.Document(doc, run.FilePath).Value()
+}
+
+// Document answers the root of doc, read from file, which is evaluated in the
+// session the first time it is read. "$yak" describes the run as it does for
+// the template, except that it names file as the one being read.
+func (s *Session) Document(doc *ast.Document, file string) *Thunk {
+	ds := &docState{
+		yak:     yakMapping(Run{FilePath: file, ContextPaths: s.run.ContextPaths}),
+		session: s,
+	}
+	ds.root = &Thunk{node: doc.Body, env: &Env{doc: ds}, pos: doc.Pos()}
+	return ds.root
 }
 
 func evalNode(n ast.Node, env *Env) (Value, error) {
@@ -222,7 +256,7 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 	case *ast.Root:
 		return env.doc.root.Value()
 	case *ast.Context:
-		return env.doc.context, nil
+		return env.doc.session.context, nil
 	case *ast.Yak:
 		return env.doc.yak, nil
 	case *ast.Field:
@@ -243,6 +277,8 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 		return evalMapComp(node, env)
 	case *ast.Local:
 		return evalLocal(node, env)
+	case *ast.Import:
+		return evalImport(node, env)
 	case *ast.Function:
 		return &Function{decl: node, env: env}, nil
 	case *ast.Call:
@@ -562,7 +598,7 @@ func evalIdent(node *ast.Ident, env *Env) (Value, error) {
 	if t, ok := env.lookup(node.Name); ok {
 		return t.Value()
 	}
-	if b, ok := builtins[node.Name]; ok {
+	if b, ok := env.doc.session.builtins[node.Name]; ok {
 		return b, nil
 	}
 	if want, ok := yamlBooleans[strings.ToLower(node.Name)]; ok {

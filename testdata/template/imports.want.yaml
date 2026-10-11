@@ -1,0 +1,12 @@
+image: nginx:1.27
+replicas: 2
+labels:
+  app: web
+  tier: frontend
+team: platform
+region: us-east-1
+defaults:
+  image: nginx
+  tag: "1.27"
+  env: prod
+  file: ../../testdata/template/lib/defaults.yak

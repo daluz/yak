@@ -1,8 +1,7 @@
 # The yak language
 
-This describes the language as it exists today, together with the `import`
-statement, which is specified here but not implemented yet. Everything else
-that is planned is listed in [ROADMAP.md](ROADMAP.md); using one of the
+This describes the language as it exists today. Everything that is planned
+is listed in [ROADMAP.md](ROADMAP.md); using one of the
 keywords held for it produces an explicit "not implemented yet" error rather
 than a confusing parse failure. The tool that renders the language — its
 commands, its flags and the formats it writes — is documented in
@@ -331,9 +330,9 @@ that block and to everything nested inside it.
 
 All three keywords are reserved, so one written where a value belongs is an
 error rather than a reference, and using one as a key takes quotes:
-`"schema": 1`. Only `local` is implemented. `import` is described in
-[Modules](#modules) and `schema` in [ROADMAP.md](ROADMAP.md); writing either
-one today is a "not implemented yet" error.
+`"schema": 1`. `import` is described in [Modules](#modules). `schema` is
+described in [ROADMAP.md](ROADMAP.md), and writing it today is a "not
+implemented yet" error.
 
 ## Local bindings
 
@@ -608,18 +607,20 @@ template.
 
 ## Modules
 
-**Not implemented yet.** This is how `import` will be used once it lands.
-
-Every `.yak` file is a module. A module is named by a dotted path that walks a
-directory chain and ends at the file, so
+Every `.yak` file is a module, and a directory of them is a package. A module
+is named by a dotted path that walks a directory chain and ends at the file,
+so
 
 ```yaml
 import mydirectory.mymodule
 ```
 
 loads `./mydirectory/mymodule.yak` and binds it under the last segment of the
-path. The name is an ordinary binding of the module's definitions, read back
-with field access like any other mapping:
+path. A path names a module, never a package: importing `mydirectory` itself
+is an error. The binding holds the module's value, which is its one document
+evaluated as it would be rendered, so it is read back with field access like
+any other mapping. Hidden fields are part of that value, which is how a module
+hands out a function or a default without rendering it:
 
 ```yaml
 import mydirectory.mymodule
@@ -644,17 +645,52 @@ import {
 }
 ```
 
+An import is a binding, so everything in [Scope](#scope) applies to it: it
+covers the block it is written in, an inner one shadows an outer one, it can
+be rebound, and a module that is never read is never loaded. The last segment
+of a path has to be a name a binding can take; write `name = path` when it is
+not.
+
+A module holds exactly one document. It is evaluated against the same
+context as the template that imports it, so `$$` reads the same data in both,
+while `$yak.filepath` names the module's own file. A module is loaded once per
+document however many times it is imported, and modules may import each other
+in a cycle as long as no value ends up depending on itself.
+
 ### Resolution
 
-A path resolves relative to the file that imports it, so `mydir.module1` is
-`./mydir/module1.yak` beside the importing file.
+A path resolves from the directory of the file that imports it, so
+`mydir.module1` is `./mydir/module1.yak` beside the importing file. A path
+cannot climb out of that directory.
 
-A `yak.mod` and `yak.lock` pair changes that. `yak.mod` remaps a module — or
-the parent module that contains it — onto somewhere else: another local
-directory, or a remote location fetched over `https` or `git`. `yak.lock`
-pins what `yak.mod` names so the same paths resolve to the same sources on
-every machine. A path with no entry covering it keeps resolving relative to
-the importing file.
+The nearest `yak.mod` in that directory or any directory above it changes
+this. It maps module paths onto other locations:
+
+```yaml
+modules:
+  shared: ../shared            # a package: shared.x.y is ../shared/x/y.yak
+  base: vendor/base.yak        # a module: base is vendor/base.yak
+  acme: https://example.com/acme
+```
+
+A key is a dotted path, and it covers every import that the path begins,
+segment by segment; when several keys do, the longest one wins. A target that
+ends in `.yak` is a module and matches only its own key. Any other local
+target is a package directory, and the rest of the import path is looked up
+inside it. Local targets are relative to the `yak.mod` that names them. A
+path that no key covers keeps resolving from the importing file's directory.
+
+A target written as a URL names a remote package fetched over `https`, `git`
+or from an OCI registry. Remote packages are **not implemented yet**: an
+import that one covers is an error, and the rest of the `yak.mod` still
+works. A `yak.lock` that pins remote sources will come with them.
+
+### The standard library
+
+Paths that begin with `std` name the standard library's modules. They never
+resolve to a file and a `yak.mod` cannot map them, so a library module can
+always be found under its own name. The library has no modules yet; the
+built-ins in [Standard library](#standard-library) are bare names.
 
 ## Missing values
 
@@ -1038,7 +1074,7 @@ sep         := ":" | "::" | ":?"
 statement   := local | import
 local       := "local" binding | "local" "{" binding+ "}"
 binding     := identifier params? "=" value
-import      := "import" module | "import" "{" module+ "}"   -- not implemented
+import      := "import" module | "import" "{" module+ "}"
 module      := (identifier "=")? identifier ("." identifier)*
 params      := "(" (param ("," param)* ","?)? ")"
 param       := identifier ("=" value)?

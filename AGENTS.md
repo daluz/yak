@@ -2,7 +2,13 @@
 
 `yak` is a YAML templating language. Go module `github.com/daluz/yak`;
 the CLI entry point is `cmd/yak`, and everything else lives under `internal/`
-(`lexer`, `parser`, `ast`, `eval`, `engine`, `render`, `ctxfile`, `cli`).
+(`lexer`, `parser`, `ast`, `eval`, `stdlib`, `module`, `engine`, `render`,
+`ctxfile`, `cli`).
+
+A module is what an `import` names: a built-in module written in Go under
+`stdlib`, or a file module read from a `.yak` file. `module` decides which one
+a path names and loads it; `eval` knows neither, and reaches modules only
+through the `eval.Modules` that `engine` hands it.
 
 [docs/SPEC.md](docs/SPEC.md) defines the language and is the source of truth
 for behavior. [docs/CLI.md](docs/CLI.md) documents the command line tool —

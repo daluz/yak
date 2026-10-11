@@ -1,0 +1,2 @@
+import pong
+value: pong.value

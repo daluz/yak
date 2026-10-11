@@ -1,2 +1,4 @@
-import mydirectory.mymodule
+schema {
+  name: string
+}
 greeting: "hello"

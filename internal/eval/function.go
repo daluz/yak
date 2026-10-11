@@ -63,9 +63,9 @@ func evalCall(node *ast.Call, env *Env) (Value, error) {
 // The arguments stay behind thunks of the calling environment, and the
 // parameters share one frame, so a default may name another parameter.
 func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
-	doc := f.env.doc
+	session := f.env.doc.session
 	who := callee{name: f.decl.Name, pos: f.decl.Pos()}
-	if doc.depth >= maxCallDepth {
+	if session.depth >= maxCallDepth {
 		return nil, errorf(node.Pos(), "%s is nested more than %d calls deep and may not terminate",
 			who, maxCallDepth)
 	}
@@ -85,8 +85,8 @@ func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
 			return nil, missingArgument(who, p.Name, node)
 		}
 	}
-	doc.depth++
-	defer func() { doc.depth-- }()
+	session.depth++
+	defer func() { session.depth-- }()
 	return evalNode(f.decl.Body, inner)
 }
 

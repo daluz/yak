@@ -146,9 +146,10 @@ func TestTemplateErrors(t *testing.T) {
 			if err == nil {
 				t.Fatalf("rendering %s succeeded, want an error", path)
 			}
-			// Golden files record the message without the fixture's directory
-			// prefix so they stay stable wherever the tests run from.
-			got := strings.ReplaceAll(err.Error(), path, filepath.Base(path))
+			// Golden files record the message without the fixtures' directory
+			// prefix, which modules the fixture imports share, so they stay
+			// stable wherever the tests run from.
+			got := strings.ReplaceAll(err.Error(), dir+string(filepath.Separator), "")
 			compareGolden(t, filepath.Join(dir, name+".want.err"), got+"\n")
 		})
 	}

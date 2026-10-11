@@ -1,0 +1,1 @@
+import-documents.yak:1:8: module "lib.documents" holds 2 documents; a module holds exactly one

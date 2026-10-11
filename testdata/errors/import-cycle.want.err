@@ -1,0 +1,5 @@
+lib/ping.yak:2:8: circular reference: this value depends on itself
+	the cycle passes through:
+	  lib/ping.yak:2:8
+	  lib/pong.yak:2:8
+	  lib/ping.yak:2:8

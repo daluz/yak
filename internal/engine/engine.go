@@ -9,8 +9,10 @@ import (
 
 	"github.com/daluz/yak/internal/ctxfile"
 	"github.com/daluz/yak/internal/eval"
+	"github.com/daluz/yak/internal/module"
 	"github.com/daluz/yak/internal/parser"
 	"github.com/daluz/yak/internal/render"
+	_ "github.com/daluz/yak/internal/stdlib"
 )
 
 // ExtTemplate is the extension recognised by the tool.
@@ -52,7 +54,7 @@ func Render(run eval.Run, src []byte, context eval.Value, w io.Writer, opts rend
 	}
 	docs := make([]eval.Value, 0, len(stream.Docs))
 	for _, doc := range stream.Docs {
-		v, err := eval.Document(doc, context, run)
+		v, err := eval.Document(doc, context, run, module.NewLoader())
 		if err != nil {
 			return err
 		}

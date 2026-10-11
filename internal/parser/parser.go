@@ -7,6 +7,7 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/lexer"
@@ -158,7 +159,7 @@ func attachFoot(body ast.Node, foot []string) {
 // parseDocumentBody parses the node a document holds. Unlike a block nested
 // inside one, a document may hold nothing but bindings, and is then null.
 func (p *parser) parseDocumentBody() (ast.Node, error) {
-	if p.atLocal() {
+	if p.atStatement() {
 		return p.parseLocalScope(p.cur().Col(), true)
 	}
 	return p.parseBlockNode()
@@ -172,7 +173,7 @@ func (p *parser) parseBlockNode() (ast.Node, error) {
 	if t.Kind == token.Dash {
 		return p.parseBlockSequence(t.Col())
 	}
-	if p.atLocal() {
+	if p.atStatement() {
 		return p.parseLocalScope(t.Col(), false)
 	}
 	if p.looksLikeEntry() {
@@ -181,7 +182,7 @@ func (p *parser) parseBlockNode() (ast.Node, error) {
 	return p.parseInlineValue()
 }
 
-// parseLocalScope parses a block that opens with one or more local
+// parseLocalScope parses a block that opens with one or more local or import
 // statements. Bindings in front of a mapping become that mapping's own, so
 // that they read the same as bindings written between its entries; anything
 // else is wrapped in a scope of its own.
@@ -190,9 +191,10 @@ func (p *parser) parseBlockNode() (ast.Node, error) {
 // which is how a document made of nothing but bindings becomes null.
 func (p *parser) parseLocalScope(col int, bare bool) (ast.Node, error) {
 	pos := p.cur().Pos
+	what := p.cur().Lit
 	var binds []*ast.Binding
-	for p.atLocal() && p.cur().Col() == col {
-		declared, err := p.parseLocalBinding(col)
+	for p.atStatement() && p.cur().Col() == col {
+		declared, err := p.parseStatement(col)
 		if err != nil {
 			return nil, err
 		}
@@ -202,7 +204,10 @@ func (p *parser) parseLocalScope(col int, bare bool) (ast.Node, error) {
 		return &ast.Local{Base: ast.At(pos), Binds: binds, Body: &ast.Null{Base: ast.At(pos)}}, nil
 	}
 	if p.atDocBoundary() || p.cur().Col() < col {
-		return nil, p.errorf(pos, "a %q binding must be followed by a value in the same block", "local")
+		if what == token.KeywordImport {
+			return nil, p.errorf(pos, "an %q must be followed by a value in the same block", what)
+		}
+		return nil, p.errorf(pos, "a %q binding must be followed by a value in the same block", what)
 	}
 	if p.cur().Col() > col {
 		return nil, p.errorf(p.cur().Pos, "unexpected indentation: expected a value at column %d", col)
@@ -235,8 +240,8 @@ func (p *parser) parseBlockMapping(col int) (*ast.Mapping, error) {
 		if t.Col() > col {
 			return nil, p.errorf(t.Pos, "unexpected indentation: expected a mapping key at column %d", col)
 		}
-		if p.atLocal() {
-			declared, err := p.parseLocalBinding(col)
+		if p.atStatement() {
+			declared, err := p.parseStatement(col)
 			if err != nil {
 				return nil, err
 			}
@@ -326,19 +331,23 @@ func (p *parser) parseEntryValue(parentCol int, colon token.Token) (ast.Node, er
 	return &ast.Null{Base: ast.At(colon.Pos)}, nil
 }
 
-// atLocal reports whether a local statement starts at the current token.
-// "local" is reserved, so it can never be anything else here.
-func (p *parser) atLocal() bool {
-	return p.at(token.Ident) && p.cur().Lit == token.KeywordLocal
+// atStatement reports whether a local or import statement starts at the
+// current token. Both keywords are reserved, so they can never be anything
+// else here.
+func (p *parser) atStatement() bool {
+	if !p.at(token.Ident) {
+		return false
+	}
+	return p.cur().Lit == token.KeywordLocal || p.cur().Lit == token.KeywordImport
 }
 
-// parseLocalBinding parses one "local name = value" binding or a
-// "local { ... }" block of them.
+// parseStatement parses one "local name = value" binding or one
+// "import module", or a braced block of either.
 //
 // The comments written on a binding are claimed by the binding itself rather
 // than left for whatever follows it, since a binding renders nothing of its
 // own and its comments travel to wherever it is read back.
-func (p *parser) parseLocalBinding(col int) ([]*ast.Binding, error) {
+func (p *parser) parseStatement(col int) ([]*ast.Binding, error) {
 	start := p.i
 	head := p.takeHead()
 	kw := p.next()
@@ -346,8 +355,11 @@ func (p *parser) parseLocalBinding(col int) ([]*ast.Binding, error) {
 	if p.cur().Kind.IsSeparator() {
 		return nil, p.errorf(kw.Pos, "%q is a reserved word and must be quoted to be used as a key", kw.Lit)
 	}
+	if kw.Lit == token.KeywordImport {
+		return p.parseImport(start, head)
+	}
 	if p.at(token.LBrace) {
-		return p.parseLocalBlock(head)
+		return p.parseBlock(token.KeywordLocal, head, p.parseBlockBinding)
 	}
 	bh, err := p.parseBindHead()
 	if err != nil {
@@ -364,10 +376,11 @@ func (p *parser) parseLocalBinding(col int) ([]*ast.Binding, error) {
 	return []*ast.Binding{bind}, nil
 }
 
-// parseLocalBlock parses the braced form. Bindings are written one per line,
-// or separated by commas when several share a line. head holds the comments
+// parseBlock parses the braced form of a "local" or "import" statement, named
+// by kw. Bindings are written one per line, or separated by commas when
+// several share a line, and item parses each one. head holds the comments
 // written above the block, which belong to the first binding in it.
-func (p *parser) parseLocalBlock(head []string) ([]*ast.Binding, error) {
+func (p *parser) parseBlock(kw string, head []string, item func() (*ast.Binding, error)) ([]*ast.Binding, error) {
 	open := p.next()
 	var binds []*ast.Binding
 	// separated records that the previous binding ran to the end of its line
@@ -375,12 +388,12 @@ func (p *parser) parseLocalBlock(head []string) ([]*ast.Binding, error) {
 	separated := true
 	for {
 		if p.at(token.EOF) {
-			return nil, p.errorf(open.Pos, "unterminated %q block: missing %q", "local", "}")
+			return nil, p.errorf(open.Pos, "unterminated %q block: missing %q", kw, "}")
 		}
 		if p.at(token.RBrace) {
 			p.next()
 			if len(binds) == 0 {
-				return nil, p.errorf(open.Pos, "a %q block must declare at least one binding", "local")
+				return nil, p.errorf(open.Pos, "the %q block must declare at least one binding", kw)
 			}
 			return binds, nil
 		}
@@ -392,15 +405,10 @@ func (p *parser) parseLocalBlock(head []string) ([]*ast.Binding, error) {
 		if len(binds) == 0 {
 			above = append(head, above...)
 		}
-		bh, err := p.parseBindHead()
+		bind, err := item()
 		if err != nil {
 			return nil, err
 		}
-		value, err := p.parseExpr()
-		if err != nil {
-			return nil, err
-		}
-		bind := bh.bind(value)
 		bind.Comments = ast.Comments{Head: above, Line: p.takeLine(start)}
 		binds = append(binds, bind)
 		if p.at(token.Comma) {
@@ -409,6 +417,79 @@ func (p *parser) parseLocalBlock(head []string) ([]*ast.Binding, error) {
 		}
 		separated = p.cur().Line() != p.prevEnd.Line
 	}
+}
+
+// parseBlockBinding parses one binding of a "local { ... }" block, whose value
+// is an expression rather than a block of its own.
+func (p *parser) parseBlockBinding() (*ast.Binding, error) {
+	bh, err := p.parseBindHead()
+	if err != nil {
+		return nil, err
+	}
+	value, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	return bh.bind(value), nil
+}
+
+// parseImport parses what follows "import": one module, or a braced block of
+// them. start is the index of the keyword and head the comments above it.
+func (p *parser) parseImport(start int, head []string) ([]*ast.Binding, error) {
+	if p.at(token.LBrace) {
+		return p.parseBlock(token.KeywordImport, head, p.parseImportSpec)
+	}
+	if p.atDocBoundary() || p.cur().Line() != p.prevEnd.Line {
+		return nil, p.errorf(p.prevEnd, "expected the path of a module after %q", token.KeywordImport)
+	}
+	bind, err := p.parseImportSpec()
+	if err != nil {
+		return nil, err
+	}
+	if !p.atDocBoundary() && p.cur().Line() == p.prevEnd.Line {
+		return nil, p.errorf(p.cur().Pos, "unexpected %s after the path of an %q", p.cur(), token.KeywordImport)
+	}
+	bind.Comments = ast.Comments{Head: head, Line: p.takeLine(start)}
+	return []*ast.Binding{bind}, nil
+}
+
+// parseImportSpec parses "name = a.b.c" or "a.b.c". A module is bound under
+// the name it is given, or else under the last segment of its path.
+func (p *parser) parseImportSpec() (*ast.Binding, error) {
+	var name token.Token
+	if p.at(token.Ident) && p.toks[p.i+1].Kind == token.Assign {
+		t, err := p.parseName("module")
+		if err != nil {
+			return nil, err
+		}
+		name = t
+		p.next()
+	}
+	if !p.at(token.Ident) {
+		return nil, p.errorf(p.cur().Pos, "expected the path of a module, found %s", p.cur())
+	}
+	first := p.next()
+	imp := &ast.Import{Base: ast.At(first.Pos), Path: []string{first.Lit}}
+	last := first
+	for p.at(token.Dots) && p.adjacent() {
+		dots := p.next()
+		if dots.Lit != "." {
+			return nil, p.errorf(dots.Pos, "%q in the path of a module; segments are separated by a single %q", dots.Lit, ".")
+		}
+		if !p.at(token.Ident) || !p.adjacent() {
+			return nil, p.errorf(p.cur().Pos, "expected a segment of the module path after %q, found %s", ".", p.cur())
+		}
+		last = p.next()
+		imp.Path = append(imp.Path, last.Lit)
+	}
+	if name.Lit == "" {
+		if token.IsReserved(last.Lit) || token.IsKeyword(last.Lit) {
+			return nil, p.errorf(last.Pos, "%q cannot name a module; bind it to another name with %q",
+				last.Lit, "import name = "+strings.Join(imp.Path, "."))
+		}
+		name = last
+	}
+	return &ast.Binding{Base: ast.At(name.Pos), Name: name.Lit, Value: imp}, nil
 }
 
 // parseName parses the name of a binding or of a parameter, which is an

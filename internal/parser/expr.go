@@ -314,7 +314,6 @@ func (p *parser) parseLambda() (ast.Node, error) {
 // unsupportedKeywords maps the statement keywords that are planned but not
 // yet implemented to the message shown when they are used.
 var unsupportedKeywords = map[string]string{
-	token.KeywordImport: `"import" is not implemented yet`,
 	token.KeywordSchema: `"schema" is not implemented yet`,
 }
 
@@ -329,6 +328,8 @@ func (p *parser) parseIdent() (ast.Node, error) {
 		return &ast.Null{Base: ast.At(t.Pos)}, nil
 	case token.KeywordLocal:
 		return nil, p.errorf(t.Pos, "a %q binding is a statement of its own, not a value", "local")
+	case token.KeywordImport:
+		return nil, p.errorf(t.Pos, "an %q is a statement of its own, not a value", "import")
 	case token.KeywordIf:
 		// An "if" is looser than every operator, so one written where an
 		// operand belongs has to say which way it groups.

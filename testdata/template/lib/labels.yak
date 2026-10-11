@@ -1,0 +1,7 @@
+import tiers
+
+local make(app) =
+  app: app
+  tier: tiers.default
+
+make:: make

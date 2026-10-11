@@ -45,12 +45,12 @@ func (t *Thunk) Value() (Value, error) {
 	}
 
 	t.state = running
-	ds := t.env.doc
-	ds.stack = append(ds.stack, t.pos)
+	s := t.env.doc.session
+	s.stack = append(s.stack, t.pos)
 
 	v, err := evalNode(t.node, t.env)
 
-	ds.stack = ds.stack[:len(ds.stack)-1]
+	s.stack = s.stack[:len(s.stack)-1]
 	t.state = resolved
 	t.val, t.err = v, err
 	return v, err
@@ -59,7 +59,7 @@ func (t *Thunk) Value() (Value, error) {
 // cycleError describes a reference cycle as the chain of positions that led
 // back to this thunk.
 func (t *Thunk) cycleError() error {
-	stack := t.env.doc.stack
+	stack := t.env.doc.session.stack
 	from := 0
 	for i, p := range stack {
 		if p == t.pos {

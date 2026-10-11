@@ -1,0 +1,1 @@
+lib/broken.yak:1:10: unexpected "world" after value; strings must be quoted

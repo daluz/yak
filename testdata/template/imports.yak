@@ -1,0 +1,14 @@
+## lib.* resolves beside this file; shared and base go through yak.mod.
+import lib.defaults
+import labels = lib.labels
+import {
+  common = shared.common
+  base
+}
+
+image: "{defaults.image}:{defaults.tag}"
+replicas: defaults.replicas
+labels: labels.make("web")
+team: common.team
+region: base.region
+defaults: defaults

@@ -36,7 +36,7 @@ type Document struct {
 // or in flow form with braces.
 type Mapping struct {
 	Base
-	// Binds holds the "local" bindings written among the entries. They cover
+	// Binds holds the "local" and "import" bindings written among the entries. They cover
 	// the whole mapping, wherever in it they appear, and they can see the
 	// mapping itself, so a binding may refer to a field with ".name".
 	Binds   []*Binding
@@ -44,7 +44,8 @@ type Mapping struct {
 	Flow    bool
 }
 
-// Binding is one "name = value" pair introduced by "local".
+// Binding is one "name = value" pair introduced by "local", or one module
+// introduced by "import", whose Value is then an *Import.
 type Binding struct {
 	Base
 	// Comments are the ones written on the binding itself. A binding
@@ -72,6 +73,13 @@ type Param struct {
 	Base
 	Name    string
 	Default Node
+}
+
+// Import is the value of a binding introduced by "import": the module that the
+// dotted path names, read from the file the import is written in.
+type Import struct {
+	Base
+	Path []string
 }
 
 // Local scopes bindings over a body that is not a mapping. Bindings written
