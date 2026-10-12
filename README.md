@@ -150,8 +150,9 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
   output format that can hold a comment gets them, JSON dialects and TOML
   included.
 
-[docs/SPEC.md](docs/SPEC.md) is the full language description, and
-[docs/CLI.md](docs/CLI.md) the tool that renders it.
+[docs/TOUR.md](docs/TOUR.md) introduces the language step by step, with an
+example for every feature. [docs/SPEC.md](docs/SPEC.md) is the full language
+description, and [docs/CLI.md](docs/CLI.md) the tool that renders it.
 
 ## Status
 

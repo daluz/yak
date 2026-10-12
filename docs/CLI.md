@@ -64,7 +64,7 @@ same template and context always render the same output. Strict mode refuses
 the standard library modules that answer differently on every rendering, such
 as `std.random`, and confines `std.files` to the directory of the file that
 calls it. Turning it off admits those modules and lets `std.files` read any
-path. [SPEC.md](SPEC.md#strict-mode) says what each module does in either
+path. [STDLIB.md](STDLIB.md#strict-mode) says what each module does in either
 mode.
 
 ### Context files

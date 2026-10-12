@@ -11,9 +11,16 @@ a path names and loads it; `eval` knows neither, and reaches modules only
 through the `eval.Modules` that `engine` hands it.
 
 [docs/SPEC.md](docs/SPEC.md) defines the language and is the source of truth
-for behavior. [docs/CLI.md](docs/CLI.md) documents the command line tool —
+for behavior. [docs/STDLIB.md](docs/STDLIB.md) documents the built-in
+functions and the `std` modules, and is the source of truth for those.
+[docs/CLI.md](docs/CLI.md) documents the command line tool —
 its commands, flags, context file handling and output formats — and is the
 source of truth for those.
+
+[docs/TOUR.md](docs/TOUR.md) is a tutorial that introduces the language to new
+users one feature at a time. When a language feature is added or changed,
+update the tour along with the spec, and render every example it shows to
+check that its output is still what the tour says.
 
 ## Commands
 
