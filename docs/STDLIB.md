@@ -313,7 +313,7 @@ entries are left out, and a function in it is an error. Mappings arrive as Go
 maps, which `range` walks in key order rather than source order. A key the
 data does not hold is an error rather than Go's `<no value>`.
 
-Besides Go's own functions, a template can call three of Helm's:
+Besides Go's `text/template` functions, the following extra template functions are available:
 
 | Call | Answer |
 | --- | --- |
@@ -321,8 +321,9 @@ Besides Go's own functions, a template can call three of Helm's:
 | `indent N TEXT` | `TEXT` with `N` spaces in front of every line. |
 | `nindent N TEXT` | A line break and then `indent N TEXT`, for a value that starts on a line of its own, as in `{{ .labels \| nindent 4 }}`. |
 
-Compute everything else in yak and pass it in `data`, such as YAML from
-`std.yaml`, so the template only lays text out.
+There are fewer functions than, for example, Helm, because you should compute everything
+else in yak and pass it in `data`, such as YAML from `std.yaml`, so the template only lays
+text out. Other functions might be added in the future if they prove to be helpful.
 
 ### `std.random`
 
