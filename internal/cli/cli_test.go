@@ -179,6 +179,44 @@ func TestRenderFormatFlag(t *testing.T) {
 	}
 }
 
+// TestYakFormatIsCanonical checks that "$yak.format" names the format rather
+// than the spelling that chose it.
+func TestYakFormatIsCanonical(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "format: $yak.format\n")
+	dest := filepath.Join(dir, "out.yml")
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		// toFile marks a case that writes dest rather than stdout.
+		toFile bool
+		want   string
+	}{
+		{"default", nil, false, "format: yaml\n"},
+		{"flag alias", []string{"-f", "hujson"}, false, "{\n  \"format\": \"jwcc\",\n}\n"},
+		{"flag case", []string{"-f", "JSON"}, false, "{\n  \"format\": \"json\"\n}\n"},
+		{"output extension", []string{"-o", dest}, true, "format: yaml\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := run(t, append([]string{"render", tmpl}, tc.args...)...)
+			if err != nil {
+				t.Fatalf("render returned error: %v", err)
+			}
+			if tc.toFile {
+				got, err := os.ReadFile(dest)
+				if err != nil {
+					t.Fatal(err)
+				}
+				out = string(got)
+			}
+			if out != tc.want {
+				t.Errorf("output = %q, want %q", out, tc.want)
+			}
+		})
+	}
+}
+
 func TestRenderDropsNullDocuments(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "local unused = 1\n---\nname: \"web\"\n")

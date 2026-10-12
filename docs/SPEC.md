@@ -273,6 +273,7 @@ error; any other `$name` is an error listing the variables that exist.
 | `$yak.filepath` | The template's path, exactly as it was given to the tool. |
 | `$yak.contextpaths` | The context files, in the order they were given. |
 | `$yak.strict` | `true` in [strict mode](STDLIB.md#strict-mode), `false` when it is turned off. |
+| `$yak.format` | The [output format](CLI.md#output-formats) being rendered, by its name and never an alias. |
 
 ```yaml
 # rendering: yak render deploy/app.yak -c base.yaml -c prod.yaml
@@ -280,12 +281,15 @@ a: $yak.filepath            # "deploy/app.yak"
 b: $yak.contextpaths[0]     # "base.yaml"
 c: "built by yak \($yak.version)"
 d: $yak.strict              # true
+e: $yak.format              # "yaml"
 ```
 
 `filepath` is the path as written, not resolved, matching what diagnostics
 say; a template read from standard input is `<stdin>`. `contextpaths` is empty,
 never absent, when no context file is given. Every document sees the same
-`$yak`, and an unstamped build reports its `version` as `dev`. Output that
+`$yak`, and an unstamped build reports its `version` as `dev`. `format` is
+the name however the format was chosen, so `-f hujson` and an output file
+ending in `.json5` both give `jwcc`, and `.yml` gives `yaml`. Output that
 includes these fields depends on where the template is and which yak rendered
 it.
 

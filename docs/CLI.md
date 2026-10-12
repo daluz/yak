@@ -117,7 +117,9 @@ half-written file.
 
 `-f` selects the format. Without it the output file's extension does, and
 failing that the extension the template's name carries ahead of `.yak`, so
-`app.toml.yak` writes TOML.
+`app.toml.yak` writes TOML. A template reads the chosen format as
+[`$yak.format`](SPEC.md#builtin-variables), which is always the name in the
+first column below, never one of the others it is known as.
 
 | Format  | Also known as                 | Documents | Comments |
 | ------- | ----------------------------- | --------- | -------- |

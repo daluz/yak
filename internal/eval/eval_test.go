@@ -780,11 +780,11 @@ func TestRootIsPerDocument(t *testing.T) {
 func TestYakDescribesTheRun(t *testing.T) {
 	var buf bytes.Buffer
 	run := eval.Run{FilePath: "deploy/app.yak", ContextPaths: []string{"base.yaml", "prod.yaml"}, NonStrict: true}
-	src := []byte("path: $yak.filepath\nversion: $yak.version\ncontexts: $yak.contextpaths\nstrict: $yak.strict\n")
+	src := []byte("path: $yak.filepath\nversion: $yak.version\ncontexts: $yak.contextpaths\nstrict: $yak.strict\nformat: $yak.format\n")
 	if err := engine.Render(run, src, nil, &buf, render.DefaultOptions()); err != nil {
 		t.Fatalf("rendering: %v", err)
 	}
-	want := "path: deploy/app.yak\nversion: " + version.Current + "\ncontexts:\n  - base.yaml\n  - prod.yaml\nstrict: false\n"
+	want := "path: deploy/app.yak\nversion: " + version.Current + "\ncontexts:\n  - base.yaml\n  - prod.yaml\nstrict: false\nformat: yaml\n"
 	if buf.String() != want {
 		t.Errorf("rendered:\n%s\nwant:\n%s", buf.String(), want)
 	}

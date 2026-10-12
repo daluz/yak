@@ -190,6 +190,8 @@ type Run struct {
 	FilePath string
 	// ContextPaths are the context files in the order they were given.
 	ContextPaths []string
+	// Format is the canonical name of the output format, never an alias.
+	Format string
 	// NonStrict turns strict mode off, admitting the built-in modules whose
 	// answers can change from one rendering to the next. It is negative so
 	// that the zero Run is strict.
@@ -210,6 +212,7 @@ func yakMapping(run Run) *Object {
 	o.Set("version", false, Done(String(version.Current)))
 	o.Set("filepath", false, Done(String(run.FilePath)))
 	o.Set("contextpaths", false, Done(NewArray(paths)))
+	o.Set("format", false, Done(String(run.Format)))
 	o.Set("strict", false, Done(Bool(run.Strict())))
 	return o
 }

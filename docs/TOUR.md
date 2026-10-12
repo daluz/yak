@@ -1269,6 +1269,22 @@ name = "web" # and its DNS label
 port = 8080
 ```
 
+A template can tell which format it is rendering from `$yak.format`, which
+is always the format's own name: `-f hujson` gives `jwcc`, and an output
+file ending in `.yml` gives `yaml`.
+
+```yaml
+note: "rendered as \($yak.format)"
+```
+
+rendered with `-f hujson`:
+
+```jsonc
+{
+  "note": "rendered as jwcc",
+}
+```
+
 A format that cannot hold what the template produced refuses it: JSON takes
 only one document, and TOML has no `null`. [CLI.md](CLI.md#output-formats)
 lists every format and the flags for writing output to files.
