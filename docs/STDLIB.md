@@ -59,7 +59,8 @@ data:
 
 `format` is any name the `--format` flag accepts for an
 [output format](CLI.md#output-formats), aliases included,
-and the text ends in a newline as the file would. Hidden and `:?` entries are
+and the text ends in a newline as the file would. Unlike a document, a `null`
+value is not left out: `render(null)` is `"null\n"`. Hidden and `:?` entries are
 left out, a function in `value` is an error, and so is a value that the format
 cannot hold, such as a sequence in TOML.
 
@@ -369,4 +370,5 @@ one rendering to the next, such as `std.random`, is an error, raised when the
 import is first read. And a module that can do more without strict mode does
 less: `std.files` reads only beneath the directory of the file that calls it.
 Both errors say that strict mode is the reason, and how to turn it off. Every
-other module behaves the same in either mode.
+other module behaves the same in either mode. A template can tell which mode
+it is rendered in by reading [`$yak.strict`](SPEC.md#builtin-variables).

@@ -815,7 +815,7 @@ local config = {name: "web", ports: [80, 443]}
 kind: "ConfigMap"
 data:
   "app.yaml": render(config)
-  "app.json": render(config, "jsonl")
+  "app.json": render(config, "json")
 ```
 
 renders as:
@@ -829,7 +829,13 @@ data:
       - 80
       - 443
   app.json: |
-    {"name":"web","ports":[80,443]}
+    {
+      "name": "web",
+      "ports": [
+        80,
+        443
+      ]
+    }
 ```
 
 ### Sequences

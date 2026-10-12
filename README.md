@@ -108,8 +108,9 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
   context's. `$self`, `$root` and `$context` spell the first, fourth and fifth
   of those out in full.
 - **Runtime information is a value.** `$yak` is a mapping holding the
-  `version` doing the rendering, the template's `filepath` as given, and the
-  `contextpaths` it was handed, which is enough for a provenance note.
+  `version` doing the rendering, the template's `filepath` as given, the
+  `contextpaths` it was handed, and whether the run is `strict`, which is
+  enough for a provenance note.
 - **Hidden fields.** Write `::` instead of `:` to keep a value available to
   references but out of the output, or `:?` to drop an entry only when its
   value is null.
@@ -120,7 +121,8 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
   anonymous one is written `(x) => x * 2`.
 - **Built-ins.** `size` measures a sequence, mapping or string, `empty` asks
   whether there is anything in one, and `nempty` turns an empty value into
-  `null` for `:?` to drop. Sequences have `sort`, `unique`, `range`, `any`
+  `null` for `:?` to drop, and `render` writes a value as the text of an
+  output format, for a ConfigMap holding whole files. Sequences have `sort`, `unique`, `range`, `any`
   and the like, and mappings have `keys`, `values`, `items`, `pick` and `omit`.
 - **Arithmetic, and a `+` that does more.** `+`, `-`, `*`, `/` and `%` work
   on numbers, and `+` also joins two strings or two sequences.
