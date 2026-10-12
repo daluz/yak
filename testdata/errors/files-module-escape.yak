@@ -1,0 +1,4 @@
+# A module is confined to its own directory, even one beneath the template's.
+import lib.readsparent
+
+v: readsparent.text

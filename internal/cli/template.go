@@ -22,6 +22,7 @@ func newTemplateCommand() *cobra.Command {
 		outputDir string
 		format    string
 		keepNull  bool
+		strict    bool
 	)
 
 	cmd := &cobra.Command{
@@ -39,7 +40,11 @@ func newTemplateCommand() *cobra.Command {
 			"yields app.toml, and app.yak yields app.yaml. --output-dir writes the\n" +
 			"output file in another directory, creating it if it is missing.\n\n" +
 			"A document that evaluates to null, such as one holding nothing but\n" +
-			"bindings, is left out unless --keep-null-documents is given.",
+			"bindings, is left out unless --keep-null-documents is given.\n\n" +
+			"Rendering is strict unless --strict=false is given: the same template and\n" +
+			"context always render the same output, so modules such as std.random are\n" +
+			"refused, and std.files reads only beneath the directory of the file that\n" +
+			"calls it.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts, err := renderOptions(format, args[0], output)
@@ -59,6 +64,7 @@ func newTemplateCommand() *cobra.Command {
 				ContextPaths: contexts,
 				Out:          &buf,
 				Options:      opts,
+				NonStrict:    !strict,
 			})
 			if err != nil {
 				return err
@@ -91,6 +97,8 @@ func newTemplateCommand() *cobra.Command {
 		"output format: "+render.FormatList()+" (default yaml, or the extension of --output or of the template)")
 	cmd.Flags().BoolVar(&keepNull, "keep-null-documents", false,
 		"write the documents that evaluated to null instead of leaving them out")
+	cmd.Flags().BoolVar(&strict, "strict", true,
+		"render deterministically; --strict=false admits std.random and reading files anywhere")
 	cmd.MarkFlagsMutuallyExclusive("output", "automatic-output")
 
 	return cmd

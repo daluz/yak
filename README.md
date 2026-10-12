@@ -136,6 +136,13 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
   false condition yields `null`, which `:?` drops.
 - **Comprehensions.** `[p.name for p in $$.ports if p.tls]` builds a
   sequence, and `{[p.name]: p.number for p in $$.ports}` a mapping.
+- **Plain text files.** `std.files` reads a file from beside the template, and
+  `std.template` renders one as a Go template with data computed in yak, so a
+  configuration file of another format can be embedded in a value:
+  `template.render(files.read("nginx.conf.tmpl"), {name: $$.name})`.
+- **Strict by default.** The same template and context always render the
+  same output: `std.random` is refused and `std.files` cannot leave the
+  template's directory unless `--strict=false` is given.
 - **Comments survive.** They are carried into the output, and the ones
   written on a `local` travel to wherever the binding is read. A comment
   starting with `## ` is a note about the template and is left out. Every

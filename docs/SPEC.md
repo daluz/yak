@@ -835,6 +835,119 @@ things; an integer is answered as it is. `round(value, digits = null)` given
 `digits` instead rounds a float to that many places after the point and
 answers a float, so `round(3.14159, 2)` is `3.14`.
 
+### `std.path`
+
+```yaml
+import std.path
+
+name: path.stem($$.config)                  # "nginx" for "conf/nginx.conf"
+file: path.join(["conf", $$.env, "app.conf"])
+```
+
+| Call | Answer |
+| --- | --- |
+| `dir(value)` | Everything before the last element, or `.` when there is nothing before it. |
+| `base(value)` | The last element. |
+| `ext(value)` | The extension of the last element, dot included, or `""`. |
+| `stem(value)` | The last element without its extension. |
+| `clean(value)` | The shortest path naming the same file, with `.`, `..` and repeated slashes worked out. |
+| `isAbs(value)` | Whether the path starts at the root. |
+| `join(values)` | The strings of a sequence joined with slashes, cleaned, leaving out the empty ones. |
+
+Paths are written with forward slashes on every system, which is also how
+`std.files` reads them, so a template means the same file wherever it is
+rendered. The answers are those of Go's `path` package: `ext("Makefile")`
+is `""`, and `join(["a", "../b"])` is `"b"`.
+
+### `std.files`
+
+```yaml
+import std.files
+
+motd: files.read("files/motd.txt")
+```
+
+`read(path)` answers the text of the file at `path`, as it is: neither
+interpolation nor anything else looks inside it. A relative path is relative
+to the directory of the file whose call to `read` it is, the way an `import`
+resolves, so a module reads from beside itself rather than from beside the
+template importing it. Bytes that are not UTF-8 text are an error, as is a
+file that is missing.
+
+In [strict mode](#strict-mode), `path` has to stay beneath that directory: an
+absolute path, one that climbs out with `..`, and a symbolic link that leads
+out are all errors. Turning strict mode off lets `path` name any file,
+absolute or relative.
+
+### `std.template`
+
+```yaml
+import { std.files, std.template }
+
+"nginx.conf": template.render(files.read("nginx.conf.tmpl"), {
+  name: $$.name,
+  servers: [s for s in $$.servers if s.enabled],
+})
+```
+
+`render(template, data = null)` renders the string `template` as a
+[Go template](https://pkg.go.dev/text/template), with `data` as its `.`, and
+answers the text. It is for plain text that a yak string would be awkward to
+write, such as a configuration file in another format. Go's actions are
+written `{{ ... }}`, which is plain text to yak, so a template fits in an
+ordinary string; one with a `\(` in it would still be interpolated by yak
+first, which `r|` prevents.
+
+`data` reaches the template as an output format would see it: hidden and `:?`
+entries are left out, and a function in it is an error. Mappings arrive as Go
+maps, which `range` walks in key order rather than in the order the entries
+were written. A key that the data does not hold is an error rather than the
+`<no value>` Go would otherwise write.
+
+Beside Go's own functions, a template can call three of Helm's:
+
+| Call | Answer |
+| --- | --- |
+| `quote VALUE` | `VALUE` written as a double-quoted string, escapes included, or `""` for `null`. |
+| `indent N TEXT` | `TEXT` with `N` spaces in front of every line. |
+| `nindent N TEXT` | A line break and then `indent N TEXT`, for a value that starts on a line of its own, as in `{{ .labels \| nindent 4 }}`. |
+
+Everything else is better computed in yak and handed over in `data`, such as
+YAML from `std.yaml`, so that a template only lays text out.
+
+### `std.random`
+
+```yaml
+import std.random
+
+suffix: random.choice(["a", "b", "c"])
+```
+
+| Call | Answer |
+| --- | --- |
+| `randint(min, max)` | An integer from `min` to `max`, both included. |
+| `rand()` | A float from 0 up to but not including 1. |
+| `choice(values)` | One item of a sequence that is not empty. |
+| `shuffle(values)` | The items of a sequence in a random order. |
+| `uuid()` | A random version 4 UUID. |
+
+The answers change from one rendering to the next, so this module is only
+available with [strict mode](#strict-mode) off.
+
+### Strict mode
+
+Rendering is strict unless the tool is told otherwise
+([CLI.md](CLI.md#strict-mode)). In strict mode the same template, context and
+files always render the same output, which is what makes the result safe to
+review as a diff and to keep re-rendering in a GitOps loop.
+
+Strict mode does two things. Importing a module whose answers can change from
+one rendering to the next, such as `std.random`, is an error, raised when the
+import is first read. And a module that can do more without strict mode does
+less: `std.files` reads only beneath the directory of the file that calls it.
+Both errors say that strict mode is the reason, and how to turn it off. Every
+other module behaves the same in either mode.
+
 ## Modules
 
 Every `.yak` file is a module, and a directory of them is a package. A module
@@ -923,7 +1036,8 @@ always be found under its own name, and a module added to the library cannot
 take a path a project already uses. Importing one binds a mapping of its
 functions under the last segment of its path, as for any other module;
 [Standard library](#standard-library) lists them beside the built-ins that are
-bare names. Rename the import to choose another namespace:
+bare names. Some of them are refused or restricted in
+[strict mode](#strict-mode). Rename the import to choose another namespace:
 
 ```yaml
 import str = std.strings

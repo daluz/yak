@@ -1,0 +1,1 @@
+files-strict-absolute.yak:4:19: "read" cannot read "/etc/hosts" in strict mode, which reads only beneath the directory of the file calling it; render with --strict=false to read anywhere

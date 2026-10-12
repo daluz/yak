@@ -77,6 +77,22 @@ func TestTemplateAcceptsJSONContext(t *testing.T) {
 	}
 }
 
+func TestTemplateIsStrictByDefault(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "import std.random\nn: random.randint(1, 1)\n")
+
+	if _, err := run(t, "template", tmpl); err == nil || !strings.Contains(err.Error(), "--strict=false") {
+		t.Errorf("error = %v, want strict mode to refuse std.random", err)
+	}
+	out, err := run(t, "template", tmpl, "--strict=false")
+	if err != nil {
+		t.Fatalf("template returned error: %v", err)
+	}
+	if out != "n: 1\n" {
+		t.Errorf("stdout = %q, want %q", out, "n: 1\n")
+	}
+}
+
 func TestTemplateWritesToFile(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")

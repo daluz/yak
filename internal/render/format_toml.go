@@ -16,16 +16,13 @@ import (
 // are reported as errors; the third means a document's keys come out grouped
 // rather than in source order, which is the one place a yak renderer cannot
 // keep the order it was written in.
-func encodeTOML(docs []eval.Value, opts Options) ([]byte, error) {
-	if err := singleDocument(FormatTOML, docs); err != nil {
-		return nil, err
-	}
+func encodeTOML(docs []eval.Value, opts Options, floats floatSpelling) ([]byte, error) {
 	root, ok := docs[0].(*eval.Object)
 	if !ok {
 		return nil, fmt.Errorf("toml needs a mapping at the top level, but the document is a %s", docs[0].TypeName())
 	}
 
-	w := &tomlWriter{}
+	w := &tomlWriter{floats: floats}
 	if err := w.table(root, nil); err != nil {
 		return nil, err
 	}
@@ -33,85 +30,73 @@ func encodeTOML(docs []eval.Value, opts Options) ([]byte, error) {
 }
 
 type tomlWriter struct {
-	buf bytes.Buffer
-}
-
-// tomlEntry is a visible field paired with the value it resolved to.
-type tomlEntry struct {
-	field *eval.Field
-	value eval.Value
+	buf    bytes.Buffer
+	floats floatSpelling
 }
 
 // table writes the body of the table at path: its plain keys first, then the
 // sub-tables they contain.
 func (w *tomlWriter) table(o *eval.Object, path []string) error {
 	prefix := strings.Join(path, ".")
-	keys, tables, err := partition(o)
-	if err != nil {
-		return err
-	}
+	keys, tables := partition(o)
 
 	for _, e := range keys {
-		w.commentLines(e.field.Head)
-		w.buf.WriteString(tomlKey(e.field.Name))
+		w.commentLines(e.Head)
+		w.buf.WriteString(tomlKey(e.name))
 		w.buf.WriteString(" = ")
-		if err := w.inline(e.value, join(prefix, e.field.Name)); err != nil {
+		if err := w.inline(e.value, join(prefix, e.name)); err != nil {
 			return err
 		}
-		w.lineComment(e.field.Line)
+		w.lineComment(e.Line)
 		w.buf.WriteByte('\n')
-		w.commentLines(e.field.Foot)
+		w.commentLines(e.Foot)
 	}
 
 	for _, e := range tables {
-		child := append(append([]string{}, path...), e.field.Name)
+		child := append(append([]string{}, path...), e.name)
 		switch t := e.value.(type) {
 		case *eval.Object:
 			// A table that holds nothing but other tables needs no header
 			// of its own, since the header of any table inside it brings
 			// it into being. One carrying a comment keeps its header,
 			// because that is the only place the comment can go.
-			if implied(t) && !commented(e.field.Comments) {
+			if implied(t) && !commented(e.Comments) {
 				if err := w.table(t, child); err != nil {
 					return err
 				}
 				continue
 			}
 			w.blankLine()
-			w.commentLines(e.field.Head)
-			w.header("["+tomlPath(child)+"]", e.field.Line)
+			w.commentLines(e.Head)
+			w.header("["+tomlPath(child)+"]", e.Line)
 			if err := w.table(t, child); err != nil {
 				return err
 			}
-			w.commentLines(e.field.Foot)
+			w.commentLines(e.Foot)
 		case *eval.Array:
 			// Every element opens a "[[table]]" of its own, so the
 			// entry's own comments belong to the first of them.
-			for i, item := range t.Items() {
-				v, err := item.Value.Value()
-				if err != nil {
-					return err
-				}
+			for i, item := range itemEntries(t) {
 				w.blankLine()
 				if i == 0 {
-					w.commentLines(e.field.Head)
+					w.commentLines(e.Head)
 				}
 				w.commentLines(item.Head)
 				line := item.Line
 				if i == 0 && line == "" {
-					line = e.field.Line
+					line = e.Line
 				}
 				w.header("[["+tomlPath(child)+"]]", line)
-				elem, ok := v.(*eval.Object)
+				elem, ok := item.value.(*eval.Object)
 				if !ok {
-					return fmt.Errorf("internal error: %s[%d] is a %s", join(prefix, e.field.Name), i, v.TypeName())
+					return fmt.Errorf("internal error: %s[%d] is a %s", join(prefix, e.name), i, item.value.TypeName())
 				}
 				if err := w.table(elem, child); err != nil {
 					return err
 				}
 				w.commentLines(item.Foot)
 			}
-			w.commentLines(e.field.Foot)
+			w.commentLines(e.Foot)
 		}
 	}
 	return nil
@@ -137,9 +122,9 @@ func (w *tomlWriter) inline(v eval.Value, path string) error {
 		w.buf.WriteString(strconv.FormatInt(int64(t), 10))
 
 	case eval.Float:
-		s, err := formatFloat(float64(t), tomlFloats)
+		s, err := formatFloat(float64(t), FormatTOML, w.floats)
 		if err != nil {
-			return fmt.Errorf("toml: %w", err)
+			return err
 		}
 		w.buf.WriteString(s)
 
@@ -148,26 +133,13 @@ func (w *tomlWriter) inline(v eval.Value, path string) error {
 
 	case *eval.Object:
 		w.buf.WriteByte('{')
-		first := true
-		for _, f := range t.Fields() {
-			omitted, err := f.Omitted()
-			if err != nil {
-				return err
-			}
-			if omitted {
-				continue
-			}
-			inner, err := f.Value.Value()
-			if err != nil {
-				return err
-			}
-			if !first {
+		for i, f := range fieldEntries(t) {
+			if i > 0 {
 				w.buf.WriteString(", ")
 			}
-			first = false
-			w.buf.WriteString(tomlKey(f.Name))
+			w.buf.WriteString(tomlKey(f.name))
 			w.buf.WriteString(" = ")
-			if err := w.inline(inner, join(path, f.Name)); err != nil {
+			if err := w.inline(f.value, join(path, f.name)); err != nil {
 				return err
 			}
 		}
@@ -175,22 +147,18 @@ func (w *tomlWriter) inline(v eval.Value, path string) error {
 
 	case *eval.Array:
 		w.buf.WriteByte('[')
-		for i, item := range t.Items() {
-			inner, err := item.Value.Value()
-			if err != nil {
-				return err
-			}
+		for i, item := range itemEntries(t) {
 			if i > 0 {
 				w.buf.WriteString(", ")
 			}
-			if err := w.inline(inner, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+			if err := w.inline(item.value, fmt.Sprintf("%s[%d]", path, i)); err != nil {
 				return err
 			}
 		}
 		w.buf.WriteByte(']')
 
 	default:
-		return fmt.Errorf("cannot render a value of type %s", v.TypeName())
+		return unrenderable(v)
 	}
 	return nil
 }
@@ -224,34 +192,22 @@ func (w *tomlWriter) blankLine() {
 
 // partition splits a mapping's visible fields into the ones written as
 // "key = value" and the ones written as a table of their own.
-func partition(o *eval.Object) (keys, tables []tomlEntry, err error) {
-	for _, f := range o.Fields() {
-		omitted, err := f.Omitted()
-		if err != nil {
-			return nil, nil, err
-		}
-		if omitted {
-			continue
-		}
-		v, err := f.Value.Value()
-		if err != nil {
-			return nil, nil, err
-		}
-		e := tomlEntry{field: f, value: v}
-		if isTable(v) {
+func partition(o *eval.Object) (keys, tables []entry) {
+	for _, e := range fieldEntries(o) {
+		if isTable(e.value) {
 			tables = append(tables, e)
 		} else {
 			keys = append(keys, e)
 		}
 	}
-	return keys, tables, nil
+	return keys, tables
 }
 
 // implied reports whether a table would be written as a bare header with
 // nothing under it.
 func implied(o *eval.Object) bool {
-	keys, tables, err := partition(o)
-	return err == nil && len(keys) == 0 && len(tables) > 0
+	keys, tables := partition(o)
+	return len(keys) == 0 && len(tables) > 0
 }
 
 func commented(c eval.Comments) bool {
@@ -269,13 +225,8 @@ func isTable(v eval.Value) bool {
 		if t.Len() == 0 {
 			return false
 		}
-		for _, item := range t.Items() {
-			// Force has already run, so this cannot fail.
-			inner, err := item.Value.Value()
-			if err != nil {
-				return false
-			}
-			if _, ok := inner.(*eval.Object); !ok {
+		for _, item := range itemEntries(t) {
+			if _, ok := item.value.(*eval.Object); !ok {
 				return false
 			}
 		}

@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shop-nginx
+data:
+  motd: |
+    Welcome to {{ .name }}.
+    This file is included as it is: \(not yak) and {{ not Go }} either.
+  nginx.conf: |
+    upstream shop {
+      server web-1:8080;
+      server web-3:8081;
+    }
+
+    server {
+      listen 443 ssl;
+      location / {
+        proxy_pass http://shop;
+      }
+    }
+  inner.txt: |
+    read by a module, from beside it

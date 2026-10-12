@@ -2,7 +2,6 @@ package render
 
 import (
 	"bytes"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -12,10 +11,10 @@ import (
 )
 
 // encodeYAML writes the documents as block YAML, separated by "---".
-func encodeYAML(docs []eval.Value, opts Options) ([]byte, error) {
+func encodeYAML(docs []eval.Value, opts Options, floats floatSpelling) ([]byte, error) {
 	nodes := make([]*yaml.Node, 0, len(docs))
 	for _, doc := range docs {
-		node, err := toNode(doc)
+		node, err := toNode(doc, floats)
 		if err != nil {
 			return nil, err
 		}
@@ -41,7 +40,7 @@ func encodeYAML(docs []eval.Value, opts Options) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func toNode(v eval.Value) (*yaml.Node, error) {
+func toNode(v eval.Value, floats floatSpelling) (*yaml.Node, error) {
 	switch t := v.(type) {
 	case eval.Null:
 		return scalar("!!null", "null"), nil
@@ -56,7 +55,7 @@ func toNode(v eval.Value) (*yaml.Node, error) {
 		return scalar("!!int", strconv.FormatInt(int64(t), 10)), nil
 
 	case eval.Float:
-		s, err := formatFloat(float64(t), yamlFloats)
+		s, err := formatFloat(float64(t), FormatYAML, floats)
 		if err != nil {
 			return nil, err
 		}
@@ -67,25 +66,14 @@ func toNode(v eval.Value) (*yaml.Node, error) {
 
 	case *eval.Object:
 		node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		for _, f := range t.Fields() {
-			omitted, err := f.Omitted()
-			if err != nil {
-				return nil, err
-			}
-			if omitted {
-				continue
-			}
-			inner, err := f.Value.Value()
-			if err != nil {
-				return nil, err
-			}
-			valNode, err := toNode(inner)
+		for _, f := range fieldEntries(t) {
+			valNode, err := toNode(f.value, floats)
 			if err != nil {
 				return nil, err
 			}
 			// An entry's comments go on its key, which is where they
 			// were written and where they come out again.
-			key := keyNode(f.Name)
+			key := keyNode(f.name)
 			key.HeadComment = joinComments(f.Head)
 			key.LineComment = f.Line
 			key.FootComment = joinComments(f.Foot)
@@ -95,12 +83,8 @@ func toNode(v eval.Value) (*yaml.Node, error) {
 
 	case *eval.Array:
 		node := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-		for _, item := range t.Items() {
-			inner, err := item.Value.Value()
-			if err != nil {
-				return nil, err
-			}
-			itemNode, err := toNode(inner)
+		for _, item := range itemEntries(t) {
+			itemNode, err := toNode(item.value, floats)
 			if err != nil {
 				return nil, err
 			}
@@ -110,7 +94,7 @@ func toNode(v eval.Value) (*yaml.Node, error) {
 		return node, nil
 
 	default:
-		return nil, fmt.Errorf("cannot render a value of type %s", v.TypeName())
+		return nil, unrenderable(v)
 	}
 }
 

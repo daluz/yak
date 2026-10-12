@@ -1,0 +1,1 @@
+lib/readsparent.yak:3:18: "read" cannot read "../files-missing.yak" in strict mode, which reads only beneath the directory of the file calling it; render with --strict=false to read anywhere

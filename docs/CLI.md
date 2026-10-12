@@ -36,7 +36,7 @@ calls itself `dev`.
 ```console
 $ yak template FILE.yak [-c context.yaml|context.json]... [-f FORMAT]
                         [-o FILE | -O] [--output-dir DIR]
-                        [--keep-null-documents]
+                        [--keep-null-documents] [--strict=false]
 ```
 
 | Flag | Meaning |
@@ -47,13 +47,25 @@ $ yak template FILE.yak [-c context.yaml|context.json]... [-f FORMAT]
 | `-O`, `--automatic-output` | Write to a file named after the template. |
 | `--output-dir DIR` | Put the output file in this directory. |
 | `--keep-null-documents` | Write the documents that evaluated to `null`. |
+| `--strict=false` | Turn [strict mode](#strict-mode) off. |
 
 `-o` and `-O` name the same thing two different ways and cannot be given
 together.
 
 The one argument is the template to render. `-` reads it from standard input
 instead of from a file, in which case it is called `<stdin>` by both the
-diagnostics and `$yak.filepath`.
+diagnostics and `$yak.filepath`, and `std.files` reads relative to the
+current directory.
+
+### Strict mode
+
+Rendering is strict unless `--strict=false` is given, which is what makes the
+same template and context always render the same output. Strict mode refuses
+the standard library modules that answer differently on every rendering, such
+as `std.random`, and confines `std.files` to the directory of the file that
+calls it. Turning it off admits those modules and lets `std.files` read any
+path. [SPEC.md](SPEC.md#strict-mode) says what each module does in either
+mode.
 
 ### Context files
 

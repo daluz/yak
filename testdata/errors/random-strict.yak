@@ -1,0 +1,4 @@
+# std.random answers differently on every rendering, which strict mode refuses.
+import std.random
+
+id: random.uuid()

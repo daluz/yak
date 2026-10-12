@@ -28,6 +28,8 @@ type TemplateRequest struct {
 	// Options selects the output format and its indentation. The zero
 	// value renders YAML at the default indent.
 	Options render.Options
+	// NonStrict turns strict mode off; the zero value renders strictly.
+	NonStrict bool
 }
 
 // Template renders one template file to the request's writer.
@@ -40,7 +42,7 @@ func Template(req TemplateRequest) error {
 	if err != nil {
 		return err
 	}
-	run := eval.Run{FilePath: name, ContextPaths: req.ContextPaths}
+	run := eval.Run{FilePath: name, ContextPaths: req.ContextPaths, NonStrict: req.NonStrict}
 	return Render(run, src, context, req.Out, req.Options)
 }
 
@@ -54,7 +56,7 @@ func Render(run eval.Run, src []byte, context eval.Value, w io.Writer, opts rend
 	}
 	docs := make([]eval.Value, 0, len(stream.Docs))
 	for _, doc := range stream.Docs {
-		v, err := eval.Document(doc, context, run, module.NewLoader())
+		v, err := eval.Document(doc, context, run, module.NewLoader(!run.NonStrict))
 		if err != nil {
 			return err
 		}

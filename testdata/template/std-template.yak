@@ -1,0 +1,40 @@
+import { std.template, std.yaml, std.strings }
+
+local servers = [
+  {host: "web-1", port: 8080, enabled: true},
+  {host: "web-2", port: 8080, enabled: false},
+  {host: "web-3", port: 8081, enabled: true},
+]
+
+local upstream = |
+  upstream {{ .name }} {
+  {{- range .servers }}
+    server {{ .host }}:{{ .port }};
+  {{- end }}
+  }
+
+## Go actions are plain text to yak, and \( still interpolates.
+nginx: template.render(upstream, {
+  name: "shop",
+  servers: [s for s in servers if s.enabled],
+})
+
+## Mappings are ranged in key order, and hidden entries are left out.
+sorted: template.render("{{ range $k, $v := . }}{{ $k }}={{ $v }} {{ end }}", {b: 2, a: 1, c:: 3})
+
+local helpers = |-
+  labels:{{ .labels | nindent 2 }}
+  quoted: {{ quote .name }} {{ quote .port }} {{ quote .none }}
+  indented:
+  {{ indent 4 .text }}
+
+helpers: template.render(helpers, {
+  labels: strings.trimSuffix(yaml.encode({app: "web", tier: "front"}), "\n"),
+  name: "say \"hi\"",
+  port: 80,
+  none: null,
+  text: "a\nb",
+})
+
+no-data: template.render("plain {{ `text` }}")
+typed: template.render("{{ if .on }}{{ printf \"%d/%.1f\" .n .f }}{{ end }}", {on: true, n: 3, f: 2.5})

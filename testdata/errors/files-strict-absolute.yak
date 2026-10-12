@@ -1,0 +1,4 @@
+# An absolute path leaves the template's directory too.
+import std.files
+
+hosts: files.read("/etc/hosts")

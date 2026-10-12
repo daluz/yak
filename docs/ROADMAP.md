@@ -4,7 +4,8 @@ Done so far: the restricted YAML parser, string interpolation, relative
 references, hidden fields, context files, the `template` command, `local`
 bindings, functions named and anonymous, the `size`, `empty` and `nullify`
 built-ins, the `std.strings`, `std.json`, `std.yaml`, `std.base64`,
-`std.hash`, `std.seqs`, `std.maps`, `std.regex` and `std.math` modules, the
+`std.hash`, `std.seqs`, `std.maps`, `std.regex`, `std.math`, `std.path`,
+`std.files`, `std.template` and `std.random` modules, strict mode, the
 `??` and
 `?.` operators, arithmetic, comparison and boolean operators, the `<<` merge
 in both of its forms,

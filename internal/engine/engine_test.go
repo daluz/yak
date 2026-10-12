@@ -184,6 +184,85 @@ func TestTemplateReportsMissingFile(t *testing.T) {
 	}
 }
 
+// renderFile writes src as a template at name beneath dir and renders it.
+func renderFile(t *testing.T, dir, name, src string, nonStrict bool) (string, error) {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	err := engine.Template(engine.TemplateRequest{Path: path, Out: &buf, Options: render.DefaultOptions(), NonStrict: nonStrict})
+	return buf.String(), err
+}
+
+func TestFilesReadAnywhereWhenNotStrict(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(dir, "outside.txt")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, path := range map[string]string{"parent": "../outside.txt", "absolute": filepath.ToSlash(outside)} {
+		t.Run(name, func(t *testing.T) {
+			src := "import std.files\nv: files.read(\"" + path + "\")\n"
+			if _, err := renderFile(t, dir, "sub/t.yak", src, false); err == nil || !strings.Contains(err.Error(), "in strict mode") {
+				t.Errorf("strict error = %v, want a strict mode refusal", err)
+			}
+			got, err := renderFile(t, dir, "sub/t.yak", src, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != "v: outside\n" {
+				t.Errorf("got %q, want %q", got, "v: outside\n")
+			}
+		})
+	}
+}
+
+func TestFilesStrictRefusesEscapingSymlink(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "outside.txt"), []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("..", "outside.txt"), filepath.Join(dir, "sub", "link.txt")); err != nil {
+		t.Skipf("cannot create a symbolic link: %v", err)
+	}
+	src := "import std.files\nv: files.read(\"link.txt\")\n"
+	if _, err := renderFile(t, dir, "sub/t.yak", src, false); err == nil || !strings.Contains(err.Error(), "escapes") {
+		t.Errorf("strict error = %v, want the link to be refused", err)
+	}
+	if got, err := renderFile(t, dir, "sub/t.yak", src, true); err != nil || got != "v: outside\n" {
+		t.Errorf("non-strict got %q, %v, want the link followed", got, err)
+	}
+}
+
+func TestRandomWhenNotStrict(t *testing.T) {
+	src := `import { std.random, std.strings }
+same: random.randint(4, 4)
+between: random.randint(1, 3) in [1, 2, 3]
+fraction: random.rand() < 1
+only: random.choice(["a"])
+picked: random.choice([1, 2, 3]) in [1, 2, 3]
+shuffled: random.shuffle([7])
+local id = random.uuid()
+uuid: size(id) == 36 and strings.startsWith(strings.split(id, "-")[2], "4")
+`
+	got, err := renderFile(t, t.TempDir(), "t.yak", src, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "same: 4\nbetween: true\nfraction: true\nonly: a\npicked: true\nshuffled:\n  - 7\nuuid: true\n"
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestTemplateWritesNothingOnFailure(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "broken.yak")

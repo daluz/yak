@@ -1,0 +1,1 @@
+random-strict.yak:2:8: module "std.random" can answer differently on every rendering, which strict mode does not allow; render with --strict=false to use it

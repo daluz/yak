@@ -1,0 +1,4 @@
+# Strict mode reads only beneath the directory of the file calling read.
+import std.files
+
+motd: files.read("../template/files/motd.txt")

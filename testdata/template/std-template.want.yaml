@@ -1,0 +1,16 @@
+nginx: |
+  upstream shop {
+    server web-1:8080;
+    server web-3:8081;
+  }
+sorted: 'a=1 b=2 '
+helpers: |-
+  labels:
+    app: web
+    tier: front
+  quoted: "say \"hi\"" "80" ""
+  indented:
+      a
+      b
+no-data: plain text
+typed: 3/2.5

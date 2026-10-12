@@ -1,0 +1,4 @@
+import std.files
+
+## A path is relative to the file calling read, so this is files/inner.txt.
+inner: files.read("inner.txt")

@@ -1,0 +1,17 @@
+import { std.files, std.path, std.template }
+import files.lib
+
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "shop-nginx"
+data:
+  ## Read as it is: neither yak nor Go looks inside the file.
+  motd: files.read(path.join(["files", "motd.txt"]))
+  ## Read, then rendered as a Go template.
+  "nginx.conf": template.render(files.read("files/nginx.conf.tmpl"), {
+    name: "shop",
+    tls: true,
+    servers: [{host: "web-1", port: 8080}, {host: "web-3", port: 8081}],
+  })
+  "inner.txt": lib.inner

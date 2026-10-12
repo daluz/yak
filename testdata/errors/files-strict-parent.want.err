@@ -1,0 +1,1 @@
+files-strict-parent.yak:4:18: "read" cannot read "../template/files/motd.txt" in strict mode, which reads only beneath the directory of the file calling it; render with --strict=false to read anywhere

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/daluz/yak/internal/eval"
 )
 
 // Format selects the output encoding.
@@ -31,47 +33,111 @@ const (
 	FormatTOML
 )
 
-// formatNames gives each format the name it is written and reported with.
-var formatNames = [...]string{
-	FormatYAML:  "yaml",
-	FormatKYAML: "kyaml",
-	FormatJSON:  "json",
-	FormatJSONC: "jsonc",
-	FormatJWCC:  "jwcc",
-	FormatJSONL: "jsonl",
-	FormatTOML:  "toml",
+// formatSpec is everything the package knows about one format.
+type formatSpec struct {
+	// name is what the format is written and reported as.
+	name string
+	// aliases are the other spellings accepted for the format, including
+	// the other names it goes by and the file extensions it is written to.
+	aliases []string
+	// single marks a format that holds exactly one document.
+	single bool
+	// floats names the non-finite floats. The zero value refuses them, as
+	// JSON has no way to write them.
+	floats floatSpelling
+	encode func(docs []eval.Value, opts Options, floats floatSpelling) ([]byte, error)
+}
+
+// formatSpecs is indexed by Format, in the order formats are offered to the
+// user.
+var formatSpecs = [...]formatSpec{
+	FormatYAML: {
+		name:    "yaml",
+		aliases: []string{"yml"},
+		floats:  yamlFloats,
+		encode:  encodeYAML,
+	},
+	FormatKYAML: {
+		name:   "kyaml",
+		floats: yamlFloats,
+		encode: bracketed(bracketStyle{
+			// A KYAML document opens with "---" so that it cannot be
+			// mistaken for JSON, which also starts with "{".
+			header:        "---\n",
+			bareKeys:      true,
+			trailingComma: true,
+			comments:      hashComments,
+			cuddle:        true,
+			foldStrings:   true,
+		}),
+	},
+	FormatJSON: {
+		name:   "json",
+		single: true,
+		encode: bracketed(bracketStyle{}),
+	},
+	FormatJSONC: {
+		name:   "jsonc",
+		single: true,
+		encode: bracketed(bracketStyle{comments: slashComments}),
+	},
+	FormatJWCC: {
+		name: "jwcc",
+		// Not all of JSON5, but everything yak writes for jwcc reads as
+		// JSON5.
+		aliases: []string{"jsoncc", "hujson", "json5"},
+		single:  true,
+		encode:  bracketed(bracketStyle{trailingComma: true, comments: slashComments}),
+	},
+	FormatJSONL: {
+		name:    "jsonl",
+		aliases: []string{"ndjson"},
+		encode:  bracketed(bracketStyle{compact: true}),
+	},
+	FormatTOML: {
+		name:   "toml",
+		single: true,
+		floats: tomlFloats,
+		encode: encodeTOML,
+	},
 }
 
 // Formats lists every format in the order they are offered to the user.
-var Formats = []Format{
-	FormatYAML, FormatKYAML, FormatJSON, FormatJSONC, FormatJWCC,
-	FormatJSONL, FormatTOML,
-}
+var Formats = func() []Format {
+	fs := make([]Format, len(formatSpecs))
+	for i := range formatSpecs {
+		fs[i] = Format(i)
+	}
+	return fs
+}()
 
-// formatAliases names every spelling accepted for a format, including the
-// other names some of them go by and the file extensions they are written to.
-var formatAliases = map[string]Format{
-	"yaml":   FormatYAML,
-	"yml":    FormatYAML,
-	"kyaml":  FormatKYAML,
-	"json":   FormatJSON,
-	"jsonc":  FormatJSONC,
-	"jwcc":   FormatJWCC,
-	"jsoncc": FormatJWCC,
-	"hujson": FormatJWCC,
-	// Not all of JSON5, but everything yak writes for jwcc reads as JSON5.
-	"json5":  FormatJWCC,
-	"jsonl":  FormatJSONL,
-	"ndjson": FormatJSONL,
-	"toml":   FormatTOML,
+// formatAliases maps every accepted spelling, names included, to its format.
+var formatAliases = func() map[string]Format {
+	m := make(map[string]Format)
+	for i, s := range formatSpecs {
+		m[s.name] = Format(i)
+		for _, a := range s.aliases {
+			m[a] = Format(i)
+		}
+	}
+	return m
+}()
+
+// spec returns the format's spec, or false for a value no constant names.
+func (f Format) spec() (formatSpec, bool) {
+	if int(f) < 0 || int(f) >= len(formatSpecs) {
+		return formatSpec{}, false
+	}
+	return formatSpecs[f], true
 }
 
 // String returns the format's name.
 func (f Format) String() string {
-	if int(f) < 0 || int(f) >= len(formatNames) {
+	s, ok := f.spec()
+	if !ok {
 		return fmt.Sprintf("Format(%d)", int(f))
 	}
-	return formatNames[f]
+	return s.name
 }
 
 // ParseFormat resolves a format name, accepting the other names some

@@ -2,7 +2,6 @@ package render
 
 import (
 	"bytes"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -25,12 +24,8 @@ const (
 // bracketStyle is the punctuation of one bracketed format. KYAML and the JSON
 // family share a writer and differ only in these knobs.
 type bracketStyle struct {
-	format Format
-	indent int
 	// header precedes every document.
 	header string
-	// single marks a format that holds exactly one document.
-	single bool
 	// bareKeys leaves a key unquoted when it cannot be mistaken for
 	// anything else.
 	bareKeys bool
@@ -45,60 +40,29 @@ type bracketStyle struct {
 	foldStrings bool
 	// compact writes a whole document on one line, without indentation.
 	compact bool
-	// floats names the non-finite floats, which JSON cannot write at all.
-	floats floatSpelling
 }
 
-func bracketStyleFor(opts Options) bracketStyle {
-	s := bracketStyle{format: opts.Format, indent: opts.Indent}
-	switch opts.Format {
-	case FormatKYAML:
-		// A KYAML document opens with "---" so that it cannot be mistaken
-		// for JSON, which also starts with "{".
-		s.header = "---\n"
-		s.bareKeys = true
-		s.trailingComma = true
-		s.comments = hashComments
-		s.cuddle = true
-		s.foldStrings = true
-		s.floats = yamlFloats
-	case FormatJSON:
-		s.single = true
-	case FormatJSONC:
-		s.single = true
-		s.comments = slashComments
-	case FormatJWCC:
-		s.single = true
-		s.trailingComma = true
-		s.comments = slashComments
-	case FormatJSONL:
-		s.compact = true
-	}
-	return s
-}
-
-func encodeBracketed(docs []eval.Value, opts Options) ([]byte, error) {
-	style := bracketStyleFor(opts)
-	if style.single {
-		if err := singleDocument(style.format, docs); err != nil {
-			return nil, err
+// bracketed returns the encoder for the bracketed format written in style.
+func bracketed(style bracketStyle) func([]eval.Value, Options, floatSpelling) ([]byte, error) {
+	return func(docs []eval.Value, opts Options, floats floatSpelling) ([]byte, error) {
+		w := &bracketWriter{style: style, format: opts.Format, indent: opts.Indent, floats: floats}
+		for _, doc := range docs {
+			w.buf.WriteString(style.header)
+			if err := w.value(doc, 0); err != nil {
+				return nil, err
+			}
+			w.buf.WriteByte('\n')
 		}
+		return w.buf.Bytes(), nil
 	}
-
-	w := &bracketWriter{style: style}
-	for _, doc := range docs {
-		w.buf.WriteString(style.header)
-		if err := w.value(doc, 0); err != nil {
-			return nil, err
-		}
-		w.buf.WriteByte('\n')
-	}
-	return w.buf.Bytes(), nil
 }
 
 type bracketWriter struct {
-	buf   bytes.Buffer
-	style bracketStyle
+	buf    bytes.Buffer
+	style  bracketStyle
+	format Format
+	indent int
+	floats floatSpelling
 }
 
 // value writes v. depth is the nesting level of the line the value starts on,
@@ -112,9 +76,9 @@ func (w *bracketWriter) value(v eval.Value, depth int) error {
 	case eval.Int:
 		w.buf.WriteString(strconv.FormatInt(int64(t), 10))
 	case eval.Float:
-		s, err := formatFloat(float64(t), w.style.floats)
+		s, err := formatFloat(float64(t), w.format, w.floats)
 		if err != nil {
-			return fmt.Errorf("%s: %w", w.style.format, err)
+			return err
 		}
 		w.buf.WriteString(s)
 	case eval.String:
@@ -124,22 +88,13 @@ func (w *bracketWriter) value(v eval.Value, depth int) error {
 	case *eval.Array:
 		return w.array(t, depth)
 	default:
-		return fmt.Errorf("cannot render a value of type %s", v.TypeName())
+		return unrenderable(v)
 	}
 	return nil
 }
 
 func (w *bracketWriter) object(o *eval.Object, depth int) error {
-	fields := make([]*eval.Field, 0, o.Len())
-	for _, f := range o.Fields() {
-		omitted, err := f.Omitted()
-		if err != nil {
-			return err
-		}
-		if !omitted {
-			fields = append(fields, f)
-		}
-	}
+	fields := fieldEntries(o)
 	if len(fields) == 0 {
 		w.buf.WriteString("{}")
 		return nil
@@ -147,18 +102,14 @@ func (w *bracketWriter) object(o *eval.Object, depth int) error {
 
 	w.buf.WriteByte('{')
 	for i, f := range fields {
-		inner, err := f.Value.Value()
-		if err != nil {
-			return err
-		}
 		w.commentLines(f.Head, depth+1)
 		w.nl(depth + 1)
-		w.writeKey(f.Name)
+		w.writeKey(f.name)
 		w.buf.WriteByte(':')
 		if !w.style.compact {
 			w.buf.WriteByte(' ')
 		}
-		if err := w.value(inner, depth+1); err != nil {
+		if err := w.value(f.value, depth+1); err != nil {
 			return err
 		}
 		w.separator(i == len(fields)-1, false)
@@ -171,25 +122,17 @@ func (w *bracketWriter) object(o *eval.Object, depth int) error {
 }
 
 func (w *bracketWriter) array(a *eval.Array, depth int) error {
-	items := a.Items()
+	items := itemEntries(a)
 	if len(items) == 0 {
 		w.buf.WriteString("[]")
 		return nil
-	}
-	values := make([]eval.Value, len(items))
-	for i, item := range items {
-		v, err := item.Value.Value()
-		if err != nil {
-			return err
-		}
-		values[i] = v
 	}
 
 	// KYAML cuddles paired brackets, so "[{" opens a list of mappings and
 	// "}, {" joins two of them. Only a list whose items are all collections
 	// has brackets to pair up, and a comment written between two items has
 	// to break the pair apart onto separate lines.
-	cuddling := w.style.cuddle && allCollections(values)
+	cuddling := w.style.cuddle && allCollections(items)
 	cuddled := make([]bool, len(items))
 	for i, item := range items {
 		if !cuddling || w.hasComments(item.Head) {
@@ -211,7 +154,7 @@ func (w *bracketWriter) array(a *eval.Array, depth int) error {
 			w.commentLines(item.Head, depth+1)
 			w.nl(depth + 1)
 		}
-		if err := w.value(values[i], itemDepth); err != nil {
+		if err := w.value(item.value, itemDepth); err != nil {
 			return err
 		}
 		openDepth = itemDepth
@@ -256,7 +199,7 @@ func (w *bracketWriter) nl(depth int) {
 		return
 	}
 	w.buf.WriteByte('\n')
-	w.buf.WriteString(strings.Repeat(" ", depth*w.style.indent))
+	w.buf.WriteString(strings.Repeat(" ", depth*w.indent))
 }
 
 func (w *bracketWriter) hasComments(lines []string) bool {
@@ -331,7 +274,7 @@ func (w *bracketWriter) foldedString(s string, depth int) {
 	if trailingNewline {
 		lines = lines[:len(lines)-1]
 	}
-	pad := strings.Repeat(" ", (depth+1)*w.style.indent)
+	pad := strings.Repeat(" ", (depth+1)*w.indent)
 
 	w.buf.WriteString(`"\`)
 	for i, line := range lines {
@@ -396,9 +339,9 @@ func bareKey(s string) bool {
 	return !ambiguousKeys[strings.ToLower(s)]
 }
 
-func allCollections(values []eval.Value) bool {
-	for _, v := range values {
-		switch v.(type) {
+func allCollections(items []entry) bool {
+	for _, item := range items {
+		switch item.value.(type) {
 		case *eval.Object, *eval.Array:
 		default:
 			return false

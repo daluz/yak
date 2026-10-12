@@ -1,0 +1,12 @@
+upstream {{ .name }} {
+{{- range .servers }}
+  server {{ .host }}:{{ .port }};
+{{- end }}
+}
+
+server {
+  listen {{ if .tls }}443 ssl{{ else }}80{{ end }};
+  location / {
+    proxy_pass http://{{ .name }};
+  }
+}

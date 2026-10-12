@@ -24,6 +24,12 @@ type Module interface {
 type BuiltinModule struct {
 	Path     string
 	Builtins []*eval.Builtin
+	// Nondeterministic marks a module whose answers can change from one
+	// rendering to the next, which strict mode refuses to import.
+	Nondeterministic bool
+	// StrictBuiltins, when set, replace Builtins in strict mode, for a
+	// module that can do more when strict mode is off.
+	StrictBuiltins []*eval.Builtin
 }
 
 func (m *BuiltinModule) Name() string { return m.Path }
@@ -92,10 +98,13 @@ type Loader struct {
 	// loaded holds the root of every file module read so far, keyed by the
 	// absolute path of its file.
 	loaded map[string]*eval.Thunk
+	// strict admits only the built-in modules that answer the same on every
+	// rendering, in their strict form.
+	strict bool
 }
 
-func NewLoader() *Loader {
-	return &Loader{loaded: map[string]*eval.Thunk{}}
+func NewLoader(strict bool) *Loader {
+	return &Loader{loaded: map[string]*eval.Thunk{}, strict: strict}
 }
 
 // Root answers the built-ins of the root module.
@@ -116,8 +125,17 @@ func (l *Loader) Import(s *eval.Session, node *ast.Import) (*eval.Thunk, error) 
 	}
 	switch m := m.(type) {
 	case *BuiltinModule:
+		if l.strict && m.Nondeterministic {
+			return nil, eval.Errorf(node.Pos(),
+				"module %q can answer differently on every rendering, which strict mode does not allow; render with --strict=false to use it",
+				m.Path)
+		}
+		builtins := m.Builtins
+		if l.strict && m.StrictBuiltins != nil {
+			builtins = m.StrictBuiltins
+		}
 		o := eval.NewObject()
-		for _, b := range m.Builtins {
+		for _, b := range builtins {
 			o.Set(b.Name, false, eval.Done(b))
 		}
 		return eval.Done(o), nil

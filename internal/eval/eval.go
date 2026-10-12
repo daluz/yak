@@ -193,6 +193,10 @@ type Run struct {
 	FilePath string
 	// ContextPaths are the context files in the order they were given.
 	ContextPaths []string
+	// NonStrict turns strict mode off, admitting the built-in modules whose
+	// answers can change from one rendering to the next. "$yak" does not
+	// report it.
+	NonStrict bool
 }
 
 // yakMapping builds the mapping "$yak" answers.

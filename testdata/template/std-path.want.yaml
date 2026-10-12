@@ -1,0 +1,12 @@
+dir: deploy/config
+base: nginx.conf.tmpl
+ext: .tmpl
+stem: nginx.conf
+no-dir: .
+no-ext: ""
+clean: a/b/d
+joined: deploy/files/motd.txt
+absolute: /etc/nginx
+is-abs:
+  - true
+  - false

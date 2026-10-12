@@ -21,8 +21,8 @@ var (
 	tomlFloats = floatSpelling{nan: "nan", inf: "inf", negInf: "-inf"}
 )
 
-// formatFloat spells f for a format whose non-finite floats are named by s.
-func formatFloat(f float64, s floatSpelling) (string, error) {
+// formatFloat spells f for format, whose non-finite floats are named by s.
+func formatFloat(f float64, format Format, s floatSpelling) (string, error) {
 	var special string
 	switch {
 	case math.IsNaN(f):
@@ -34,7 +34,7 @@ func formatFloat(f float64, s floatSpelling) (string, error) {
 	}
 	if math.IsNaN(f) || math.IsInf(f, 0) {
 		if special == "" {
-			return "", fmt.Errorf("cannot write %s, which has no spelling in this format", strconv.FormatFloat(f, 'g', -1, 64))
+			return "", fmt.Errorf("%s has no spelling for %s", format, strconv.FormatFloat(f, 'g', -1, 64))
 		}
 		return special, nil
 	}

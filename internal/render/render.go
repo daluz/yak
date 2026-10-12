@@ -43,20 +43,16 @@ func Documents(w io.Writer, docs []eval.Value, opts Options) error {
 		}
 	}
 
-	var (
-		out []byte
-		err error
-	)
-	switch opts.Format {
-	case FormatYAML:
-		out, err = encodeYAML(docs, opts)
-	case FormatKYAML, FormatJSON, FormatJSONC, FormatJWCC, FormatJSONL:
-		out, err = encodeBracketed(docs, opts)
-	case FormatTOML:
-		out, err = encodeTOML(docs, opts)
-	default:
-		err = fmt.Errorf("unsupported output format %s", opts.Format)
+	spec, ok := opts.Format.spec()
+	if !ok {
+		return fmt.Errorf("unsupported output format %s", opts.Format)
 	}
+	if spec.single {
+		if err := singleDocument(opts.Format, docs); err != nil {
+			return err
+		}
+	}
+	out, err := spec.encode(docs, opts, spec.floats)
 	if err != nil {
 		return err
 	}
@@ -77,6 +73,46 @@ func withoutNull(docs []eval.Value) []eval.Value {
 		kept = append(kept, doc)
 	}
 	return kept
+}
+
+// entry is a field that is written out, or an item of a sequence, paired with
+// the value it resolved to. An item has no name.
+type entry struct {
+	name string
+	eval.Comments
+	value eval.Value
+}
+
+// fieldEntries returns the fields of o that are written out, leaving out the
+// hidden ones and those that hide a null. Documents forces every value before
+// it hands a document to an encoder, so reading one here cannot fail.
+func fieldEntries(o *eval.Object) []entry {
+	out := make([]entry, 0, o.Len())
+	for _, f := range o.Fields() {
+		if omitted, _ := f.Omitted(); omitted {
+			continue
+		}
+		v, _ := f.Value.Value()
+		out = append(out, entry{name: f.Name, Comments: f.Comments, value: v})
+	}
+	return out
+}
+
+// itemEntries returns the items of a, which like fieldEntries relies on
+// Documents having forced them.
+func itemEntries(a *eval.Array) []entry {
+	items := a.Items()
+	out := make([]entry, len(items))
+	for i, item := range items {
+		v, _ := item.Value.Value()
+		out[i] = entry{Comments: item.Comments, value: v}
+	}
+	return out
+}
+
+// unrenderable reports a value that no format can write, such as a function.
+func unrenderable(v eval.Value) error {
+	return fmt.Errorf("cannot render a value of type %s", v.TypeName())
 }
 
 // singleDocument reports the error a format that holds exactly one document

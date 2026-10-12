@@ -1,0 +1,14 @@
+import std.path
+
+local file = "deploy/config/nginx.conf.tmpl"
+
+dir: path.dir(file)
+base: path.base(file)
+ext: path.ext(file)
+stem: path.stem(file)
+no-dir: path.dir("nginx.conf")
+no-ext: path.ext("Makefile")
+clean: path.clean("a//b/./c/../d/")
+joined: path.join(["deploy", "", "config/", "../files", "motd.txt"])
+absolute: path.join(["/etc", "nginx"])
+is-abs: [path.isAbs("/etc/hosts"), path.isAbs("etc/hosts")]

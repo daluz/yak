@@ -1,0 +1,1 @@
+template-not-a-string.yak:3:20: "render" needs a string, found sequence
