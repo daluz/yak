@@ -1,10 +1,6 @@
 package eval
 
-import (
-	"strconv"
-
-	"github.com/daluz/yak/internal/ast"
-)
+import "github.com/daluz/yak/internal/ast"
 
 // rebinds reports whether binds bring any name into scope more than once.
 func rebinds(binds []*ast.Binding) bool {
@@ -69,11 +65,11 @@ func fit(pat *ast.Pattern, t *Thunk, where string) error {
 	arr, ok := v.(*Array)
 	if !ok {
 		return errorf(pat.Pos(), "the pattern needs a sequence of %s, found %s%s",
-			itemCount(len(pat.Items)), v.TypeName(), where)
+			plural(len(pat.Items), "item"), v.TypeName(), where)
 	}
 	if arr.Len() != len(pat.Items) {
 		return errorf(pat.Pos(), "the pattern needs a sequence of %s, found %s%s",
-			itemCount(len(pat.Items)), itemCount(arr.Len()), where)
+			plural(len(pat.Items), "item"), plural(arr.Len(), "item"), where)
 	}
 	for i, item := range pat.Items {
 		if err := fit(item, arr.Items()[i].Value, where); err != nil {
@@ -91,12 +87,4 @@ func part(t *Thunk, path []int) *Thunk {
 		t = v.(*Array).Items()[i].Value
 	}
 	return t
-}
-
-// itemCount counts the items of a sequence for a diagnostic.
-func itemCount(n int) string {
-	if n == 1 {
-		return "1 item"
-	}
-	return strconv.Itoa(n) + " items"
 }

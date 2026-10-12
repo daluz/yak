@@ -286,9 +286,7 @@ func (w *bracketWriter) writeKey(name string) {
 		w.buf.WriteString(name)
 		return
 	}
-	w.buf.WriteByte('"')
-	escapeInto(&w.buf, name)
-	w.buf.WriteByte('"')
+	w.buf.WriteString(quote(name))
 }
 
 func (w *bracketWriter) writeString(s string, depth int) {
@@ -296,9 +294,7 @@ func (w *bracketWriter) writeString(s string, depth int) {
 		w.foldedString(s, depth)
 		return
 	}
-	w.buf.WriteByte('"')
-	escapeInto(&w.buf, s)
-	w.buf.WriteByte('"')
+	w.buf.WriteString(quote(s))
 }
 
 // foldedString writes a multi-line string the way KYAML does: one source line

@@ -10,10 +10,6 @@ import (
 	"github.com/daluz/yak/internal/token"
 )
 
-// parseInlineValue parses a value that appears on a single line: a literal, a
-// reference, or a flow collection.
-func (p *parser) parseInlineValue() (ast.Node, error) { return p.parseExpr() }
-
 // parseExpr parses an expression. A conditional binds looser than every
 // operator, so it is recognised before anything else.
 func (p *parser) parseExpr() (ast.Node, error) {
@@ -35,7 +31,7 @@ func (p *parser) parseCoalesce() (ast.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	for p.at(token.Coalesce) && p.cur().Line() == p.prevEnd.Line {
+	for p.at(token.Coalesce) && p.sameLine() {
 		p.next()
 		y, err := p.parseBinary(0)
 		if err != nil {
@@ -47,12 +43,12 @@ func (p *parser) parseCoalesce() (ast.Node, error) {
 	// needs, and so was a number the lexer read with its sign attached.
 	// Either way the operator was meant, so say so rather than leave the
 	// caller to report two values in a row.
-	if p.cur().Line() == p.prevEnd.Line && (p.at(token.Dash) || p.atSignedNumber()) {
+	if p.sameLine() && (p.at(token.Dash) || p.atSignedNumber()) {
 		return nil, p.errorf(p.cur().Pos, "a subtraction needs whitespace on both sides of its %q", "-")
 	}
 	// An arrow left over here follows something that was not a parameter
 	// list, which is how a function written without parentheses reads.
-	if p.at(token.Arrow) && p.cur().Line() == p.prevEnd.Line {
+	if p.at(token.Arrow) && p.sameLine() {
 		return nil, p.errorf(p.cur().Pos,
 			"an anonymous function needs its parameters in parentheses, as in %q", "(x) => x")
 	}
@@ -129,7 +125,7 @@ func (p *parser) operator() token.Kind {
 		return k
 	}
 	if p.atKeyword(token.KeywordNot) {
-		if next := p.toks[p.i+1]; next.Kind == token.Ident && next.Lit == token.KeywordIn {
+		if next := p.peek(); next.Kind == token.Ident && next.Lit == token.KeywordIn {
 			return token.NotIn
 		}
 	}
@@ -139,14 +135,14 @@ func (p *parser) operator() token.Kind {
 // atBinaryOp reports whether an operator of the given level stands at the
 // current position, ready to extend the operand already parsed.
 func (p *parser) atBinaryOp(level int) bool {
-	if !slices.Contains(precedence[level], p.operator()) || p.cur().Line() != p.prevEnd.Line {
+	if !slices.Contains(precedence[level], p.operator()) || !p.sameLine() {
 		return false
 	}
 	// A "-" may appear inside an identifier and may negate what follows it,
 	// so a subtraction is the one written with whitespace on both sides:
 	// "a-b" is a name, "a -b" is two operands, and "a - b" subtracts.
 	if p.at(token.Dash) {
-		return !p.adjacent() && p.toks[p.i+1].Pos != p.cur().End
+		return !p.adjacent() && p.peek().Pos != p.cur().End
 	}
 	return true
 }
@@ -566,16 +562,13 @@ func (p *parser) parseArgs() ([]ast.Arg, error) {
 	var args []ast.Arg
 	named := false
 	for {
-		if p.at(token.EOF) {
-			return nil, p.errorf(open.Pos, "unterminated argument list: missing %q", ")")
-		}
-		if p.at(token.RParen) {
-			p.next()
-			return args, nil
+		more, err := p.nextInList(open, argList, len(args) == 0)
+		if !more {
+			return args, err
 		}
 		var arg ast.Arg
 		switch {
-		case p.at(token.Ident) && p.toks[p.i+1].Kind == token.Assign:
+		case p.at(token.Ident) && p.peek().Kind == token.Assign:
 			name := p.next()
 			p.next()
 			arg.Name, arg.NamePos = name.Lit, name.Pos
@@ -589,16 +582,6 @@ func (p *parser) parseArgs() ([]ast.Arg, error) {
 		}
 		arg.Value = value
 		args = append(args, arg)
-		if p.at(token.Comma) {
-			p.next()
-			continue
-		}
-		if p.at(token.EOF) {
-			return nil, p.errorf(open.Pos, "unterminated argument list: missing %q", ")")
-		}
-		if !p.at(token.RParen) {
-			return nil, p.errorf(p.cur().Pos, "expected %q or %q in an argument list, found %s", ",", ")", p.cur())
-		}
 	}
 }
 
@@ -606,12 +589,9 @@ func (p *parser) parseFlowSequence() (ast.Node, error) {
 	open := p.next()
 	s := &ast.Sequence{Base: ast.At(open.Pos), Flow: true}
 	for {
-		if p.at(token.EOF) {
-			return nil, p.errorf(open.Pos, "unterminated flow sequence: missing %q", "]")
-		}
-		if p.at(token.RBracket) {
-			p.next()
-			return s, nil
+		more, err := p.nextInList(open, flowSeqList, len(s.Items) == 0)
+		if !more {
+			return s, err
 		}
 		item, err := p.parseExpr()
 		if err != nil {
@@ -621,16 +601,6 @@ func (p *parser) parseFlowSequence() (ast.Node, error) {
 			return p.parseSeqComp(open, item)
 		}
 		s.Items = append(s.Items, &ast.Item{Value: item})
-		if p.at(token.Comma) {
-			p.next()
-			continue
-		}
-		if p.at(token.EOF) {
-			return nil, p.errorf(open.Pos, "unterminated flow sequence: missing %q", "]")
-		}
-		if !p.at(token.RBracket) {
-			return nil, p.errorf(p.cur().Pos, "expected %q or %q in flow sequence, found %s", ",", "]", p.cur())
-		}
 	}
 }
 
@@ -638,12 +608,9 @@ func (p *parser) parseFlowMapping() (ast.Node, error) {
 	open := p.next()
 	m := &ast.Mapping{Base: ast.At(open.Pos), Flow: true}
 	for {
-		if p.at(token.EOF) {
-			return nil, p.errorf(open.Pos, "unterminated flow mapping: missing %q", "}")
-		}
-		if p.at(token.RBrace) {
-			p.next()
-			return m, nil
+		more, err := p.nextInList(open, flowMapList, len(m.Entries) == 0)
+		if !more {
+			return m, err
 		}
 		entry, err := p.parseEntryHead()
 		if err != nil {
@@ -659,16 +626,6 @@ func (p *parser) parseFlowMapping() (ast.Node, error) {
 			return p.parseMapComp(open, entry)
 		}
 		m.Entries = append(m.Entries, entry)
-		if p.at(token.Comma) {
-			p.next()
-			continue
-		}
-		if p.at(token.EOF) {
-			return nil, p.errorf(open.Pos, "unterminated flow mapping: missing %q", "}")
-		}
-		if !p.at(token.RBrace) {
-			return nil, p.errorf(p.cur().Pos, "expected %q or %q in flow mapping, found %s", ",", "}", p.cur())
-		}
 	}
 }
 

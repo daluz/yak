@@ -16,7 +16,7 @@ import (
 // another format.
 func init() {
 	module.Register(module.BuiltinModule{Path: "std.gotemplate", Builtins: []*eval.Builtin{
-		{Name: "render", Params: append(params("template"), optional("data", &ast.Null{})), Fn: renderTemplate},
+		builtin("render", append(params("template"), optional("data", &ast.Null{})), renderTemplate),
 	}})
 }
 
@@ -41,39 +41,37 @@ func indentLines(n int, s string) string {
 	return pad + strings.ReplaceAll(s, "\n", "\n"+pad)
 }
 
-func renderTemplate(args []*eval.Thunk) (eval.Value, error) {
-	text, err := stringArg("render", args[0])
+func renderTemplate(c call) (eval.Value, error) {
+	text, err := c.str(0)
 	if err != nil {
 		return nil, err
 	}
-	v, err := args[1].Value()
+	v, err := c.value(1)
 	if err != nil {
 		return nil, err
 	}
-	data, err := goValue(v, args[1])
+	data, err := goValue(v, c)
 	if err != nil {
 		return nil, err
 	}
 	t, err := template.New("template").Option("missingkey=error").Funcs(templateFuncs).Parse(text)
 	if err != nil {
-		return nil, templateError(args[0], err)
+		return nil, templateError(c, err)
 	}
 	var b strings.Builder
 	if err := t.Execute(&b, data); err != nil {
-		return nil, templateError(args[0], err)
+		return nil, templateError(c, err)
 	}
 	return eval.String(b.String()), nil
 }
 
-func templateError(arg *eval.Thunk, err error) error {
-	return eval.Errorf(arg.Pos(), "%q cannot render its template: %s", "render",
-		strings.TrimPrefix(err.Error(), "template: "))
+func templateError(c call, err error) error {
+	return c.errorf(0, "cannot render its template: %s", strings.TrimPrefix(err.Error(), "template: "))
 }
 
-// goValue converts a value into the Go data a template reads, leaving out
-// what the output formats leave out. arg is the argument it came from, which
-// a complaint points at.
-func goValue(v eval.Value, arg *eval.Thunk) (any, error) {
+// goValue converts a value of the data argument into the Go data a template
+// reads, leaving out what the output formats leave out.
+func goValue(v eval.Value, c call) (any, error) {
 	switch t := v.(type) {
 	case eval.Null:
 		return nil, nil
@@ -92,7 +90,7 @@ func goValue(v eval.Value, arg *eval.Thunk) (any, error) {
 			if err != nil {
 				return nil, err
 			}
-			if items[i], err = goValue(iv, arg); err != nil {
+			if items[i], err = goValue(iv, c); err != nil {
 				return nil, err
 			}
 		}
@@ -111,12 +109,12 @@ func goValue(v eval.Value, arg *eval.Thunk) (any, error) {
 			if err != nil {
 				return nil, err
 			}
-			if m[f.Name], err = goValue(fv, arg); err != nil {
+			if m[f.Name], err = goValue(fv, c); err != nil {
 				return nil, err
 			}
 		}
 		return m, nil
 	default:
-		return nil, eval.Errorf(arg.Pos(), "%q cannot pass a %s to a template", "render", v.TypeName())
+		return nil, c.errorf(1, "cannot pass a %s to a template", v.TypeName())
 	}
 }

@@ -66,7 +66,13 @@ func (p *parser) atKeyword(word string) bool {
 	if !p.at(token.Ident) || p.cur().Lit != word {
 		return false
 	}
-	return !p.toks[p.i+1].Kind.IsSeparator()
+	return !p.peek().Kind.IsSeparator()
+}
+
+// peek returns the token after the current one, which is EOF again at the
+// end of the input.
+func (p *parser) peek() token.Token {
+	return p.toks[min(p.i+1, len(p.toks)-1)]
 }
 
 func (p *parser) next() token.Token {
@@ -82,6 +88,12 @@ func (p *parser) next() token.Token {
 // previous one ended.
 func (p *parser) adjacent() bool {
 	return p.cur().Pos == p.prevEnd
+}
+
+// sameLine reports whether the current token is on the line the previous one
+// ended on.
+func (p *parser) sameLine() bool {
+	return p.cur().Line() == p.prevEnd.Line
 }
 
 func (p *parser) errorf(pos token.Pos, format string, args ...any) error {
@@ -179,7 +191,7 @@ func (p *parser) parseBlockNode() (ast.Node, error) {
 	if p.looksLikeEntry() {
 		return p.parseBlockMapping(t.Col())
 	}
-	return p.parseInlineValue()
+	return p.parseExpr()
 }
 
 // parseLocalScope parses a block that opens with one or more local or import
@@ -313,7 +325,7 @@ func (p *parser) parseEntryValue(parentCol int, colon token.Token) (ast.Node, er
 	}
 	t := p.cur()
 	if t.Line() == colon.Line() {
-		v, err := p.parseInlineValue()
+		v, err := p.parseExpr()
 		if err != nil {
 			return nil, err
 		}
@@ -418,7 +430,7 @@ func (p *parser) parseBlock(kw string, head []string, item func() (*ast.Binding,
 			p.next()
 			continue
 		}
-		separated = p.cur().Line() != p.prevEnd.Line
+		separated = !p.sameLine()
 	}
 }
 
@@ -442,14 +454,14 @@ func (p *parser) parseImport(start int, head []string) ([]*ast.Binding, error) {
 	if p.at(token.LBrace) {
 		return p.parseBlock(token.KeywordImport, head, p.parseImportSpec)
 	}
-	if p.atDocBoundary() || p.cur().Line() != p.prevEnd.Line {
+	if p.atDocBoundary() || !p.sameLine() {
 		return nil, p.errorf(p.prevEnd, "expected the path of a module after %q", token.KeywordImport)
 	}
 	bind, err := p.parseImportSpec()
 	if err != nil {
 		return nil, err
 	}
-	if !p.atDocBoundary() && p.cur().Line() == p.prevEnd.Line {
+	if !p.atDocBoundary() && p.sameLine() {
 		return nil, p.errorf(p.cur().Pos, "unexpected %s after the path of an %q", p.cur(), token.KeywordImport)
 	}
 	bind.Comments = ast.Comments{Head: head, Line: p.takeLine(start)}
@@ -460,7 +472,7 @@ func (p *parser) parseImport(start int, head []string) ([]*ast.Binding, error) {
 // the name it is given, or else under the last segment of its path.
 func (p *parser) parseImportSpec() (*ast.Binding, error) {
 	var name token.Token
-	if p.at(token.Ident) && p.toks[p.i+1].Kind == token.Assign {
+	if p.at(token.Ident) && p.peek().Kind == token.Assign {
 		t, err := p.parseName("module")
 		if err != nil {
 			return nil, err
@@ -535,29 +547,54 @@ func (p *parser) parseSignature(name token.Token) (*ast.Function, error) {
 func (p *parser) parseParams(fn *ast.Function) error {
 	open := p.next()
 	for {
-		if p.at(token.EOF) {
-			return p.errorf(open.Pos, "unterminated parameter list: missing %q", ")")
-		}
-		if p.at(token.RParen) {
-			p.next()
-			return nil
+		more, err := p.nextInList(open, paramList, len(fn.Params) == 0)
+		if !more {
+			return err
 		}
 		param, err := p.parseParam(fn)
 		if err != nil {
 			return err
 		}
 		fn.Params = append(fn.Params, param)
-		if p.at(token.Comma) {
-			p.next()
-			continue
-		}
-		if p.at(token.EOF) {
-			return p.errorf(open.Pos, "unterminated parameter list: missing %q", ")")
-		}
-		if !p.at(token.RParen) {
-			return p.errorf(p.cur().Pos, "expected %q or %q in a parameter list, found %s", ",", ")", p.cur())
-		}
 	}
+}
+
+// list describes a comma-separated list in brackets, for nextInList.
+type list struct {
+	closer token.Kind
+	// close is how closer is written.
+	close string
+	// name is what the list is called, and in what an unexpected token is
+	// reported as being found in.
+	name, in string
+}
+
+var (
+	paramList   = list{closer: token.RParen, close: ")", name: "parameter list", in: "a parameter list"}
+	argList     = list{closer: token.RParen, close: ")", name: "argument list", in: "an argument list"}
+	flowSeqList = list{closer: token.RBracket, close: "]", name: "flow sequence", in: "flow sequence"}
+	flowMapList = list{closer: token.RBrace, close: "}", name: "flow mapping", in: "flow mapping"}
+)
+
+// nextInList moves to the next item of the list l that open opened, and
+// reports whether there is one. It consumes the comma after the item before
+// it, which first says there is none of, or the bracket that closes the list.
+func (p *parser) nextInList(open token.Token, l list, first bool) (bool, error) {
+	separated := first
+	if !first && p.at(token.Comma) {
+		p.next()
+		separated = true
+	}
+	switch {
+	case p.at(token.EOF):
+		return false, p.errorf(open.Pos, "unterminated %s: missing %q", l.name, l.close)
+	case p.at(l.closer):
+		p.next()
+		return false, nil
+	case !separated:
+		return false, p.errorf(p.cur().Pos, "expected %q or %q in %s, found %s", ",", l.close, l.in, p.cur())
+	}
+	return true, nil
 }
 
 // parseParam parses one parameter of fn, along with the default value that a
@@ -577,7 +614,7 @@ func (p *parser) parseParam(fn *ast.Function) (*ast.Param, error) {
 		}
 		param = &ast.Param{Base: ast.At(name.Pos), Name: name.Lit}
 	}
-	if err := checkParamNames(p, fn.Params, param); err != nil {
+	if err := p.checkParamNames(fn.Params, param); err != nil {
 		return nil, err
 	}
 	var err error
@@ -592,7 +629,7 @@ func (p *parser) parseParam(fn *ast.Function) (*ast.Param, error) {
 
 // checkParamNames rejects a parameter that binds a name one declared before
 // it already binds, whether either of them is a pattern or not.
-func checkParamNames(p *parser, prev []*ast.Param, param *ast.Param) error {
+func (p *parser) checkParamNames(prev []*ast.Param, param *ast.Param) error {
 	taken := map[string]bool{}
 	for _, q := range prev {
 		eachParamName(q, func(name string, _ token.Pos) { taken[name] = true })
@@ -628,7 +665,7 @@ type bindHead struct {
 // written the same way whether the binding stands on its own or inside a
 // "local" block.
 func (p *parser) parseBindHead() (bindHead, error) {
-	if p.at(token.LBracket) || (p.at(token.Ident) && p.toks[p.i+1].Kind == token.Comma) {
+	if p.at(token.LBracket) || (p.at(token.Ident) && p.peek().Kind == token.Comma) {
 		return p.parsePatternHead()
 	}
 	name, err := p.parseName("binding")

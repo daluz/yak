@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"math"
@@ -66,15 +67,15 @@ func evalBinary(node *ast.Binary, env *Env) (Value, error) {
 	}
 	switch node.Op {
 	case token.Eq, token.Ne:
-		same, err := equal(x, y)
+		same, err := Equal(x, y)
 		if err != nil {
-			return nil, errorf(node.OpPos, "%s", err.Error())
+			return nil, errorAt(node.OpPos, err)
 		}
 		return Bool(same == (node.Op == token.Eq)), nil
 	case token.Plus, token.Dash, token.Star, token.Slash, token.Percent:
 		v, err := arith(node.Op, x, y)
 		if err != nil {
-			return nil, errorf(node.OpPos, "%s", err.Error())
+			return nil, errorAt(node.OpPos, err)
 		}
 		return v, nil
 	case token.Merge:
@@ -83,7 +84,7 @@ func evalBinary(node *ast.Binary, env *Env) (Value, error) {
 		if !aok || !bok {
 			return nil, errorf(node.OpPos, "%s needs two mappings, found %s and %s", node.Op, x.TypeName(), y.TypeName())
 		}
-		v, err := deepMerge(a, b)
+		v, err := Merge(a, b)
 		if err != nil {
 			return nil, err
 		}
@@ -95,9 +96,9 @@ func evalBinary(node *ast.Binary, env *Env) (Value, error) {
 		}
 		return Bool(found == (node.Op == token.In)), nil
 	}
-	c, err := compare(x, y)
+	c, err := Compare(x, y)
 	if err != nil {
-		return nil, errorf(node.OpPos, "%s", err.Error())
+		return nil, errorAt(node.OpPos, err)
 	}
 	switch node.Op {
 	case token.Lt:
@@ -214,17 +215,17 @@ func concat(x, y *Array) *Array {
 	return NewArray(append(items, y.items...))
 }
 
-// deepMerge joins two mappings. The one on the right decides: a key held by
-// both takes its value from y and keeps the position it has in x, so the
-// shape of the mapping on the left stays recognisable.
+// Merge joins two mappings as "<<" does. The one on the right decides: a key
+// held by both takes its value from y and keeps the position it has in x, so
+// the shape of the mapping on the left stays recognisable.
 //
 // A key whose value is a mapping on both sides merges rather than being
 // replaced, however deep that goes. Anything else y holds replaces what x
 // held, so a sequence or a scalar overrides rather than combining.
-func deepMerge(x, y *Object) (*Object, error) {
+func Merge(x, y *Object) (*Object, error) {
 	o := NewObject()
 	for _, f := range x.fields {
-		o.add(f)
+		o.Add(f)
 	}
 	for _, f := range y.fields {
 		if prev, held := o.Lookup(f.Name); held {
@@ -236,10 +237,10 @@ func deepMerge(x, y *Object) (*Object, error) {
 			// about it; only its value is combined.
 			copied := *f
 			copied.Value = value
-			o.add(&copied)
+			o.Add(&copied)
 			continue
 		}
-		o.add(f)
+		o.Add(f)
 	}
 	return o, nil
 }
@@ -267,22 +268,17 @@ func combined(old, new *Field) (*Thunk, error) {
 	if !ok {
 		return new.Value, nil
 	}
-	merged, err := deepMerge(a, b)
+	merged, err := Merge(a, b)
 	if err != nil {
 		return nil, err
 	}
 	return Done(merged), nil
 }
 
-// Equal answers what "==" does, and fails where it would.
-func Equal(x, y Value) (bool, error) { return equal(x, y) }
-
-// Compare answers the order "<" sees, and fails where it would.
-func Compare(x, y Value) (int, error) { return compare(x, y) }
-
-// equal compares two values for "==". Values of different types are never
-// equal, except that integers and floats compare as the numbers they are.
-func equal(x, y Value) (bool, error) {
+// Equal compares two values for "==", and fails where it would. Values of
+// different types are never equal, except that integers and floats compare
+// as the numbers they are.
+func Equal(x, y Value) (bool, error) {
 	if err := requireScalar(x); err != nil {
 		return false, err
 	}
@@ -300,23 +296,17 @@ func equal(x, y Value) (bool, error) {
 		b, ok := y.(String)
 		return ok && a == b, nil
 	}
-	c, err := compare(x, y)
+	c, err := Compare(x, y)
 	return err == nil && c == 0, nil
 }
 
-// compare orders two values, answering a negative number when x sorts first.
-// Numbers and strings are the only things with an order.
-func compare(x, y Value) (int, error) {
+// Compare orders two values for "<", answering a negative number when x sorts
+// first, and fails where "<" would. Numbers and strings are the only things
+// with an order.
+func Compare(x, y Value) (int, error) {
 	if a, ok := x.(Int); ok {
 		if b, ok := y.(Int); ok {
-			switch {
-			case a < b:
-				return -1, nil
-			case a > b:
-				return 1, nil
-			default:
-				return 0, nil
-			}
+			return cmp.Compare(a, b), nil
 		}
 	}
 	if a, ok := x.(String); ok {
@@ -339,9 +329,9 @@ func compare(x, y Value) (int, error) {
 	return 0, fmt.Errorf("cannot compare %s with %s", x.TypeName(), y.TypeName())
 }
 
-// member answers "x in y", which op names for its errors. A sequence holds x when one of its items equals it,
-// a mapping when x names one of its keys, hidden ones included, and a string
-// when x appears somewhere within it.
+// member answers "x in y", which op names for its errors. A sequence holds x
+// when one of its items equals it, a mapping when x names one of its keys,
+// hidden ones included, and a string when x appears somewhere within it.
 //
 // Looking for x among the items of a sequence asks the same question "=="
 // does, so x has to be a scalar. An item that is a collection is never equal
@@ -350,14 +340,14 @@ func member(op token.Kind, pos token.Pos, x, y Value) (bool, error) {
 	switch c := y.(type) {
 	case *Array:
 		if err := requireScalar(x); err != nil {
-			return false, errorf(pos, "%s", err.Error())
+			return false, errorAt(pos, err)
 		}
 		for _, item := range c.Items() {
 			v, err := item.Value.Value()
 			if err != nil {
 				return false, err
 			}
-			if same, err := equal(x, v); err == nil && same {
+			if same, err := Equal(x, v); err == nil && same {
 				return true, nil
 			}
 		}

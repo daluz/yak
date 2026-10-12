@@ -23,13 +23,9 @@ func decodeJSON(t *testing.T, src string) *eval.Object {
 
 func decodeAs(t *testing.T, name, src string) *eval.Object {
 	t.Helper()
-	v, err := ctxfile.Decode(name, []byte(src))
+	obj, err := ctxfile.Decode(name, []byte(src))
 	if err != nil {
 		t.Fatalf("Decode(%q) returned error: %v", src, err)
-	}
-	obj, ok := v.(*eval.Object)
-	if !ok {
-		t.Fatalf("Decode(%q) returned a %s, want a mapping", src, v.TypeName())
 	}
 	return obj
 }
@@ -246,9 +242,9 @@ func TestDecodeRejectsNonMapping(t *testing.T) {
 func TestMergeIsDeepAndLastWins(t *testing.T) {
 	base := decode(t, "a:\n  x: 1\n  y: 2\nkeep: base\nlist:\n  - 1\n")
 	over := decode(t, "a:\n  y: 20\n  z: 30\nlist:\n  - 9\n  - 9\n")
-	merged, ok := ctxfile.Merge(base, over).(*eval.Object)
-	if !ok {
-		t.Fatal("merge did not produce a mapping")
+	merged, err := eval.Merge(base, over)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	if got := lookup(t, merged, "a.x"); got != eval.Int(1) {
@@ -272,7 +268,10 @@ func TestMergeIsDeepAndLastWins(t *testing.T) {
 func TestMergeKeepsBaseOrdering(t *testing.T) {
 	base := decode(t, "a: 1\nb: 2\n")
 	over := decode(t, "b: 20\nc: 30\n")
-	merged := ctxfile.Merge(base, over).(*eval.Object)
+	merged, err := eval.Merge(base, over)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got := strings.Join(merged.Names(), ","); got != "a,b,c" {
 		t.Errorf("key order = %q, want %q", got, "a,b,c")
 	}

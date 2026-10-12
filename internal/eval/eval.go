@@ -191,10 +191,14 @@ type Run struct {
 	// ContextPaths are the context files in the order they were given.
 	ContextPaths []string
 	// NonStrict turns strict mode off, admitting the built-in modules whose
-	// answers can change from one rendering to the next. "$yak.strict"
-	// reports its opposite.
+	// answers can change from one rendering to the next. It is negative so
+	// that the zero Run is strict.
 	NonStrict bool
 }
+
+// Strict reports whether the run is in strict mode, which is what
+// "$yak.strict" says.
+func (r Run) Strict() bool { return !r.NonStrict }
 
 // yakMapping builds the mapping "$yak" answers.
 func yakMapping(run Run) *Object {
@@ -206,7 +210,7 @@ func yakMapping(run Run) *Object {
 	o.Set("version", false, Done(String(version.Current)))
 	o.Set("filepath", false, Done(String(run.FilePath)))
 	o.Set("contextpaths", false, Done(NewArray(paths)))
-	o.Set("strict", false, Done(Bool(!run.NonStrict)))
+	o.Set("strict", false, Done(Bool(run.Strict())))
 	return o
 }
 
@@ -229,10 +233,9 @@ func Document(doc *ast.Document, context Value, run Run, mods Modules) (Value, e
 // session the first time it is read. "$yak" describes the run as it does for
 // the template, except that it names file as the one being read.
 func (s *Session) Document(doc *ast.Document, file string) *Thunk {
-	ds := &docState{
-		yak:     yakMapping(Run{FilePath: file, ContextPaths: s.run.ContextPaths, NonStrict: s.run.NonStrict}),
-		session: s,
-	}
+	run := s.run
+	run.FilePath = file
+	ds := &docState{yak: yakMapping(run), session: s}
 	ds.root = &Thunk{node: doc.Body, env: &Env{doc: ds}, pos: doc.Pos()}
 	return ds.root
 }
@@ -321,7 +324,7 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 	for i, e := range node.Entries {
 		if name, ok := literalKey(e); ok {
 			if err := obj.bind(slots[i], name); err != nil {
-				return nil, errorf(e.KeyPos, "%s", err.Error())
+				return nil, errorAt(e.KeyPos, err)
 			}
 		}
 	}
@@ -341,7 +344,7 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 			return nil, errorf(e.KeyPos, "mapping keys must be strings, found %s", key.TypeName())
 		}
 		if err := obj.bind(slots[i], string(name)); err != nil {
-			return nil, errorf(e.KeyPos, "%s", err.Error())
+			return nil, errorAt(e.KeyPos, err)
 		}
 	}
 	// Merges come last, so that a key the mapping writes itself is known
@@ -571,7 +574,7 @@ func evalString(node *ast.String, env *Env) (Value, error) {
 		}
 		s, err := stringify(v)
 		if err != nil {
-			return nil, errorf(part.Expr.Pos(), "%s", err.Error())
+			return nil, errorAt(part.Expr.Pos(), err)
 		}
 		sb.WriteString(s)
 	}

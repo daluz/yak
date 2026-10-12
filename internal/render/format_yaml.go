@@ -56,10 +56,7 @@ func toNode(v eval.Value, floats floatSpelling) (*yaml.Node, error) {
 		return scalar("!!null", "null"), nil
 
 	case eval.Bool:
-		if t {
-			return scalar("!!bool", "true"), nil
-		}
-		return scalar("!!bool", "false"), nil
+		return scalar("!!bool", strconv.FormatBool(bool(t))), nil
 
 	case eval.Int:
 		return scalar("!!int", strconv.FormatInt(int64(t), 10)), nil
@@ -159,8 +156,6 @@ func closing(n *yaml.Node) *yaml.Node {
 	return n
 }
 
-// stringNode emits a string, choosing a literal block for multi-line text so
-// that rendered output stays readable.
 // keyNode builds the node for an entry's key. A key that would read back as
 // another type is quoted by the encoder, which goes by the "!!str" tag, but
 // "<<" reads back as YAML's merge key rather than as another type, so it
@@ -173,6 +168,8 @@ func keyNode(name string) *yaml.Node {
 	return n
 }
 
+// stringNode emits a string, choosing a literal block for multi-line text so
+// that rendered output stays readable.
 func stringNode(s string) *yaml.Node {
 	n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s}
 	if !strings.Contains(s, "\n") {

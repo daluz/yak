@@ -12,13 +12,13 @@ import (
 // std.files reads them on every system.
 func init() {
 	module.Register(module.BuiltinModule{Path: "std.path", Builtins: []*eval.Builtin{
-		{Name: "dir", Params: valueParam, Fn: mapString("dir", path.Dir)},
-		{Name: "base", Params: valueParam, Fn: mapString("base", path.Base)},
-		{Name: "ext", Params: valueParam, Fn: mapString("ext", path.Ext)},
-		{Name: "stem", Params: valueParam, Fn: mapString("stem", stem)},
-		{Name: "clean", Params: valueParam, Fn: mapString("clean", path.Clean)},
-		{Name: "isAbs", Params: valueParam, Fn: isAbs},
-		{Name: "join", Params: params("values"), Fn: joinPath},
+		builtin("dir", valueParam, mapString(path.Dir)),
+		builtin("base", valueParam, mapString(path.Base)),
+		builtin("ext", valueParam, mapString(path.Ext)),
+		builtin("stem", valueParam, mapString(stem)),
+		builtin("clean", valueParam, mapString(path.Clean)),
+		builtin("isAbs", valueParam, isAbs),
+		builtin("join", params("values"), joinPath),
 	}})
 }
 
@@ -28,8 +28,8 @@ func stem(p string) string {
 	return strings.TrimSuffix(base, path.Ext(base))
 }
 
-func isAbs(args []*eval.Thunk) (eval.Value, error) {
-	s, err := stringArg("isAbs", args[0])
+func isAbs(c call) (eval.Value, error) {
+	s, err := c.str(0)
 	if err != nil {
 		return nil, err
 	}
@@ -38,19 +38,10 @@ func isAbs(args []*eval.Thunk) (eval.Value, error) {
 
 // joinPath joins a sequence of path elements with slashes and cleans the
 // result, leaving out the empty ones.
-func joinPath(args []*eval.Thunk) (eval.Value, error) {
-	_, values, err := seqArg("join", args[0])
+func joinPath(c call) (eval.Value, error) {
+	parts, err := c.strs(0)
 	if err != nil {
 		return nil, err
-	}
-	parts := make([]string, len(values))
-	for i, v := range values {
-		s, ok := v.(eval.String)
-		if !ok {
-			return nil, eval.Errorf(args[0].Pos(), "%q needs a sequence of strings, found %s at index %d",
-				"join", v.TypeName(), i)
-		}
-		parts[i] = string(s)
 	}
 	return eval.String(path.Join(parts...)), nil
 }

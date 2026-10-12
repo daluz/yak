@@ -41,3 +41,8 @@ func (e *Error) Error() string {
 func errorf(pos token.Pos, format string, args ...any) *Error {
 	return &Error{Pos: pos, Msg: fmt.Sprintf(format, args...)}
 }
+
+// errorAt reports err, which has no position of its own, at pos.
+func errorAt(pos token.Pos, err error) *Error {
+	return errorf(pos, "%s", err.Error())
+}

@@ -25,17 +25,19 @@ const ExtJSON = ".json"
 // Load reads and merges context files in order. Later files win: mappings are
 // merged key by key, and every other value is replaced outright.
 func Load(paths []string) (eval.Value, error) {
-	merged := eval.Value(eval.NewObject())
+	merged := eval.NewObject()
 	for _, path := range paths {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("reading context file: %w", err)
 		}
-		v, err := Decode(path, data)
+		o, err := Decode(path, data)
 		if err != nil {
 			return nil, err
 		}
-		merged = Merge(merged, v)
+		if merged, err = eval.Merge(merged, o); err != nil {
+			return nil, err
+		}
 	}
 	return merged, nil
 }
@@ -44,8 +46,9 @@ func Load(paths []string) (eval.Value, error) {
 // yak, so anchors and unquoted strings are allowed in them. A .json name is
 // read by the JSON parser, which accepts the whole of JSON including escapes
 // such as \/ that YAML rejects; any other name is read as YAML, which accepts
-// most JSON too.
-func Decode(name string, data []byte) (eval.Value, error) {
+// most JSON too. A file holds a mapping, or nothing, which reads as an empty
+// one.
+func Decode(name string, data []byte) (*eval.Object, error) {
 	src := source{name: name, what: "context file " + name, data: data}
 	if strings.EqualFold(filepath.Ext(name), ExtJSON) {
 		return decodeJSON(src)
@@ -103,10 +106,9 @@ func ValueJSON(name string, data []byte) (eval.Value, error) {
 
 // decodeYAML reads a YAML stream. Every document must hold a mapping, and the
 // documents are merged in order so a stream behaves like separate files.
-func decodeYAML(src source) (eval.Value, error) {
+func decodeYAML(src source) (*eval.Object, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(src.data))
-	merged := eval.Value(eval.NewObject())
-	seen := false
+	merged := eval.NewObject()
 	for {
 		var doc yaml.Node
 		err := dec.Decode(&doc)
@@ -120,14 +122,9 @@ func decodeYAML(src source) (eval.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := requireMapping(src, v); err != nil {
+		if merged, err = mergeMapping(src, merged, v); err != nil {
 			return nil, err
 		}
-		merged = Merge(merged, v)
-		seen = true
-	}
-	if !seen {
-		return eval.NewObject(), nil
 	}
 	return merged, nil
 }
@@ -135,11 +132,10 @@ func decodeYAML(src source) (eval.Value, error) {
 // decodeJSON reads a JSON file. Like the YAML path it accepts more than one
 // top-level value, merging them in order, and it keeps object keys in the
 // order they appear so the rendered output follows the source.
-func decodeJSON(src source) (eval.Value, error) {
+func decodeJSON(src source) (*eval.Object, error) {
 	dec := json.NewDecoder(bytes.NewReader(src.data))
 	dec.UseNumber()
-	merged := eval.Value(eval.NewObject())
-	seen := false
+	merged := eval.NewObject()
 	for {
 		tok, err := dec.Token()
 		if errors.Is(err, io.EOF) {
@@ -152,14 +148,9 @@ func decodeJSON(src source) (eval.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := requireMapping(src, v); err != nil {
+		if merged, err = mergeMapping(src, merged, v); err != nil {
 			return nil, err
 		}
-		merged = Merge(merged, v)
-		seen = true
-	}
-	if !seen {
-		return eval.NewObject(), nil
 	}
 	return merged, nil
 }
@@ -250,11 +241,14 @@ func jsonNumber(n json.Number, src source, offset int64) (eval.Value, error) {
 	return eval.Float(f), nil
 }
 
-func requireMapping(src source, v eval.Value) error {
-	if _, ok := v.(*eval.Object); ok {
-		return nil
+// mergeMapping merges the top-level value v of src over merged, which every
+// top-level value has to be a mapping for.
+func mergeMapping(src source, merged *eval.Object, v eval.Value) (*eval.Object, error) {
+	o, ok := v.(*eval.Object)
+	if !ok {
+		return nil, fmt.Errorf("%s must contain a mapping at the top level, found %s", src.what, v.TypeName())
 	}
-	return fmt.Errorf("%s must contain a mapping at the top level, found %s", src.what, v.TypeName())
+	return eval.Merge(merged, o)
 }
 
 // jsonError reports a decoding failure, pointing at the offending byte when
@@ -290,39 +284,6 @@ func position(data []byte, offset int64) (int, int) {
 		col++
 	}
 	return line, col
-}
-
-// Merge deep-merges over onto base. Mappings merge recursively; anything else
-// replaces what came before.
-func Merge(base, over eval.Value) eval.Value {
-	b, okBase := base.(*eval.Object)
-	o, okOver := over.(*eval.Object)
-	if !okBase || !okOver {
-		return over
-	}
-	out := eval.NewObject()
-	for _, f := range b.Fields() {
-		out.Set(f.Name, f.Hidden, f.Value)
-	}
-	for _, f := range o.Fields() {
-		existing, ok := out.Lookup(f.Name)
-		if !ok {
-			out.Set(f.Name, f.Hidden, f.Value)
-			continue
-		}
-		prev, err := existing.Value.Value()
-		if err != nil {
-			out.Set(f.Name, f.Hidden, f.Value)
-			continue
-		}
-		next, err := f.Value.Value()
-		if err != nil {
-			out.Set(f.Name, f.Hidden, f.Value)
-			continue
-		}
-		out.Set(f.Name, f.Hidden, eval.Done(Merge(prev, next)))
-	}
-	return out
 }
 
 func convert(n *yaml.Node, src source) (eval.Value, error) {

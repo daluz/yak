@@ -2,7 +2,6 @@ package eval
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/token"
@@ -145,7 +144,7 @@ func Call(fn Value, pos token.Pos, args ...Value) (Value, error) {
 // position, as matchArguments does for a call written without names.
 func byPosition(fn callee, params []*ast.Param, pos token.Pos, args []*Thunk) (map[string]*Thunk, error) {
 	if len(args) > len(params) {
-		return nil, errorf(pos, "%s takes at most %s, found %d", fn, argumentCount(len(params)), len(args))
+		return nil, errorf(pos, "%s takes at most %s, found %d", fn, plural(len(params), "argument"), len(args))
 	}
 	matched := make(map[string]*Thunk, len(args))
 	for i, t := range args {
@@ -165,7 +164,7 @@ func matchArguments(fn callee, params []*ast.Param, node *ast.Call, env *Env) (m
 		switch {
 		case name == "" && i >= len(params):
 			return nil, errorf(arg.Value.Pos(), "%s takes at most %s, found %d",
-				fn, argumentCount(len(params)), len(node.Args))
+				fn, plural(len(params), "argument"), len(node.Args))
 		case name == "":
 			name = params[i].Label()
 		case paramNamed(params, name) == nil:
@@ -185,14 +184,6 @@ func matchArguments(fn callee, params []*ast.Param, node *ast.Call, env *Env) (m
 // default to fall back on.
 func missingArgument(fn callee, param string, pos token.Pos) error {
 	return errorf(pos, "%s needs an argument for parameter %q", fn, param)
-}
-
-// argumentCount counts arguments for a diagnostic.
-func argumentCount(n int) string {
-	if n == 1 {
-		return "1 argument"
-	}
-	return strconv.Itoa(n) + " arguments"
 }
 
 func paramNamed(params []*ast.Param, name string) *ast.Param {

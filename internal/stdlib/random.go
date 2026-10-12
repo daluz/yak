@@ -13,49 +13,49 @@ import (
 // refuses it.
 func init() {
 	module.Register(module.BuiltinModule{Path: "std.random", Nondeterministic: true, Builtins: []*eval.Builtin{
-		{Name: "randint", Params: params("min", "max"), Fn: randint},
-		{Name: "rand", Fn: randfloat},
-		{Name: "choice", Params: valuesParam, Fn: choice},
-		{Name: "shuffle", Params: valuesParam, Fn: shuffle},
-		{Name: "uuid", Fn: uuid},
+		builtin("randint", params("min", "max"), randint),
+		builtin("rand", nil, randfloat),
+		builtin("choice", valuesParam, choice),
+		builtin("shuffle", valuesParam, shuffle),
+		builtin("uuid", nil, uuid),
 	}})
 }
 
 // randint answers an integer from min to max, both included.
-func randint(args []*eval.Thunk) (eval.Value, error) {
-	lo, err := intArg("randint", args[0])
+func randint(c call) (eval.Value, error) {
+	lo, err := c.integer(0)
 	if err != nil {
 		return nil, err
 	}
-	hi, err := intArg("randint", args[1])
+	hi, err := c.integer(1)
 	if err != nil {
 		return nil, err
 	}
 	if hi < lo {
-		return nil, eval.Errorf(args[1].Pos(), "%q needs a max of at least min %d, found %d", "randint", lo, hi)
+		return nil, c.errorf(1, "needs a max of at least min %d, found %d", lo, hi)
 	}
 	return lo + eval.Int(mathrand.Int64N(int64(hi-lo)+1)), nil
 }
 
 // randfloat is rand, which answers a float from 0 up to but not including 1.
-func randfloat([]*eval.Thunk) (eval.Value, error) {
+func randfloat(call) (eval.Value, error) {
 	return eval.Float(mathrand.Float64()), nil
 }
 
-func choice(args []*eval.Thunk) (eval.Value, error) {
-	_, values, err := seqArg("choice", args[0])
+func choice(c call) (eval.Value, error) {
+	_, values, err := c.seq(0)
 	if err != nil {
 		return nil, err
 	}
 	if len(values) == 0 {
-		return nil, eval.Errorf(args[0].Pos(), "%q needs a sequence with an item in it, found []", "choice")
+		return nil, c.errorf(0, "needs a sequence with an item in it, found []")
 	}
 	return values[mathrand.IntN(len(values))], nil
 }
 
 // shuffle answers the items in a random order, each keeping its comments.
-func shuffle(args []*eval.Thunk) (eval.Value, error) {
-	a, _, err := seqArg("shuffle", args[0])
+func shuffle(c call) (eval.Value, error) {
+	a, _, err := c.seq(0)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func shuffle(args []*eval.Thunk) (eval.Value, error) {
 }
 
 // uuid answers a random (version 4) UUID.
-func uuid([]*eval.Thunk) (eval.Value, error) {
+func uuid(call) (eval.Value, error) {
 	var b [16]byte
 	rand.Read(b[:])
 	b[6] = b[6]&0x0f | 0x40

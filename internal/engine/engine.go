@@ -15,8 +15,9 @@ import (
 	_ "github.com/daluz/yak/internal/stdlib"
 )
 
-// ExtTemplate is the extension recognised by the tool.
-const ExtTemplate = ".yak"
+// ExtTemplate is the extension recognised by the tool, which is the one a
+// module is written with.
+const ExtTemplate = module.Ext
 
 // TemplateRequest describes a single template rendering.
 type TemplateRequest struct {
@@ -56,7 +57,7 @@ func Render(run eval.Run, src []byte, context eval.Value, w io.Writer, opts rend
 	}
 	docs := make([]eval.Value, 0, len(stream.Docs))
 	for _, doc := range stream.Docs {
-		v, err := eval.Document(doc, context, run, module.NewLoader(!run.NonStrict))
+		v, err := eval.Document(doc, context, run, module.NewLoader(run.Strict()))
 		if err != nil {
 			return err
 		}

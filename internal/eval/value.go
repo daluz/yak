@@ -131,13 +131,10 @@ func (o *Object) Set(name string, hidden bool, v *Thunk) {
 	o.fields = append(o.fields, &Field{Name: name, Hidden: hidden, Value: v})
 }
 
-// Add appends a copy of f, the whole field rather than just its value.
-func (o *Object) Add(f *Field) { o.add(f) }
-
-// add appends a copy of f, or replaces an existing field of the same name
+// Add appends a copy of f, or replaces an existing field of the same name
 // while keeping its position. Unlike Set it carries the whole field over,
 // which is what merging two mappings with "<<" needs.
-func (o *Object) add(f *Field) {
+func (o *Object) Add(f *Field) {
 	copied := *f
 	if i, ok := o.index[f.Name]; ok {
 		o.fields[i] = &copied
@@ -216,10 +213,7 @@ func stringify(v Value) (string, error) {
 	case Null:
 		return "null", nil
 	case Bool:
-		if t {
-			return "true", nil
-		}
-		return "false", nil
+		return strconv.FormatBool(bool(t)), nil
 	case Int:
 		return strconv.FormatInt(int64(t), 10), nil
 	case Float:
@@ -229,4 +223,12 @@ func stringify(v Value) (string, error) {
 	default:
 		return "", fmt.Errorf("cannot interpolate a %s into a string", v.TypeName())
 	}
+}
+
+// plural counts n of noun for a diagnostic, as in "1 item" or "2 items".
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return strconv.Itoa(n) + " " + noun + "s"
 }

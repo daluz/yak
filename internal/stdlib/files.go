@@ -9,7 +9,6 @@ import (
 
 	"github.com/daluz/yak/internal/eval"
 	"github.com/daluz/yak/internal/module"
-	"github.com/daluz/yak/internal/token"
 )
 
 // The files module reads text files. A path is relative to the directory of
@@ -18,22 +17,21 @@ import (
 func init() {
 	module.Register(module.BuiltinModule{
 		Path:           "std.files",
-		Builtins:       []*eval.Builtin{{Name: "read", Params: params("path"), Fn: readFile(false)}},
-		StrictBuiltins: []*eval.Builtin{{Name: "read", Params: params("path"), Fn: readFile(true)}},
+		Builtins:       []*eval.Builtin{builtin("read", params("path"), readFile(false))},
+		StrictBuiltins: []*eval.Builtin{builtin("read", params("path"), readFile(true))},
 	})
 }
 
-func readFile(strict bool) func([]*eval.Thunk) (eval.Value, error) {
-	return func(args []*eval.Thunk) (eval.Value, error) {
-		p, err := stringArg("read", args[0])
+func readFile(strict bool) func(call) (eval.Value, error) {
+	return func(c call) (eval.Value, error) {
+		p, err := c.str(0)
 		if err != nil {
 			return nil, err
 		}
-		pos := args[0].Pos()
-		dir := filepath.Dir(pos.File)
+		dir := filepath.Dir(c.pos(0).File)
 		var b []byte
 		if strict {
-			b, err = readUnder(dir, p, pos)
+			b, err = readUnder(c, dir, p)
 		} else {
 			full := filepath.FromSlash(p)
 			if !filepath.IsAbs(full) {
@@ -50,10 +48,10 @@ func readFile(strict bool) func([]*eval.Thunk) (eval.Value, error) {
 			if errors.As(err, &pe) {
 				err = pe.Err
 			}
-			return nil, eval.Errorf(pos, "%q cannot read %q: %s", "read", p, err.Error())
+			return nil, c.errorf(0, "cannot read %q: %s", p, err.Error())
 		}
 		if !utf8.Valid(b) {
-			return nil, eval.Errorf(pos, "%q read %q, which is not UTF-8 text", "read", p)
+			return nil, c.errorf(0, "read %q, which is not UTF-8 text", p)
 		}
 		return eval.String(b), nil
 	}
@@ -61,12 +59,12 @@ func readFile(strict bool) func([]*eval.Thunk) (eval.Value, error) {
 
 // readUnder reads the file at p beneath dir, refusing a path that leaves
 // dir, whether by "..", by being absolute, or through a symbolic link.
-func readUnder(dir, p string, pos token.Pos) ([]byte, error) {
+func readUnder(c call, dir, p string) ([]byte, error) {
 	local := filepath.FromSlash(p)
 	if !filepath.IsLocal(local) {
-		return nil, eval.Errorf(pos,
-			"%q cannot read %q in strict mode, which reads only beneath the directory of the file calling it; render with --strict=false to read anywhere",
-			"read", p)
+		return nil, c.errorf(0,
+			"cannot read %q in strict mode, which reads only beneath the directory of the file calling it; render with --strict=false to read anywhere",
+			p)
 	}
 	root, err := os.OpenRoot(dir)
 	if err != nil {
