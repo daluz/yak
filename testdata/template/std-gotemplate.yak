@@ -1,4 +1,4 @@
-import { std.template, std.yaml, std.strings }
+import { std.gotemplate, std.yaml, std.strings }
 
 local servers = [
   {host: "web-1", port: 8080, enabled: true},
@@ -14,13 +14,13 @@ local upstream = |
   }
 
 ## Go actions are plain text to yak, and \( still interpolates.
-nginx: template.render(upstream, {
+nginx: gotemplate.render(upstream, {
   name: "shop",
   servers: [s for s in servers if s.enabled],
 })
 
 ## Mappings are ranged in key order, and hidden entries are left out.
-sorted: template.render("{{ range $k, $v := . }}{{ $k }}={{ $v }} {{ end }}", {b: 2, a: 1, c:: 3})
+sorted: gotemplate.render("{{ range $k, $v := . }}{{ $k }}={{ $v }} {{ end }}", {b: 2, a: 1, c:: 3})
 
 local helpers = |-
   labels:{{ .labels | nindent 2 }}
@@ -28,7 +28,7 @@ local helpers = |-
   indented:
   {{ indent 4 .text }}
 
-helpers: template.render(helpers, {
+helpers: gotemplate.render(helpers, {
   labels: strings.trimSuffix(yaml.encode({app: "web", tier: "front"}), "\n"),
   name: "say \"hi\"",
   port: 80,
@@ -36,5 +36,5 @@ helpers: template.render(helpers, {
   text: "a\nb",
 })
 
-no-data: template.render("plain {{ `text` }}")
-typed: template.render("{{ if .on }}{{ printf \"%d/%.1f\" .n .f }}{{ end }}", {on: true, n: 3, f: 2.5})
+no-data: gotemplate.render("plain {{ `text` }}")
+typed: gotemplate.render("{{ if .on }}{{ printf \"%d/%.1f\" .n .f }}{{ end }}", {on: true, n: 3, f: 2.5})

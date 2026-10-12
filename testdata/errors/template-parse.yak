@@ -1,3 +1,0 @@
-import std.template
-
-v: template.render("{{ range .items }}never closed", {items: []})

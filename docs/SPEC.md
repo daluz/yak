@@ -319,12 +319,14 @@ than the document, and its fields are read like any other mapping's.
 | `$yak.version` | The version of yak doing the rendering. |
 | `$yak.filepath` | The template's path, exactly as it was given to the tool. |
 | `$yak.contextpaths` | The context files, in the order they were given. |
+| `$yak.strict` | `true` in [strict mode](STDLIB.md#strict-mode), `false` when it is turned off. |
 
 ```yaml
-# rendering: yak template deploy/app.yak -c base.yaml -c prod.yaml
+# rendering: yak render deploy/app.yak -c base.yaml -c prod.yaml
 a: $yak.filepath            # "deploy/app.yak"
 b: $yak.contextpaths[0]     # "base.yaml"
 c: "built by yak \($yak.version)"
+d: $yak.strict              # true
 ```
 
 The path is reported as it was written rather than resolved against the

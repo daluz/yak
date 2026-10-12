@@ -1,5 +1,0 @@
-import std.template
-
-local f(x) = x
-
-v: template.render("{{ .f }}", {f: f})

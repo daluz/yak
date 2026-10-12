@@ -11,11 +11,11 @@ import (
 	"github.com/daluz/yak/internal/module"
 )
 
-// The template module renders Go's text/template, for plain text that a
+// The gotemplate module renders Go's text/template, for plain text that a
 // yak string would be awkward to write, such as a configuration file of
 // another format.
 func init() {
-	module.Register(module.BuiltinModule{Path: "std.template", Builtins: []*eval.Builtin{
+	module.Register(module.BuiltinModule{Path: "std.gotemplate", Builtins: []*eval.Builtin{
 		{Name: "render", Params: append(params("template"), optional("data", &ast.Null{})), Fn: renderTemplate},
 	}})
 }

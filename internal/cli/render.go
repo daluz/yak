@@ -14,7 +14,7 @@ import (
 	"github.com/daluz/yak/internal/render"
 )
 
-func newTemplateCommand() *cobra.Command {
+func newRenderCommand() *cobra.Command {
 	var (
 		contexts  []string
 		output    string
@@ -26,7 +26,7 @@ func newTemplateCommand() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "template FILE",
+		Use:   "render FILE",
 		Short: "Render a single template",
 		Long: "Render one .yak template.\n\n" +
 			"Context files may be YAML or JSON. They are merged in the order given,\n" +

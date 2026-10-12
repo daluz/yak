@@ -191,8 +191,8 @@ type Run struct {
 	// ContextPaths are the context files in the order they were given.
 	ContextPaths []string
 	// NonStrict turns strict mode off, admitting the built-in modules whose
-	// answers can change from one rendering to the next. "$yak" does not
-	// report it.
+	// answers can change from one rendering to the next. "$yak.strict"
+	// reports its opposite.
 	NonStrict bool
 }
 
@@ -206,6 +206,7 @@ func yakMapping(run Run) *Object {
 	o.Set("version", false, Done(String(version.Current)))
 	o.Set("filepath", false, Done(String(run.FilePath)))
 	o.Set("contextpaths", false, Done(NewArray(paths)))
+	o.Set("strict", false, Done(Bool(!run.NonStrict)))
 	return o
 }
 
@@ -229,7 +230,7 @@ func Document(doc *ast.Document, context Value, run Run, mods Modules) (Value, e
 // the template, except that it names file as the one being read.
 func (s *Session) Document(doc *ast.Document, file string) *Thunk {
 	ds := &docState{
-		yak:     yakMapping(Run{FilePath: file, ContextPaths: s.run.ContextPaths}),
+		yak:     yakMapping(Run{FilePath: file, ContextPaths: s.run.ContextPaths, NonStrict: s.run.NonStrict}),
 		session: s,
 	}
 	ds.root = &Thunk{node: doc.Body, env: &Env{doc: ds}, pos: doc.Pos()}

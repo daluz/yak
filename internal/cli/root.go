@@ -20,7 +20,7 @@ func NewRootCommand() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(newTemplateCommand())
+	root.AddCommand(newRenderCommand())
 	return root
 }
 

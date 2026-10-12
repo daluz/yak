@@ -1,0 +1,26 @@
+## render writes a value as the output format of that name would write a file.
+config::
+  name: "web"
+  ports: [80, 443]
+  secret:: "hidden"
+  region:? null
+
+formats:
+  default: render($.config)
+  yaml: render($.config, "yaml")
+  json: render($.config, "json")
+  jsonl: render($.config, format = "jsonl")
+  kyaml: render($.config, "kyaml")
+  toml: render($.config, "toml")
+  alias: render($.config, "YML")
+  null-format: render($.config, null)
+  scalar: render("hi")
+  nothing: render(null)
+
+## A ConfigMap holds whole files as strings.
+configmap:
+  apiVersion: "v1"
+  kind: "ConfigMap"
+  data:
+    "app.yaml": render($.config)
+    "app.json": render($.config, "json")

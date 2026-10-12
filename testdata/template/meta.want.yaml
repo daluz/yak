@@ -10,3 +10,5 @@ note: rendered from ../../testdata/template/meta.yak
 # "$yak.version" answers the version the build stamped in, so this golden can
 # only say that there is one. internal/eval checks the string itself.
 stamped: true
+# Rendering is strict unless the run turns it off.
+strict: true

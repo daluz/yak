@@ -1,0 +1,4 @@
+# A key the data does not hold is an error rather than "<no value>".
+import std.gotemplate
+
+v: gotemplate.render("hello {{ .nmae }}", {name: "web"})

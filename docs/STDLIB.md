@@ -21,6 +21,7 @@ binding of the same name [shadows](SPEC.md#standard-library) a built-in.
 | `size(value)` | How much is in a sequence, a mapping, or a string. |
 | `empty(value)` | Whether the value is `null`, `{}`, `[]` or `""`. |
 | `nempty(value)` | `null` when `empty(value)`, and the value itself otherwise. |
+| `render(value, format = null)` | `value` as a string in the output format `format`, or in YAML when there is none. |
 
 `size` counts items, entries, or characters:
 
@@ -45,6 +46,22 @@ labels:? nempty($$?.labels)
 
 With a context of `{labels: {}}` that entry is left out, while `{labels: {app:
 web}}` renders it.
+
+`render` answers the text that rendering `value` to a file in `format` would
+write, which is how a manifest holds a whole document as a string, as a
+ConfigMap does:
+
+```yaml
+data:
+  "app.yaml": render(.config)
+  "app.json": render(.config, "json")
+```
+
+`format` is any name the `--format` flag accepts for an
+[output format](CLI.md#output-formats), aliases included,
+and the text ends in a newline as the file would. Hidden and `:?` entries are
+left out, a function in `value` is an error, and so is a value that the format
+cannot hold, such as a sequence in TOML.
 
 The operations on [sequences](#sequences) and [mappings](#mappings) are
 built-ins as well.
@@ -285,12 +302,12 @@ absolute path, one that climbs out with `..`, and a symbolic link that leads
 out are all errors. Turning strict mode off lets `path` name any file,
 absolute or relative.
 
-### `std.template`
+### `std.gotemplate`
 
 ```yaml
-import { std.files, std.template }
+import { std.files, std.gotemplate }
 
-"nginx.conf": template.render(files.read("nginx.conf.tmpl"), {
+"nginx.conf": gotemplate.render(files.read("nginx.conf.tmpl"), {
   name: $$.name,
   servers: [s for s in $$.servers if s.enabled],
 })

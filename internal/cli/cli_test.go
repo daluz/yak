@@ -31,13 +31,13 @@ func write(t *testing.T, dir, name, contents string) string {
 	return path
 }
 
-func TestTemplateWritesToStdout(t *testing.T) {
+func TestRenderWritesToStdout(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\nalias: .name\n")
 
-	out, err := run(t, "template", tmpl)
+	out, err := run(t, "render", tmpl)
 	if err != nil {
-		t.Fatalf("template returned error: %v", err)
+		t.Fatalf("render returned error: %v", err)
 	}
 	want := "name: web\nalias: web\n"
 	if out != want {
@@ -45,15 +45,15 @@ func TestTemplateWritesToStdout(t *testing.T) {
 	}
 }
 
-func TestTemplateMergesContextFlags(t *testing.T) {
+func TestRenderMergesContextFlags(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: $$.name\ntier: $$.tier\n")
 	first := write(t, dir, "one.yaml", "name: base\ntier: base\n")
 	second := write(t, dir, "two.yaml", "tier: override\n")
 
-	out, err := run(t, "template", tmpl, "-c", first, "-c", second)
+	out, err := run(t, "render", tmpl, "-c", first, "-c", second)
 	if err != nil {
-		t.Fatalf("template returned error: %v", err)
+		t.Fatalf("render returned error: %v", err)
 	}
 	want := "name: base\ntier: override\n"
 	if out != want {
@@ -61,15 +61,15 @@ func TestTemplateMergesContextFlags(t *testing.T) {
 	}
 }
 
-func TestTemplateAcceptsJSONContext(t *testing.T) {
+func TestRenderAcceptsJSONContext(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: $$.name\ntier: $$.tier\n")
 	yamlCtx := write(t, dir, "one.yaml", "name: base\ntier: base\n")
 	jsonCtx := write(t, dir, "two.json", `{"tier": "override"}`)
 
-	out, err := run(t, "template", tmpl, "-c", yamlCtx, "-c", jsonCtx)
+	out, err := run(t, "render", tmpl, "-c", yamlCtx, "-c", jsonCtx)
 	if err != nil {
-		t.Fatalf("template returned error: %v", err)
+		t.Fatalf("render returned error: %v", err)
 	}
 	want := "name: base\ntier: override\n"
 	if out != want {
@@ -77,30 +77,30 @@ func TestTemplateAcceptsJSONContext(t *testing.T) {
 	}
 }
 
-func TestTemplateIsStrictByDefault(t *testing.T) {
+func TestRenderIsStrictByDefault(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "import std.random\nn: random.randint(1, 1)\n")
 
-	if _, err := run(t, "template", tmpl); err == nil || !strings.Contains(err.Error(), "--strict=false") {
+	if _, err := run(t, "render", tmpl); err == nil || !strings.Contains(err.Error(), "--strict=false") {
 		t.Errorf("error = %v, want strict mode to refuse std.random", err)
 	}
-	out, err := run(t, "template", tmpl, "--strict=false")
+	out, err := run(t, "render", tmpl, "--strict=false")
 	if err != nil {
-		t.Fatalf("template returned error: %v", err)
+		t.Fatalf("render returned error: %v", err)
 	}
 	if out != "n: 1\n" {
 		t.Errorf("stdout = %q, want %q", out, "n: 1\n")
 	}
 }
 
-func TestTemplateWritesToFile(t *testing.T) {
+func TestRenderWritesToFile(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
 	dest := filepath.Join(dir, "out.yaml")
 
-	out, err := run(t, "template", tmpl, "-o", dest)
+	out, err := run(t, "render", tmpl, "-o", dest)
 	if err != nil {
-		t.Fatalf("template returned error: %v", err)
+		t.Fatalf("render returned error: %v", err)
 	}
 	if out != "" {
 		t.Errorf("stdout = %q, want it to be empty when -o is used", out)
@@ -114,12 +114,12 @@ func TestTemplateWritesToFile(t *testing.T) {
 	}
 }
 
-func TestTemplateLeavesOutputFileAloneOnFailure(t *testing.T) {
+func TestRenderLeavesOutputFileAloneOnFailure(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "broken.yak", "a: .missing\n")
 	dest := write(t, dir, "out.yaml", "previous contents\n")
 
-	if _, err := run(t, "template", tmpl, "-o", dest); err == nil {
+	if _, err := run(t, "render", tmpl, "-o", dest); err == nil {
 		t.Fatal("expected an error")
 	}
 	got, err := os.ReadFile(dest)
@@ -131,17 +131,17 @@ func TestTemplateLeavesOutputFileAloneOnFailure(t *testing.T) {
 	}
 }
 
-func TestTemplateRequiresOneArgument(t *testing.T) {
-	if _, err := run(t, "template"); err == nil {
+func TestRenderRequiresOneArgument(t *testing.T) {
+	if _, err := run(t, "render"); err == nil {
 		t.Error("expected an error when no template is given")
 	}
 }
 
-func TestTemplateErrorMentionsPosition(t *testing.T) {
+func TestRenderErrorMentionsPosition(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "broken.yak", "a: 1\nb: yes\n")
 
-	_, err := run(t, "template", tmpl)
+	_, err := run(t, "render", tmpl)
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -150,7 +150,7 @@ func TestTemplateErrorMentionsPosition(t *testing.T) {
 	}
 }
 
-func TestTemplateFormatFlag(t *testing.T) {
+func TestRenderFormatFlag(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
 
@@ -168,9 +168,9 @@ func TestTemplateFormatFlag(t *testing.T) {
 		{"json5", "{\n  \"name\": \"web\",\n}\n"},
 	} {
 		t.Run(tc.format, func(t *testing.T) {
-			out, err := run(t, "template", tmpl, "-f", tc.format)
+			out, err := run(t, "render", tmpl, "-f", tc.format)
 			if err != nil {
-				t.Fatalf("template returned error: %v", err)
+				t.Fatalf("render returned error: %v", err)
 			}
 			if out != tc.want {
 				t.Errorf("stdout = %q, want %q", out, tc.want)
@@ -179,49 +179,49 @@ func TestTemplateFormatFlag(t *testing.T) {
 	}
 }
 
-func TestTemplateDropsNullDocuments(t *testing.T) {
+func TestRenderDropsNullDocuments(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "local unused = 1\n---\nname: \"web\"\n")
 
-	out, err := run(t, "template", tmpl)
+	out, err := run(t, "render", tmpl)
 	if err != nil {
-		t.Fatalf("template returned error: %v", err)
+		t.Fatalf("render returned error: %v", err)
 	}
 	if out != "name: web\n" {
 		t.Errorf("stdout = %q, want the null document to be left out", out)
 	}
 }
 
-func TestTemplateKeepsNullDocumentsOnRequest(t *testing.T) {
+func TestRenderKeepsNullDocumentsOnRequest(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "local unused = 1\n---\nname: \"web\"\n")
 
-	out, err := run(t, "template", tmpl, "--keep-null-documents")
+	out, err := run(t, "render", tmpl, "--keep-null-documents")
 	if err != nil {
-		t.Fatalf("template returned error: %v", err)
+		t.Fatalf("render returned error: %v", err)
 	}
 	if out != "null\n---\nname: web\n" {
 		t.Errorf("stdout = %q, want the null document to be kept", out)
 	}
 }
 
-func TestTemplateRejectsUnknownFormat(t *testing.T) {
+func TestRenderRejectsUnknownFormat(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
 
-	_, err := run(t, "template", tmpl, "-f", "xml")
+	_, err := run(t, "render", tmpl, "-f", "xml")
 	if err == nil || !strings.Contains(err.Error(), `unknown output format "xml"`) {
 		t.Errorf("error = %v, want a complaint about the format name", err)
 	}
 }
 
-func TestTemplateInfersFormatFromOutputFile(t *testing.T) {
+func TestRenderInfersFormatFromOutputFile(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
 	dest := filepath.Join(dir, "out.toml")
 
-	if _, err := run(t, "template", tmpl, "-o", dest); err != nil {
-		t.Fatalf("template returned error: %v", err)
+	if _, err := run(t, "render", tmpl, "-o", dest); err != nil {
+		t.Fatalf("render returned error: %v", err)
 	}
 	got, err := os.ReadFile(dest)
 	if err != nil {
@@ -232,13 +232,13 @@ func TestTemplateInfersFormatFromOutputFile(t *testing.T) {
 	}
 }
 
-func TestTemplateFormatFlagBeatsOutputExtension(t *testing.T) {
+func TestRenderFormatFlagBeatsOutputExtension(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
 	dest := filepath.Join(dir, "out.toml")
 
-	if _, err := run(t, "template", tmpl, "-o", dest, "-f", "json"); err != nil {
-		t.Fatalf("template returned error: %v", err)
+	if _, err := run(t, "render", tmpl, "-o", dest, "-f", "json"); err != nil {
+		t.Fatalf("render returned error: %v", err)
 	}
 	got, err := os.ReadFile(dest)
 	if err != nil {
@@ -249,13 +249,13 @@ func TestTemplateFormatFlagBeatsOutputExtension(t *testing.T) {
 	}
 }
 
-func TestTemplateKeepsYAMLForAnUnknownExtension(t *testing.T) {
+func TestRenderKeepsYAMLForAnUnknownExtension(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
 	dest := filepath.Join(dir, "out.txt")
 
-	if _, err := run(t, "template", tmpl, "-o", dest); err != nil {
-		t.Fatalf("template returned error: %v", err)
+	if _, err := run(t, "render", tmpl, "-o", dest); err != nil {
+		t.Fatalf("render returned error: %v", err)
 	}
 	got, err := os.ReadFile(dest)
 	if err != nil {
@@ -266,26 +266,26 @@ func TestTemplateKeepsYAMLForAnUnknownExtension(t *testing.T) {
 	}
 }
 
-func TestTemplateInfersFormatFromTemplateName(t *testing.T) {
+func TestRenderInfersFormatFromTemplateName(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
 
-	out, err := run(t, "template", tmpl)
+	out, err := run(t, "render", tmpl)
 	if err != nil {
-		t.Fatalf("template returned error: %v", err)
+		t.Fatalf("render returned error: %v", err)
 	}
 	if out != "name = \"web\"\n" {
 		t.Errorf("stdout = %q, want TOML", out)
 	}
 }
 
-func TestTemplateOutputExtensionBeatsTemplateName(t *testing.T) {
+func TestRenderOutputExtensionBeatsTemplateName(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
 	dest := filepath.Join(dir, "out.json")
 
-	if _, err := run(t, "template", tmpl, "-o", dest); err != nil {
-		t.Fatalf("template returned error: %v", err)
+	if _, err := run(t, "render", tmpl, "-o", dest); err != nil {
+		t.Fatalf("render returned error: %v", err)
 	}
 	got, err := os.ReadFile(dest)
 	if err != nil {
@@ -296,13 +296,13 @@ func TestTemplateOutputExtensionBeatsTemplateName(t *testing.T) {
 	}
 }
 
-func TestTemplateNameHoldsForAnUnknownOutputExtension(t *testing.T) {
+func TestRenderNameHoldsForAnUnknownOutputExtension(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
 	dest := filepath.Join(dir, "out.txt")
 
-	if _, err := run(t, "template", tmpl, "-o", dest); err != nil {
-		t.Fatalf("template returned error: %v", err)
+	if _, err := run(t, "render", tmpl, "-o", dest); err != nil {
+		t.Fatalf("render returned error: %v", err)
 	}
 	got, err := os.ReadFile(dest)
 	if err != nil {
@@ -313,13 +313,13 @@ func TestTemplateNameHoldsForAnUnknownOutputExtension(t *testing.T) {
 	}
 }
 
-func TestTemplateAutomaticOutput(t *testing.T) {
+func TestRenderAutomaticOutput(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
 
-	out, err := run(t, "template", tmpl, "-O")
+	out, err := run(t, "render", tmpl, "-O")
 	if err != nil {
-		t.Fatalf("template returned error: %v", err)
+		t.Fatalf("render returned error: %v", err)
 	}
 	if out != "" {
 		t.Errorf("stdout = %q, want it to be empty when -O is used", out)
@@ -333,7 +333,7 @@ func TestTemplateAutomaticOutput(t *testing.T) {
 	}
 }
 
-func TestTemplateAutomaticOutputNamesTheFormat(t *testing.T) {
+func TestRenderAutomaticOutputNamesTheFormat(t *testing.T) {
 	for _, tc := range []struct {
 		template string
 		args     []string
@@ -347,10 +347,10 @@ func TestTemplateAutomaticOutputNamesTheFormat(t *testing.T) {
 		t.Run(tc.template+strings.Join(tc.args, " "), func(t *testing.T) {
 			dir := t.TempDir()
 			tmpl := write(t, dir, tc.template, "name: \"web\"\n")
-			args := append([]string{"template", tmpl, "-O"}, tc.args...)
+			args := append([]string{"render", tmpl, "-O"}, tc.args...)
 
 			if _, err := run(t, args...); err != nil {
-				t.Fatalf("template returned error: %v", err)
+				t.Fatalf("render returned error: %v", err)
 			}
 			if _, err := os.Stat(filepath.Join(dir, tc.want)); err != nil {
 				t.Errorf("want %s to have been written: %v", tc.want, err)
@@ -359,29 +359,29 @@ func TestTemplateAutomaticOutputNamesTheFormat(t *testing.T) {
 	}
 }
 
-func TestTemplateAutomaticOutputRejectsStandardInput(t *testing.T) {
-	_, err := run(t, "template", "-", "-O")
+func TestRenderAutomaticOutputRejectsStandardInput(t *testing.T) {
+	_, err := run(t, "render", "-", "-O")
 	if err == nil || !strings.Contains(err.Error(), "--automatic-output needs a .yak template") {
 		t.Errorf("error = %v, want a complaint about the template name", err)
 	}
 }
 
-func TestTemplateRejectsOutputAndAutomaticOutputTogether(t *testing.T) {
+func TestRenderRejectsOutputAndAutomaticOutputTogether(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
 
-	if _, err := run(t, "template", tmpl, "-O", "-o", filepath.Join(dir, "out.yaml")); err == nil {
+	if _, err := run(t, "render", tmpl, "-O", "-o", filepath.Join(dir, "out.yaml")); err == nil {
 		t.Error("expected an error when both -o and -O are given")
 	}
 }
 
-func TestTemplateOutputDirCreatesTheDirectory(t *testing.T) {
+func TestRenderOutputDirCreatesTheDirectory(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
 	outDir := filepath.Join(dir, "build", "nested")
 
-	if _, err := run(t, "template", tmpl, "-O", "--output-dir", outDir); err != nil {
-		t.Fatalf("template returned error: %v", err)
+	if _, err := run(t, "render", tmpl, "-O", "--output-dir", outDir); err != nil {
+		t.Fatalf("render returned error: %v", err)
 	}
 	got, err := os.ReadFile(filepath.Join(outDir, "app.toml"))
 	if err != nil {
@@ -392,13 +392,13 @@ func TestTemplateOutputDirCreatesTheDirectory(t *testing.T) {
 	}
 }
 
-func TestTemplateOutputDirJoinsTheOutputPath(t *testing.T) {
+func TestRenderOutputDirJoinsTheOutputPath(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	write(t, dir, "app.yak", "name: \"web\"\n")
 
-	if _, err := run(t, "template", "app.yak", "-o", "sub/out.json", "--output-dir", "build"); err != nil {
-		t.Fatalf("template returned error: %v", err)
+	if _, err := run(t, "render", "app.yak", "-o", "sub/out.json", "--output-dir", "build"); err != nil {
+		t.Fatalf("render returned error: %v", err)
 	}
 	got, err := os.ReadFile(filepath.Join(dir, "build", "sub", "out.json"))
 	if err != nil {
@@ -409,21 +409,21 @@ func TestTemplateOutputDirJoinsTheOutputPath(t *testing.T) {
 	}
 }
 
-func TestTemplateOutputDirRejectsAnAbsoluteOutput(t *testing.T) {
+func TestRenderOutputDirRejectsAnAbsoluteOutput(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
 
-	_, err := run(t, "template", tmpl, "-o", filepath.Join(dir, "out.yaml"), "--output-dir", dir)
+	_, err := run(t, "render", tmpl, "-o", filepath.Join(dir, "out.yaml"), "--output-dir", dir)
 	if err == nil || !strings.Contains(err.Error(), "absolute path") {
 		t.Errorf("error = %v, want a complaint about the absolute output path", err)
 	}
 }
 
-func TestTemplateOutputDirNeedsAnOutputFile(t *testing.T) {
+func TestRenderOutputDirNeedsAnOutputFile(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
 
-	_, err := run(t, "template", tmpl, "--output-dir", dir)
+	_, err := run(t, "render", tmpl, "--output-dir", dir)
 	if err == nil || !strings.Contains(err.Error(), "--output-dir needs") {
 		t.Errorf("error = %v, want a complaint about the missing output file", err)
 	}

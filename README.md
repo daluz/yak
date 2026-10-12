@@ -27,7 +27,7 @@ spec:
 ```
 
 ```console
-$ yak template app.yak -c production.yaml
+$ yak render app.yak -c production.yaml
 ```
 
 ## Install
@@ -45,7 +45,7 @@ $ go build ./cmd/yak
 ## Usage
 
 ```console
-$ yak template FILE.yak [-c context.yaml|context.json]... [-f FORMAT]
+$ yak render FILE.yak [-c context.yaml|context.json]... [-f FORMAT]
                         [-o FILE | -O] [--output-dir DIR]
 ```
 
@@ -86,10 +86,10 @@ than picking one. TOML also needs a mapping at the top level and has no null,
 so a null value is an error naming the key it came from.
 
 ```console
-$ yak template app.yak -c production.yaml -f kyaml
-$ yak template app.yak -o rendered.json            # the extension chooses JSON
-$ yak template app.toml.yak -O                     # writes app.toml
-$ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
+$ yak render app.yak -c production.yaml -f kyaml
+$ yak render app.yak -o rendered.json            # the extension chooses JSON
+$ yak render app.toml.yak -O                     # writes app.toml
+$ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
 ```
 
 ## What makes it different from YAML
@@ -138,9 +138,9 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
 - **Comprehensions.** `[p.name for p in $$.ports if p.tls]` builds a
   sequence, and `{[p.name]: p.number for p in $$.ports}` a mapping.
 - **Plain text files.** `std.files` reads a file from beside the template, and
-  `std.template` renders one as a Go template with data computed in yak, so a
+  `std.gotemplate` renders one as a Go template with data computed in yak, so a
   configuration file of another format can be embedded in a value:
-  `template.render(files.read("nginx.conf.tmpl"), {name: $$.name})`.
+  `gotemplate.render(files.read("nginx.conf.tmpl"), {name: $$.name})`.
 - **Strict by default.** The same template and context always render the
   same output: `std.random` is refused and `std.files` cannot leave the
   template's directory unless `--strict=false` is given.
@@ -156,7 +156,7 @@ description, and [docs/CLI.md](docs/CLI.md) the tool that renders it.
 
 ## Status
 
-The `template` command is implemented, along with `local` bindings,
+The `render` command is implemented, along with `local` bindings,
 functions, conditionals, comprehensions and the first built-ins. `local` is
 one of three statement keywords; the other two — `import`, which reads
 another module into a namespace, and `schema` — are reserved but not

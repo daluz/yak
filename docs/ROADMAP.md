@@ -1,11 +1,12 @@
 # Roadmap
 
 Done so far: the restricted YAML parser, string interpolation, relative
-references, hidden fields, context files, the `template` command, `local`
-bindings, functions named and anonymous, the `size`, `empty` and `nempty`
-built-ins and those on sequences and mappings, the `std.strings`, `std.json`,
-`std.yaml`, `std.base64`, `std.hash`, `std.regex`, `std.math`, `std.path`,
-`std.files`, `std.template` and `std.random` modules, strict mode, the
+references, hidden fields, context files, the `render` command, `local`
+bindings, functions named and anonymous, the `size`, `empty`, `nempty` and
+`render` built-ins and those on sequences and mappings, the `std.strings`,
+`std.json`, `std.yaml`, `std.base64`, `std.hash`, `std.regex`, `std.math`,
+`std.path`, `std.files`, `std.gotemplate` and `std.random` modules, strict
+mode, the
 `??` and
 `?.` operators, arithmetic, comparison and boolean operators, the `<<` merge
 in both of its forms,
@@ -27,7 +28,8 @@ function does, and `evalIdent` finds one only after every binding in scope, so
 a `local` shadows it. Built-ins are grouped into built-in modules under
 `internal/stdlib`, each of which hands a `module.BuiltinModule` to
 `module.Register` from its `init`. The root module, in `root.go`, has no path,
-so its members are bare names; `size`, `empty` and `nempty` live there, and
+so its members are bare names; `size`, `empty`, `nempty` and `render` live
+there, and
 `seqs.go` and `maps.go` register the operations on sequences and mappings into
 it as well.
 
@@ -39,9 +41,6 @@ one that no file or `yak.mod` can take. Each module has a file of its own,
 and names that take more than one word are camelCase. A built-in that takes a function calls it with `eval.Call`.
 
 What remains is formatting.
-
-`render` belongs here rather than among the statements: it will be a built-in,
-so the name stays an ordinary identifier until then.
 
 ## 2. Remote packages
 
@@ -70,14 +69,14 @@ message that says so.
 
 ## 4. Remaining commands
 
-`template` is the only command so far; [CLI.md](CLI.md) documents it.
+`render` is the only command so far; [CLI.md](CLI.md) documents it.
 
 - `build` renders a multi-file project rather than a single template.
 - `check` checks inputs and outputs against a schema.
 - `fmt` formats yak files following best practices.
 - `mod` controls yak.mod and yak.lock files.
 
-They slot into `internal/cli` beside `template`, and both can reuse
+They slot into `internal/cli` beside `render`, and both can reuse
 `internal/engine`.
 
 ## Smaller items

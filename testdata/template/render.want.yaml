@@ -1,0 +1,64 @@
+formats:
+  default: |
+    name: web
+    ports:
+      - 80
+      - 443
+  yaml: |
+    name: web
+    ports:
+      - 80
+      - 443
+  json: |
+    {
+      "name": "web",
+      "ports": [
+        80,
+        443
+      ]
+    }
+  jsonl: |
+    {"name":"web","ports":[80,443]}
+  kyaml: |
+    ---
+    {
+      name: "web",
+      ports: [
+        80,
+        443,
+      ],
+    }
+  toml: |
+    name = "web"
+    ports = [80, 443]
+  alias: |
+    name: web
+    ports:
+      - 80
+      - 443
+  null-format: |
+    name: web
+    ports:
+      - 80
+      - 443
+  scalar: |
+    hi
+  nothing: |
+    null
+configmap:
+  apiVersion: v1
+  kind: ConfigMap
+  data:
+    app.yaml: |
+      name: web
+      ports:
+        - 80
+        - 443
+    app.json: |
+      {
+        "name": "web",
+        "ports": [
+          80,
+          443
+        ]
+      }

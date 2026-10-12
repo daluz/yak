@@ -20,7 +20,7 @@ $ go build ./cmd/yak
 
 | Command | Purpose |
 | --- | --- |
-| `yak template FILE` | Render one template. |
+| `yak render FILE` | Render one template. |
 | `yak completion SHELL` | Write a shell completion script. |
 | `yak help [command]` | Describe a command. |
 
@@ -28,13 +28,13 @@ $ go build ./cmd/yak
 same string a template reads as `$yak.version`; a build that was not stamped
 calls itself `dev`.
 
-`template` is the only command that renders anything today. `build`,
+`render` is the only command that renders anything today. `build`,
 `validate`, `fmt` and `mod` are planned; see [ROADMAP.md](ROADMAP.md).
 
-## `yak template`
+## `yak render`
 
 ```console
-$ yak template FILE.yak [-c context.yaml|context.json]... [-f FORMAT]
+$ yak render FILE.yak [-c context.yaml|context.json]... [-f FORMAT]
                         [-o FILE | -O] [--output-dir DIR]
                         [--keep-null-documents] [--strict=false]
 ```
@@ -74,7 +74,7 @@ Repeating it merges the files left to right: mappings merge key by key, and a
 sequence or a scalar from a later file replaces what came before.
 
 ```console
-$ yak template app.yak -c base.yaml -c prod.yaml
+$ yak render app.yak -c base.yaml -c prod.yaml
 ```
 
 With `base.yaml` holding `{replicas: 1, env: staging}` and `prod.yaml` holding
@@ -112,14 +112,14 @@ read from standard input leaves nothing to name the file after and is an error.
 `--output-dir` places the output file in another directory, creating it if it
 is missing. It needs `-o` or `-O` to have a file to place, and it refuses an
 absolute output path. With `-O` only the template's own name is kept, so
-`yak template deploy/app.toml.yak -O --output-dir build` writes
+`yak render deploy/app.toml.yak -O --output-dir build` writes
 `build/app.toml`.
 
 ```console
-$ yak template app.yak -c production.yaml -f kyaml
-$ yak template app.yak -o rendered.json            # the extension chooses JSON
-$ yak template app.toml.yak -O                     # writes app.toml
-$ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
+$ yak render app.yak -c production.yaml -f kyaml
+$ yak render app.yak -o rendered.json            # the extension chooses JSON
+$ yak render app.toml.yak -O                     # writes app.toml
+$ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
 ```
 
 The output is held until every document has rendered, so a failure part of the

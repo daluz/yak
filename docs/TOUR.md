@@ -49,7 +49,7 @@ greeting: "hello from \(.name)"
 and render it:
 
 ```console
-$ yak template hello.yak
+$ yak render hello.yak
 name: web
 replicas: 2
 greeting: hello from web
@@ -82,7 +82,7 @@ name: web
 ```
 
 ```console
-$ yak template values.yak
+$ yak render values.yak
 yak: values.yak:1:7: unknown identifier "web"; strings must be quoted, and no "local" binding is in scope here
 ```
 
@@ -328,7 +328,7 @@ replicas: $$.replicas
 ```
 
 ```console
-$ yak template app.yak -c prod.yaml
+$ yak render app.yak -c prod.yaml
 name: shop-web
 environment: prod
 replicas: 3
@@ -805,6 +805,33 @@ annotations:
 `size` counts characters rather than bytes, and the empty `labels` from the
 context was dropped instead of rendering as `{}`.
 
+`render` turns a value into the text an output format would write for it,
+YAML unless it is given the name of another. That is what a ConfigMap wants,
+since it holds whole files as strings:
+
+```yaml
+local config = {name: "web", ports: [80, 443]}
+
+kind: "ConfigMap"
+data:
+  "app.yaml": render(config)
+  "app.json": render(config, "jsonl")
+```
+
+renders as:
+
+```yaml
+kind: ConfigMap
+data:
+  app.yaml: |
+    name: web
+    ports:
+      - 80
+      - 443
+  app.json: |
+    {"name":"web","ports":[80,443]}
+```
+
 ### Sequences
 
 `sort`, `reverse`, `unique`, `flatten`, `take`, `drop`, `range`, `sum`,
@@ -1132,7 +1159,7 @@ describes it.
 Beyond the built-ins of section 13, the standard library lives in modules
 whose paths begin with `std`: `std.strings`, `std.json`, `std.yaml`,
 `std.base64`, `std.hash`, `std.regex`, `std.math`, `std.path`, `std.files`,
-`std.template` and `std.random`. Given this context:
+`std.gotemplate` and `std.random`. Given this context:
 
 ```yaml
 name: "  Shop  "
@@ -1168,14 +1195,14 @@ annotations:
   checksum: 6233995587e8b3290a28d0c96f35ab4ea89c5b01000efdfbd4dc39a5449923e0
 ```
 
-`std.files` reads a text file from beside the template, and `std.template`
+`std.files` reads a text file from beside the template, and `std.gotemplate`
 renders one as a Go template with data computed in yak, which is how a
 configuration file in some other format ends up inside a value:
 
 ```yaml
-import { std.files, std.template }
+import { std.files, std.gotemplate }
 
-"nginx.conf": template.render(files.read("nginx.conf.tmpl"), {name: $$.name})
+"nginx.conf": gotemplate.render(files.read("nginx.conf.tmpl"), {name: $$.name})
 ```
 
 [STDLIB.md](STDLIB.md) lists every function in every module.
@@ -1218,7 +1245,9 @@ yak: app.yak:3:19: "read" cannot read "/etc/hosts" in strict mode, which reads o
 
 Both errors say that strict mode is the reason and how to turn it off.
 Turning it off is a choice about the run, not the template: the same file
-renders strictly again the next time it is rendered without the flag.
+renders strictly again the next time it is rendered without the flag. A
+template can still tell which mode it is in by reading `$yak.strict`, which is
+`true` unless `--strict=false` was given.
 
 ### Information about the rendering
 
@@ -1313,7 +1342,7 @@ The template, `deployment.yak`, uses most of what this tour covered:
 
 ```yaml
 ## Render with:
-##   yak template deployment.yak -c base.yaml -c prod.yaml
+##   yak render deployment.yak -c base.yaml -c prod.yaml
 
 local {
   name = "\($$.app)-\($$.component)"
@@ -1371,7 +1400,7 @@ spec:
 ```
 
 ```console
-$ yak template deployment.yak -c base.yaml -c prod.yaml
+$ yak render deployment.yak -c base.yaml -c prod.yaml
 ```
 
 renders as:

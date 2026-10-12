@@ -1,0 +1,3 @@
+import std.gotemplate
+
+v: gotemplate.render(["{{ .name }}"], {name: "web"})

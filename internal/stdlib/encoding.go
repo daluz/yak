@@ -45,7 +45,7 @@ func encodeJSON(args []*eval.Thunk) (eval.Value, error) {
 	if indent > 0 {
 		format = render.FormatJSON
 	}
-	out, err := encode(args[0], render.Options{Format: format, Indent: indent})
+	out, err := encode("encode", args[0], render.Options{Format: format, Indent: indent})
 	if err != nil {
 		return nil, err
 	}
@@ -54,14 +54,41 @@ func encodeJSON(args []*eval.Thunk) (eval.Value, error) {
 
 // encodeYAML writes block YAML ending in a newline, as a file would.
 func encodeYAML(args []*eval.Thunk) (eval.Value, error) {
-	out, err := encode(args[0], render.Options{Format: render.FormatYAML})
+	out, err := encode("encode", args[0], render.Options{Format: render.FormatYAML})
 	if err != nil {
 		return nil, err
 	}
 	return eval.String(out), nil
 }
 
-func encode(arg *eval.Thunk, opts render.Options) (string, error) {
+// renderValue writes a value exactly as the output format named by its
+// second argument would write it as a file, or as YAML when that is null.
+func renderValue(args []*eval.Thunk) (eval.Value, error) {
+	format := render.FormatYAML
+	v, err := args[1].Value()
+	if err != nil {
+		return nil, err
+	}
+	switch name := v.(type) {
+	case eval.Null:
+	case eval.String:
+		if format, err = render.ParseFormat(string(name)); err != nil {
+			return nil, eval.Errorf(args[1].Pos(), "%q needs one of the formats %s, found %q",
+				"render", render.FormatList(), string(name))
+		}
+	default:
+		return nil, eval.Errorf(args[1].Pos(), "%q needs a string, found %s", "render", v.TypeName())
+	}
+	out, err := encode("render", args[0], render.Options{Format: format})
+	if err != nil {
+		return nil, err
+	}
+	return eval.String(out), nil
+}
+
+// encode writes the value of arg in the format opts asks for. name is the
+// function doing it, as a diagnostic reports it.
+func encode(name string, arg *eval.Thunk, opts render.Options) (string, error) {
 	v, err := arg.Value()
 	if err != nil {
 		return "", err
@@ -73,7 +100,7 @@ func encode(arg *eval.Thunk, opts render.Options) (string, error) {
 		if errors.As(err, &e) {
 			return "", err
 		}
-		return "", eval.Errorf(arg.Pos(), "%q cannot encode its value: %s", "encode", err.Error())
+		return "", eval.Errorf(arg.Pos(), "%q cannot encode its value: %s", name, err.Error())
 	}
 	return buf.String(), nil
 }

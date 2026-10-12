@@ -36,6 +36,7 @@ func init() {
 		{Name: "size", Params: valueParam, Fn: size},
 		{Name: "empty", Params: valueParam, Fn: empty},
 		{Name: "nempty", Params: valueParam, Fn: nempty},
+		{Name: "render", Params: append(params("value"), optional("format", &ast.Null{})), Fn: renderValue},
 	}})
 }
 

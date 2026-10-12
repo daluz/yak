@@ -1,0 +1,1 @@
+gotemplate-missing-key.yak:4:22: "render" cannot render its template: template:1:9: executing "template" at <.nmae>: map has no entry for key "nmae"
