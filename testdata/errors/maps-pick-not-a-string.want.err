@@ -1,1 +1,1 @@
-maps-pick-not-a-string.yak:2:27: "pick" needs a sequence of strings, found integer at index 1
+maps-pick-not-a-string.yak:1:22: "pick" needs a sequence of strings, found integer at index 1

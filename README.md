@@ -119,8 +119,9 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
   called with arguments by position or by name: `url("web", port = 443)`. An
   anonymous one is written `(x) => x * 2`.
 - **Built-ins.** `size` measures a sequence, mapping or string, `empty` asks
-  whether there is anything in one, and `nullify` turns an empty value into
-  `null` for `:?` to drop.
+  whether there is anything in one, and `nempty` turns an empty value into
+  `null` for `:?` to drop. Sequences have `sort`, `unique`, `range`, `any`
+  and the like, and mappings have `keys`, `values`, `items`, `pick` and `omit`.
 - **Arithmetic, and a `+` that does more.** `+`, `-`, `*`, `/` and `%` work
   on numbers, and `+` also joins two strings or two sequences.
 - **Merging.** `<<` merges two mappings at every depth, and the one on the

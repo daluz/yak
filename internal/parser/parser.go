@@ -369,6 +369,9 @@ func (p *parser) parseStatement(col int) ([]*ast.Binding, error) {
 	// colon, so a binding may hold an indented block.
 	value, err := p.parseEntryValue(col, bh.assign)
 	if err != nil {
+		if bh.pattern != nil && p.at(token.Comma) && p.cur().Line() == bh.assign.Line() {
+			return nil, p.errorf(p.cur().Pos, "a pattern destructures one sequence, so the values go in brackets, as in %q", "a, b = [1, 2]")
+		}
 		return nil, err
 	}
 	bind := bh.bind(value)
@@ -505,6 +508,9 @@ func (p *parser) parseName(what string) (token.Token, error) {
 	if token.IsKeyword(t.Lit) {
 		return t, p.errorf(t.Pos, "%q is a keyword and cannot name a %s", t.Lit, what)
 	}
+	if t.Lit == ast.Wildcard {
+		return t, p.errorf(t.Pos, "%q discards a value and cannot name a %s", t.Lit, what)
+	}
 	p.next()
 	return t, nil
 }
@@ -557,16 +563,24 @@ func (p *parser) parseParams(fn *ast.Function) error {
 // parseParam parses one parameter of fn, along with the default value that a
 // call may leave out.
 func (p *parser) parseParam(fn *ast.Function) (*ast.Param, error) {
-	name, err := p.parseName("parameter")
-	if err != nil {
+	var param *ast.Param
+	if p.at(token.LBracket) {
+		pat, err := p.parseNamingPattern("parameter")
+		if err != nil {
+			return nil, err
+		}
+		param = &ast.Param{Base: pat.Base, Pattern: pat}
+	} else {
+		name, err := p.parseName("parameter")
+		if err != nil {
+			return nil, err
+		}
+		param = &ast.Param{Base: ast.At(name.Pos), Name: name.Lit}
+	}
+	if err := checkParamNames(p, fn.Params, param); err != nil {
 		return nil, err
 	}
-	for _, prev := range fn.Params {
-		if prev.Name == name.Lit {
-			return nil, p.errorf(name.Pos, "parameter %q is declared twice", name.Lit)
-		}
-	}
-	param := &ast.Param{Base: ast.At(name.Pos), Name: name.Lit}
+	var err error
 	if p.at(token.Assign) {
 		p.next()
 		if param.Default, err = p.parseExpr(); err != nil {
@@ -576,18 +590,47 @@ func (p *parser) parseParam(fn *ast.Function) (*ast.Param, error) {
 	return param, nil
 }
 
+// checkParamNames rejects a parameter that binds a name one declared before
+// it already binds, whether either of them is a pattern or not.
+func checkParamNames(p *parser, prev []*ast.Param, param *ast.Param) error {
+	taken := map[string]bool{}
+	for _, q := range prev {
+		eachParamName(q, func(name string, _ token.Pos) { taken[name] = true })
+	}
+	var err error
+	eachParamName(param, func(name string, pos token.Pos) {
+		if taken[name] && err == nil {
+			err = p.errorf(pos, "parameter %q is declared twice", name)
+		}
+	})
+	return err
+}
+
+func eachParamName(param *ast.Param, f func(string, token.Pos)) {
+	if param.Pattern == nil {
+		f(param.Name, param.Pos())
+		return
+	}
+	param.Pattern.Walk(func(name *ast.Pattern, _ []int) { f(name.Name, name.Pos()) })
+}
+
 // bindHead is everything a binding has before its value: its name, the
-// function that its parameter list declared, and the "=" that ends it.
+// function that its parameter list declared, and the "=" that ends it. A
+// binding that destructures has a pattern instead of a name and a function.
 type bindHead struct {
-	name   token.Token
-	fn     *ast.Function
-	assign token.Token
+	name    token.Token
+	fn      *ast.Function
+	pattern *ast.Pattern
+	assign  token.Token
 }
 
 // parseBindHead parses the name of a binding through to its "=", which is
 // written the same way whether the binding stands on its own or inside a
 // "local" block.
 func (p *parser) parseBindHead() (bindHead, error) {
+	if p.at(token.LBracket) || (p.at(token.Ident) && p.toks[p.i+1].Kind == token.Comma) {
+		return p.parsePatternHead()
+	}
 	name, err := p.parseName("binding")
 	if err != nil {
 		return bindHead{}, err
@@ -603,9 +646,54 @@ func (p *parser) parseBindHead() (bindHead, error) {
 	return bindHead{name: name, fn: fn, assign: assign}, nil
 }
 
+// parsePatternHead parses the "[a, b] =" of a binding that destructures, or
+// the "a, b =" that leaves out the brackets of the outermost pattern.
+func (p *parser) parsePatternHead() (bindHead, error) {
+	pat, err := p.parsePatternList("binding")
+	if err != nil {
+		return bindHead{}, err
+	}
+	if err := p.checkNaming(pat, "binding"); err != nil {
+		return bindHead{}, err
+	}
+	assign, err := p.expectAssign()
+	if err != nil {
+		return bindHead{}, err
+	}
+	return bindHead{pattern: pat, assign: assign}, nil
+}
+
+// parseNamingPattern parses a bracketed pattern that has to bind a name, as
+// a parameter or a binding written as one does.
+func (p *parser) parseNamingPattern(what string) (*ast.Pattern, error) {
+	pat, err := p.parsePattern(what)
+	if err != nil {
+		return nil, err
+	}
+	return pat, p.checkNaming(pat, what)
+}
+
+// checkNaming rejects a pattern that binds a name twice or binds none. One of
+// nothing but wildcards would never be read, and so never be checked against
+// its value, which makes it a mistake rather than a test.
+func (p *parser) checkNaming(pat *ast.Pattern, what string) error {
+	if err := p.checkPattern(pat); err != nil {
+		return err
+	}
+	named := false
+	pat.Walk(func(*ast.Pattern, []int) { named = true })
+	if !named {
+		return p.errorf(pat.Pos(), "the pattern of a %s has to bind at least one name", what)
+	}
+	return nil
+}
+
 // bind builds the binding of the head to value, wrapping it in the function
 // that its parameter list declared.
 func (h bindHead) bind(value ast.Node) *ast.Binding {
+	if h.pattern != nil {
+		return &ast.Binding{Base: h.pattern.Base, Pattern: h.pattern, Value: value}
+	}
 	if h.fn != nil {
 		h.fn.Body = value
 		value = h.fn

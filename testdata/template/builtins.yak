@@ -25,11 +25,11 @@ emptiness:
   flag: empty(false)
   ports: empty($.ports)
 
-## nullify turns an empty value into null, which ":?" then drops.
+## nempty turns an empty value into null, which ":?" then drops.
 service:
-  labels:? nullify($$.labels)
-  selector:? nullify($$.selector)
-  region:? nullify($$?.region)
+  labels:? nempty($$.labels)
+  selector:? nempty($$.selector)
+  region:? nempty($$?.region)
 
 ## A built-in is a value, so it can be passed to a function.
 local apply(fn, to) = fn(to)

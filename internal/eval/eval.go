@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -111,50 +112,46 @@ func (e *Env) pushBindings(binds []*ast.Binding) *regions {
 	if len(binds) == 0 {
 		return &regions{envs: []*Env{e}}
 	}
-	// The thunks come first because each binding's environment has to be
-	// able to name the bindings around it, including later ones.
-	thunks := make([]*Thunk, len(binds))
-	for i, b := range binds {
-		thunks[i] = &Thunk{
-			node:     b.Value,
-			pos:      b.Value.Pos(),
-			comments: comments(b.Comments),
-		}
-	}
 	// The outermost frame holds the first binding of every name, which is
-	// what a reference written above them all reads.
-	first := make(map[string]*Thunk, len(binds))
-	for i, b := range binds {
-		if _, ok := first[b.Name]; !ok {
-			first[b.Name] = thunks[i]
-		}
-	}
+	// what a reference written above them all reads. It is filled in as the
+	// bindings are made, which is before anything can read it, so each
+	// binding can name the ones around it, including later ones.
+	first := map[string]*Thunk{}
 	env := &Env{doc: e.doc, self: e.self, scope: &scope{outer: e.scope, binds: first}}
 	// With no name bound twice, that one frame covers the whole block and
 	// nothing has to care where it is read from.
-	if len(first) == len(binds) {
-		for _, t := range thunks {
-			t.env = env
+	if !rebinds(binds) {
+		for _, b := range binds {
+			bind(b, env, first)
 		}
 		return &regions{envs: []*Env{env}}
 	}
 	r := &regions{envs: make([]*Env, 1, len(binds)+1), decl: make([]token.Pos, len(binds))}
 	r.envs[0] = env
 	for i, b := range binds {
-		thunks[i].env = env
-		env = &Env{doc: e.doc, self: e.self,
-			scope: &scope{outer: env.scope, binds: map[string]*Thunk{b.Name: thunks[i]}}}
+		frame := map[string]*Thunk{}
+		bind(b, env, frame)
+		for name, t := range frame {
+			if _, ok := first[name]; !ok {
+				first[name] = t
+			}
+		}
+		env = &Env{doc: e.doc, self: e.self, scope: &scope{outer: env.scope, binds: frame}}
 		r.decl[i] = b.Pos()
 		r.envs = append(r.envs, env)
 	}
 	return r
 }
 
-// bindOne returns an environment that adds a frame holding a single binding,
-// which is how a comprehension names the item it is looking at.
-func (e *Env) bindOne(name string, t *Thunk) *Env {
-	s := &scope{outer: e.scope, binds: map[string]*Thunk{name: t}}
-	return &Env{doc: e.doc, self: e.self, scope: s}
+// bindPattern returns an environment that adds a frame holding the names pat
+// binds in the value of t, which is how a comprehension names the item it is
+// looking at. fit has to have checked the value against pat already.
+func (e *Env) bindPattern(pat *ast.Pattern, t *Thunk) *Env {
+	binds := map[string]*Thunk{}
+	pat.Walk(func(name *ast.Pattern, path []int) {
+		binds[name.Name] = part(t, path)
+	})
+	return &Env{doc: e.doc, self: e.self, scope: &scope{outer: e.scope, binds: binds}}
 }
 
 // lookup finds a binding, searching outwards from the innermost frame.
@@ -500,7 +497,8 @@ func evalMapComp(node *ast.MapComp, env *Env) (Value, error) {
 // iterate walks the source sequence of a comprehension, calling yield with an
 // environment that names the current item. The filter has to be resolved as
 // the loop runs, so it forces each item it looks at; the body it guards stays
-// lazy like any other value.
+// lazy like any other value. An item the pattern destructures is checked as
+// it is reached, whether or not anything reads the names it binds.
 func iterate(loop *ast.Loop, env *Env, yield func(*Env) error) error {
 	src, err := evalNode(loop.Source, env)
 	if err != nil {
@@ -510,8 +508,11 @@ func iterate(loop *ast.Loop, env *Env, yield func(*Env) error) error {
 	if !ok {
 		return errorf(loop.Source.Pos(), "%q needs a sequence to walk over, found %s", "for", src.TypeName())
 	}
-	for _, item := range arr.Items() {
-		child := env.bindOne(loop.Var, item.Value)
+	for i, item := range arr.Items() {
+		if err := fit(loop.Pattern, item.Value, fmt.Sprintf(" (the item at index %d of the source)", i)); err != nil {
+			return err
+		}
+		child := env.bindPattern(loop.Pattern, item.Value)
 		if loop.Filter != nil {
 			keep, err := condition(loop.Filter, child, `the filter of a "for"`)
 			if err != nil {

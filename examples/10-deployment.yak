@@ -25,7 +25,7 @@ kind: "Deployment"
 metadata:
   name: name
   labels: labels
-  annotations:? nullify($$?.annotations)
+  annotations:? nempty($$?.annotations)
 spec:
   replicas: if prod then $$?.replicas ?? 3 else 1
   selector:

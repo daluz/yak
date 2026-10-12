@@ -15,6 +15,14 @@ omitted:
   app: web
   team: platform
 empty: []
-aliased:
-  - b
+shown:
+  app: web
+  tier: frontend
+  team: platform
+shownKeys:
+  - app
+  - tier
+  - team
+kept:
   - a
+  - b

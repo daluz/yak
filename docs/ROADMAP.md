@@ -2,9 +2,9 @@
 
 Done so far: the restricted YAML parser, string interpolation, relative
 references, hidden fields, context files, the `template` command, `local`
-bindings, functions named and anonymous, the `size`, `empty` and `nullify`
-built-ins, the `std.strings`, `std.json`, `std.yaml`, `std.base64`,
-`std.hash`, `std.seqs`, `std.maps`, `std.regex`, `std.math`, `std.path`,
+bindings, functions named and anonymous, the `size`, `empty` and `nempty`
+built-ins and those on sequences and mappings, the `std.strings`, `std.json`,
+`std.yaml`, `std.base64`, `std.hash`, `std.regex`, `std.math`, `std.path`,
 `std.files`, `std.template` and `std.random` modules, strict mode, the
 `??` and
 `?.` operators, arithmetic, comparison and boolean operators, the `<<` merge
@@ -27,17 +27,16 @@ function does, and `evalIdent` finds one only after every binding in scope, so
 a `local` shadows it. Built-ins are grouped into built-in modules under
 `internal/stdlib`, each of which hands a `module.BuiltinModule` to
 `module.Register` from its `init`. The root module, in `root.go`, has no path,
-so its members are bare names; `size`, `empty` and `nullify` are the three
-that live there.
+so its members are bare names; `size`, `empty` and `nempty` live there, and
+`seqs.go` and `maps.go` register the operations on sequences and mappings into
+it as well.
 
 The rest of the library is namespaced rather than bare, so that adding a
 function cannot take a name a template is already using. Each module is a
 built-in module registered under a dotted path beginning with `std`, which
 `import std.name` binds as a mapping of its built-ins; the `std` segment is
 one that no file or `yak.mod` can take. Each module has a file of its own,
-and names that take more than one word are camelCase. A module that goes by
-several names, as `std.seqs` does, registers the same built-ins under each.
-A built-in that takes a function calls it with `eval.Call`.
+and names that take more than one word are camelCase. A built-in that takes a function calls it with `eval.Call`.
 
 What remains is formatting.
 

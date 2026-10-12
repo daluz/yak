@@ -1,7 +1,11 @@
 // Package ast defines the syntax tree produced by the yak parser.
 package ast
 
-import "github.com/daluz/yak/internal/token"
+import (
+	"strings"
+
+	"github.com/daluz/yak/internal/token"
+)
 
 // Node is any syntax tree node.
 type Node interface {
@@ -45,15 +49,60 @@ type Mapping struct {
 }
 
 // Binding is one "name = value" pair introduced by "local", or one module
-// introduced by "import", whose Value is then an *Import.
+// introduced by "import", whose Value is then an *Import. A binding written
+// as "[a, b] = value" has a Pattern instead of a Name.
 type Binding struct {
 	Base
 	// Comments are the ones written on the binding itself. A binding
 	// renders nothing of its own, so they come out wherever it is read
 	// back instead.
 	Comments
-	Name  string
-	Value Node
+	Name    string
+	Pattern *Pattern
+	Value   Node
+}
+
+// Wildcard is the name a pattern writes for an item it binds nothing to.
+const Wildcard = "_"
+
+// Pattern is what a "for" or a "local" binds a value to: a name, the
+// wildcard, or a bracketed list of patterns, which destructures a sequence
+// of exactly that many items.
+type Pattern struct {
+	Base
+	// Name is the name bound, or Wildcard. It is empty for a list.
+	Name string
+	// Items are the patterns of a list, and nil for anything else.
+	Items []*Pattern
+}
+
+// String writes the pattern as it would be written in a template.
+func (p *Pattern) String() string {
+	if p.Items == nil {
+		return p.Name
+	}
+	parts := make([]string, len(p.Items))
+	for i, item := range p.Items {
+		parts[i] = item.String()
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+// Walk calls f with each name the pattern binds, in the order they are
+// written, along with the indices of the items that lead to it.
+func (p *Pattern) Walk(f func(name *Pattern, path []int)) {
+	p.walk(nil, f)
+}
+
+func (p *Pattern) walk(path []int, f func(*Pattern, []int)) {
+	switch {
+	case p.Items != nil:
+		for i, item := range p.Items {
+			item.walk(append(path[:len(path):len(path)], i), f)
+		}
+	case p.Name != Wildcard:
+		f(p, path)
+	}
 }
 
 // Function is the value of a binding whose name was followed by a parameter
@@ -68,11 +117,22 @@ type Function struct {
 }
 
 // Param is one parameter of a Function. Default is nil for a parameter that
-// every call has to supply.
+// every call has to supply. A parameter written as "[a, b]" has a Pattern
+// instead of a Name, and can only be given by position.
 type Param struct {
 	Base
 	Name    string
+	Pattern *Pattern
 	Default Node
+}
+
+// Label is how a diagnostic names the parameter: its name, or the pattern
+// it was written as.
+func (p *Param) Label() string {
+	if p.Pattern != nil {
+		return p.Pattern.String()
+	}
+	return p.Name
 }
 
 // Import is the value of a binding introduced by "import": the module that the
@@ -282,14 +342,14 @@ type If struct {
 	Else Node
 }
 
-// Loop is the "for name in source" clause of a comprehension, together with
-// the optional "if" filter that decides which items it keeps.
+// Loop is the "for pattern in source" clause of a comprehension, together
+// with the optional "if" filter that decides which items it keeps. The
+// unbracketed "for a, b in source" is held as the list pattern [a, b].
 type Loop struct {
 	Base
-	Var    string
-	VarPos token.Pos
-	Source Node
-	Filter Node
+	Pattern *Pattern
+	Source  Node
+	Filter  Node
 }
 
 // SeqComp is a sequence comprehension, "[item for name in source]".

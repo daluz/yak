@@ -11,12 +11,12 @@ import (
 // valuesParam is the single parameter of the built-ins that take a sequence.
 var valuesParam = params("values")
 
-// The seqs module holds the operations on sequences that a comprehension
-// cannot spell. It goes by three names, which import the same module.
+// The operations on sequences that a comprehension cannot spell are in the
+// root module.
 func init() {
 	keyed := append(params("values"), optional("key", &ast.Null{}))
 	predicated := append(params("values"), optional("predicate", &ast.Null{}))
-	seqs := []*eval.Builtin{
+	module.Register(module.BuiltinModule{Builtins: []*eval.Builtin{
 		{Name: "sort", Params: keyed, Fn: sortSeq},
 		{Name: "reverse", Params: valuesParam, Fn: reverse},
 		{Name: "unique", Params: valuesParam, Fn: unique},
@@ -30,10 +30,7 @@ func init() {
 		{Name: "max", Params: keyed, Fn: extreme("max", 1)},
 		{Name: "any", Params: predicated, Fn: quantifier("any", true)},
 		{Name: "all", Params: predicated, Fn: quantifier("all", false)},
-	}
-	for _, path := range []string{"std.seqs", "std.sequences", "std.lists"} {
-		module.Register(module.BuiltinModule{Path: path, Builtins: seqs})
-	}
+	}})
 }
 
 // seqArg reads an argument that has to be a sequence, along with the values

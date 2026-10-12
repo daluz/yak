@@ -35,7 +35,7 @@ func init() {
 	module.Register(module.BuiltinModule{Builtins: []*eval.Builtin{
 		{Name: "size", Params: valueParam, Fn: size},
 		{Name: "empty", Params: valueParam, Fn: empty},
-		{Name: "nullify", Params: valueParam, Fn: nullify},
+		{Name: "nempty", Params: valueParam, Fn: nempty},
 	}})
 }
 
@@ -68,7 +68,7 @@ func empty(args []*eval.Thunk) (eval.Value, error) {
 	return eval.Bool(isEmpty(v)), nil
 }
 
-func nullify(args []*eval.Thunk) (eval.Value, error) {
+func nempty(args []*eval.Thunk) (eval.Value, error) {
 	v, err := args[0].Value()
 	if err != nil {
 		return nil, err

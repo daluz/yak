@@ -191,19 +191,21 @@ func (p *parser) parseIf() (ast.Node, error) {
 	return n, nil
 }
 
-// parseLoop parses the "for name in source" clause that turns a flow
+// parseLoop parses the "for pattern in source" clause that turns a flow
 // collection into a comprehension, along with its optional "if" filter.
 func (p *parser) parseLoop(pos token.Pos) (ast.Loop, error) {
 	var loop ast.Loop
 	p.next()
-	name := p.cur()
-	switch {
-	case name.Kind != token.Ident:
-		return loop, p.errorf(name.Pos, "expected the name of the loop variable after %q, found %s", "for", name)
-	case token.IsReserved(name.Lit) || token.IsKeyword(name.Lit):
-		return loop, p.errorf(name.Pos, "%q is a keyword and cannot name a loop variable", name.Lit)
+	if t := p.cur(); t.Kind != token.Ident && t.Kind != token.LBracket {
+		return loop, p.errorf(t.Pos, "expected the name of the loop variable after %q, found %s", "for", t)
 	}
-	p.next()
+	pat, err := p.parsePatternList("loop variable")
+	if err != nil {
+		return loop, err
+	}
+	if err := p.checkPattern(pat); err != nil {
+		return loop, err
+	}
 	if !p.atKeyword(token.KeywordIn) {
 		return loop, p.errorf(p.cur().Pos, "expected %q after the loop variable, found %s", "in", p.cur())
 	}
@@ -212,7 +214,7 @@ func (p *parser) parseLoop(pos token.Pos) (ast.Loop, error) {
 	if err != nil {
 		return loop, err
 	}
-	loop = ast.Loop{Base: ast.At(pos), Var: name.Lit, VarPos: name.Pos, Source: source}
+	loop = ast.Loop{Base: ast.At(pos), Pattern: pat, Source: source}
 	if p.atKeyword(token.KeywordIf) {
 		p.next()
 		if loop.Filter, err = p.parseExpr(); err != nil {
@@ -220,6 +222,79 @@ func (p *parser) parseLoop(pos token.Pos) (ast.Loop, error) {
 		}
 	}
 	return loop, nil
+}
+
+// parsePatternList parses a pattern, or several separated by commas, which
+// are one list pattern written without its brackets.
+func (p *parser) parsePatternList(what string) (*ast.Pattern, error) {
+	pat, err := p.parsePattern(what)
+	if err != nil || !p.at(token.Comma) {
+		return pat, err
+	}
+	pat = &ast.Pattern{Base: pat.Base, Items: []*ast.Pattern{pat}}
+	for p.at(token.Comma) {
+		p.next()
+		item, err := p.parsePattern(what)
+		if err != nil {
+			return nil, err
+		}
+		pat.Items = append(pat.Items, item)
+	}
+	return pat, nil
+}
+
+// parsePattern parses a name, the wildcard, or a bracketed list of patterns.
+// what says what the names are for, which a misplaced token is reported as.
+func (p *parser) parsePattern(what string) (*ast.Pattern, error) {
+	t := p.cur()
+	if t.Kind == token.Ident && t.Lit == ast.Wildcard {
+		p.next()
+		return &ast.Pattern{Base: ast.At(t.Pos), Name: ast.Wildcard}, nil
+	}
+	if t.Kind != token.LBracket {
+		name, err := p.parseName(what)
+		if err != nil {
+			return nil, err
+		}
+		return &ast.Pattern{Base: ast.At(name.Pos), Name: name.Lit}, nil
+	}
+	p.next()
+	pat := &ast.Pattern{Base: ast.At(t.Pos), Items: []*ast.Pattern{}}
+	for {
+		if p.at(token.RBracket) {
+			if len(pat.Items) == 0 {
+				return nil, p.errorf(t.Pos, "a pattern needs at least one item")
+			}
+			return nil, p.errorf(p.cur().Pos, "expected a pattern after %q, found %s", ",", p.cur())
+		}
+		item, err := p.parsePattern(what)
+		if err != nil {
+			return nil, err
+		}
+		pat.Items = append(pat.Items, item)
+		if p.at(token.RBracket) {
+			p.next()
+			return pat, nil
+		}
+		if !p.at(token.Comma) {
+			return nil, p.errorf(p.cur().Pos, "expected %q or %q in a pattern, found %s", ",", "]", p.cur())
+		}
+		p.next()
+	}
+}
+
+// checkPattern rejects a pattern that binds the same name twice. The
+// wildcard binds nothing, so it may be written any number of times.
+func (p *parser) checkPattern(pat *ast.Pattern) error {
+	seen := map[string]bool{}
+	var err error
+	pat.Walk(func(name *ast.Pattern, _ []int) {
+		if seen[name.Name] && err == nil {
+			err = p.errorf(name.Pos(), "%q is bound twice in one pattern", name.Name)
+		}
+		seen[name.Name] = true
+	})
+	return err
 }
 
 func (p *parser) parseOperand() (ast.Node, error) {
@@ -373,6 +448,9 @@ func (p *parser) parseIdent() (ast.Node, error) {
 	}
 	if msg, ok := unsupportedKeywords[t.Lit]; ok {
 		return nil, p.errorf(t.Pos, "%s", msg)
+	}
+	if t.Lit == ast.Wildcard {
+		return nil, p.errorf(t.Pos, "%q discards a value and cannot be read", t.Lit)
 	}
 	if token.IsKeyword(t.Lit) {
 		return nil, p.errorf(t.Pos, "%q is a keyword and cannot be used as a value; quote it to make it a string", t.Lit)

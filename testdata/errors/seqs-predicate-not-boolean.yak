@@ -1,2 +1,1 @@
-import std.seqs
-any: seqs.any([1, 2], (n) => n)
+any: any([1, 2], (n) => n)

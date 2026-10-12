@@ -520,6 +520,16 @@ func TestComprehensions(t *testing.T) {
 			want: "v:\n  - 1\n  - 2\n",
 		},
 		{
+			name: "a pattern leaves the items it does not read lazy",
+			src:  "v: [a for a, b in [[1, 1 / 0]]]\n",
+			want: "v:\n  - 1\n",
+		},
+		{
+			name: "a filter reads the names of a pattern",
+			src:  "v: [a for a, b in [[1, true], [2, false]] if b]\n",
+			want: "v:\n  - 1\n",
+		},
+		{
 			name:    "sequence over the context",
 			src:     "v: [\"n-\\(x)\" for x in $$.list]\n",
 			context: "list: [1, 2]\n",
@@ -646,6 +656,46 @@ func TestFunctions(t *testing.T) {
 		{
 			name: "a function that is never called is never evaluated",
 			src:  "local f(a) = .missing\nv: 1\n",
+			want: "v: 1\n",
+		},
+		{
+			name: "a pattern parameter destructures its argument",
+			src:  "local f([a, [_, b]], c) = a + b + c\nv: f([1, [0, 2]], 3)\n",
+			want: "v: 6\n",
+		},
+		{
+			name: "a lambda destructures its argument",
+			src:  "local apply(fn, x) = fn(x)\nv: apply(([k, v]) => \"\\(k)=\\(v)\", [\"a\", 1])\n",
+			want: "v: a=1\n",
+		},
+		{
+			name: "a pattern parameter falls back to its default",
+			src:  "local f(x, [a, b] = [x, 2]) = a + b\nv: f(1)\n",
+			want: "v: 3\n",
+		},
+		{
+			name: "a parameter after a pattern can be named",
+			src:  "local f([a, b], c = 0) = a + b + c\nv: f([1, 2], c = 3)\n",
+			want: "v: 6\n",
+		},
+		{
+			name: "a pattern parameter that is never read is never evaluated",
+			src:  "local f([a, b], c) = c\nv: f(.missing, 1)\n",
+			want: "v: 1\n",
+		},
+		{
+			name: "a pattern without brackets",
+			src:  "local a, [b, c] = [1, [2, 3]]\nv: a + b + c\n",
+			want: "v: 6\n",
+		},
+		{
+			name: "a pattern none of whose names is read is never evaluated",
+			src:  "local [a, b] = .missing\nv: 1\n",
+			want: "v: 1\n",
+		},
+		{
+			name: "a pattern leaves the items it does not read lazy",
+			src:  "local [a, b] = [1, .missing]\nv: a\n",
 			want: "v: 1\n",
 		},
 		{
@@ -809,6 +859,12 @@ func TestEvalErrors(t *testing.T) {
 		{"a remainder of zero", "a: 1 % 0\n", "", "division by zero"},
 		{"negating a string", `a: -"x"` + "\n", "", `the operand of "-" must be a number, found string`},
 		{"looping over a scalar", "a: [x for x in 1]\n", "", `"for" needs a sequence to walk over`},
+		{"a loop item checked though unread", "a: [1 for _, _ in [[1, 2], [3]]]\n", "", "found 1 item (the item at index 1 of the source)"},
+		{"a pattern that reads itself", "local [a, b] = [b, a]\nv: a\n", "", "circular reference"},
+		{"a mismatch read through another name", "local [a, b] = [1, 2, 3]\nv: a\n", "", "found 3 items"},
+		{"an argument that does not fit its pattern", "local f([a, b]) = a\nv: f([1])\n", "", "the pattern needs a sequence of 2 items, found 1 item"},
+		{"a missing pattern argument", "local f(x, [a, b]) = a\nv: f(1)\n", "", `needs an argument for parameter "[a, b]"`},
+		{"a pattern parameter cannot be named", "local f([a, b]) = a\nv: f(a = 1)\n", "", `has no parameter named "a"; parameters: "[a, b]"`},
 		{"a non-boolean filter", "a: [x for x in [1] if x]\n", "", `the filter of a "for" must be a boolean`},
 		{"a constant comprehension key", `a: {"k": x for x in [1, 2]}` + "\n", "", "two items of the comprehension produced"},
 		{"a non-string comprehension key", "a: {[x]: 1 for x in [1]}\n", "", "mapping keys must be strings"},

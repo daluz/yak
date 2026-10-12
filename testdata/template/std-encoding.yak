@@ -30,7 +30,6 @@ base64:
   empty: base64.encode("")
 
 ## A Secret's data is base64 of each value.
-import std.maps
 local credentials = {username: "admin", password: "hunter2"}
 secret:
-  data: {[k]: base64.encode(credentials[k]) for k in maps.keys(credentials)}
+  data: {[k]: base64.encode(credentials[k]) for k in keys(credentials)}

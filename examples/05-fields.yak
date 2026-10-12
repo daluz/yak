@@ -25,11 +25,11 @@ count:? 0
 tags:? []
 extra:? {}
 
-## "nullify" turns an empty value into the null that ":?" drops. The context
+## "nempty" turns an empty value into the null that ":?" drops. The context
 ## has an empty "labels" and a populated "annotations", so this leaves one
 ## key behind rather than two.
-labels:? nullify($$?.labels)
-annotations:? nullify($$?.annotations)
+labels:? nempty($$?.labels)
+annotations:? nempty($$?.annotations)
 
 ## "size" counts items, entries or characters, and "empty" asks whether there
 ## is anything to count. Hidden entries count, since both describe the value

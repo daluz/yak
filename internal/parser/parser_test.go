@@ -88,11 +88,15 @@ func dump(n ast.Node) string {
 	case *ast.Function:
 		params := make([]string, 0, len(t.Params))
 		for _, p := range t.Params {
+			name := p.Name
+			if p.Pattern != nil {
+				name = dumpPattern(p.Pattern)
+			}
 			if p.Default == nil {
-				params = append(params, p.Name)
+				params = append(params, name)
 				continue
 			}
-			params = append(params, p.Name+"="+dump(p.Default))
+			params = append(params, name+"="+dump(p.Default))
 		}
 		return "fn(" + strings.Join(params, ",") + ";" + dump(t.Body) + ")"
 	case *ast.Call:
@@ -131,17 +135,35 @@ func dumpEntry(e *ast.Entry) string {
 }
 
 func dumpLoop(l ast.Loop) string {
-	out := " for " + l.Var + " in " + dump(l.Source)
+	out := " for " + dumpPattern(l.Pattern) + " in " + dump(l.Source)
 	if l.Filter != nil {
 		out += " if " + dump(l.Filter)
 	}
 	return out
 }
 
+func dumpPattern(p *ast.Pattern) string {
+	if p.Items == nil {
+		return p.Name
+	}
+	parts := make([]string, len(p.Items))
+	for i, item := range p.Items {
+		parts[i] = dumpPattern(item)
+	}
+	return "[" + strings.Join(parts, " ") + "]"
+}
+
+func bindingName(b *ast.Binding) string {
+	if b.Pattern != nil {
+		return dumpPattern(b.Pattern)
+	}
+	return b.Name
+}
+
 func dumpBinds(binds []*ast.Binding) []string {
 	parts := make([]string, 0, len(binds))
 	for _, b := range binds {
-		parts = append(parts, b.Name+"="+dump(b.Value))
+		parts = append(parts, bindingName(b)+"="+dump(b.Value))
 	}
 	return parts
 }
@@ -266,6 +288,16 @@ func TestParseLocals(t *testing.T) {
 		{"block form on one line", "local { x = 1, y = 2 }\na: x\n", `{x=1 y=2 "a":ident(x)}`},
 		{"block value", "local x =\n  a: 1\nb: x\n", `{x={"a":1} "b":ident(x)}`},
 		{"sequence value", "local x =\n  - 1\nb: x\n", `{x=[1] "b":ident(x)}`},
+		{"pattern", "local [a, b] = p\nc: a\n", `{[a b]=ident(p) "c":ident(a)}`},
+		{"nested pattern with a wildcard", "local [a, [_, b]] = p\nc: a\n", `{[a [_ b]]=ident(p) "c":ident(a)}`},
+		{"pattern in a block", "local {\n  p = [1, 2]\n  [a, b] = p\n}\nc: a\n", `{p=[1 2] [a b]=ident(p) "c":ident(a)}`},
+		{"pattern in a block on one line", "local { p = [1, 2], [a, b] = p }\nc: a\n", `{p=[1 2] [a b]=ident(p) "c":ident(a)}`},
+		{"pattern with a block value", "local [a, b] =\n  - 1\n  - 2\nc: a\n", `{[a b]=[1 2] "c":ident(a)}`},
+		{"pattern without brackets", "local a, b = p\nc: a\n", `{[a b]=ident(p) "c":ident(a)}`},
+		{"pattern without brackets around a nested one", "local _, [a, b] = p\nc: a\n", `{[_ [a b]]=ident(p) "c":ident(a)}`},
+		{"pattern without brackets after a bracketed one", "local [a, b], c = p\nd: a\n", `{[[a b] c]=ident(p) "d":ident(a)}`},
+		{"one-item pattern", "local [a] = p\nc: a\n", `{[a]=ident(p) "c":ident(a)}`},
+		{"pattern without brackets in a block", "local { x = 1, a, b = p, y = 2 }\nc: a\n", `{x=1 [a b]=ident(p) y=2 "c":ident(a)}`},
 		{"nested scope", "a:\n  local x = 1\n  b: x\n", `{"a":{x=1 "b":ident(x)}}`},
 		{"in a sequence item", "- local x = 1\n  a: x\n", `[{x=1 "a":ident(x)}]`},
 		{"before a sequence", "local x = 1\n- x\n", `local(x=1;[ident(x)])`},
@@ -295,6 +327,10 @@ func TestParseFunctions(t *testing.T) {
 		{"trailing comma", "local f(a,) = a\nb: 1\n", `{f=fn(a;ident(a)) "b":1}`},
 		{"block body", "local f(a) =\n  b: a\nc: 1\n", `{f=fn(a;{"b":ident(a)}) "c":1}`},
 		{"in a local block", "local { f(a) = a, g = 1 }\nb: 1\n", `{f=fn(a;ident(a)) g=1 "b":1}`},
+		{"a pattern parameter", "local f([a, b], c) = a\nd: 1\n", `{f=fn([a b],c;ident(a)) "d":1}`},
+		{"a nested pattern parameter", "local f([a, [_, b]]) = a\nc: 1\n", `{f=fn([a [_ b]];ident(a)) "c":1}`},
+		{"a pattern parameter with a default", "local f([a, b] = [1, 2]) = a\nc: 1\n", `{f=fn([a b]=[1 2];ident(a)) "c":1}`},
+		{"a pattern parameter of a lambda", "a: ([k, v]) => v\n", `{"a":fn([k v];ident(v))}`},
 
 		{"positional call", "local f(a) = a\nb: f(1)\n", `{f=fn(a;ident(a)) "b":ident(f)(1)}`},
 		{"empty call", "local f() = 1\nb: f()\n", `{f=fn(;1) "b":ident(f)()}`},
@@ -446,6 +482,13 @@ func TestParseComprehensions(t *testing.T) {
 		{"a conditional item", "a: [if x then 1 else 2 for x in $$.list]\n", `{"a":[if(ident(x);1;2) for x in context.list]}`},
 		{"a conditional source", "a: [x for x in if true then [1] else [2]]\n", `{"a":[ident(x) for x in if(true;[1];[2])]}`},
 		{"wrapped over lines", "a: [\n  x\n  for x in $$.list\n]\n", `{"a":[ident(x) for x in context.list]}`},
+		{"a bracketed pattern", "a: [k for [k, v] in $$.list]\n", `{"a":[ident(k) for [k v] in context.list]}`},
+		{"several names", "a: [k for k, v in $$.list]\n", `{"a":[ident(k) for [k v] in context.list]}`},
+		{"three names", "a: [b for a, b, c in $$.list]\n", `{"a":[ident(b) for [a b c] in context.list]}`},
+		{"a nested pattern", "a: [x for k, [x, y] in $$.list]\n", `{"a":[ident(x) for [k [x y]] in context.list]}`},
+		{"wildcards", "a: [v for _, v, _ in $$.list]\n", `{"a":[ident(v) for [_ v _] in context.list]}`},
+		{"a lone wildcard", "a: [1 for _ in $$.list]\n", `{"a":[1 for _ in context.list]}`},
+		{"a pattern in a mapping", "a: {[k]: v for k, v in $$.list}\n", `{"a":{[ident(k)]:ident(v) for [k v] in context.list}}`},
 	}
 
 	for _, tc := range tests {
@@ -542,7 +585,7 @@ func dumpComments(n ast.Node) []string {
 func dumpBindings(binds []*ast.Binding) []string {
 	var out []string
 	for _, b := range binds {
-		out = append(out, labelComments("local "+b.Name, b.Comments)...)
+		out = append(out, labelComments("local "+bindingName(b), b.Comments)...)
 		out = append(out, dumpComments(b.Value)...)
 	}
 	return out
@@ -675,6 +718,25 @@ func TestParseErrors(t *testing.T) {
 		{"comprehension without a variable", "a: [x for 1 in $$.l]\n", "expected the name of the loop variable"},
 		{"comprehension naming a keyword", "a: [x for in in $$.l]\n", "cannot name a loop variable"},
 		{"comprehension after several items", "a: [1, 2 for x in $$.l]\n", `expected "," or "]"`},
+		{"empty pattern", "a: [1 for [] in $$.l]\n", "a pattern needs at least one item"},
+		{"pattern with a trailing comma", "a: [1 for [x,] in $$.l]\n", `expected a pattern after ","`},
+		{"unseparated pattern", "a: [1 for [x y] in $$.l]\n", `expected "," or "]" in a pattern`},
+		{"pattern with a value", "a: [1 for [x, 2] in $$.l]\n", "expected the name of a loop variable"},
+		{"name bound twice in a loop", "a: [1 for x, [y, x] in $$.l]\n", `"x" is bound twice in one pattern`},
+		{"pattern naming a keyword", "a: [1 for [x, if] in $$.l]\n", `"if" is a keyword and cannot name a loop variable`},
+		{"name bound twice in a local", "local [a, a] = [1, 2]\nb: a\n", `"a" is bound twice in one pattern`},
+		{"local pattern of wildcards", "local [_, [_]] = [1, [2]]\nb: 1\n", "has to bind at least one name"},
+		{"local pattern with parameters", "local [a, b](x) = x\nc: a\n", `expected "=" after the name of a binding`},
+		{"values of a pattern without brackets", "local a, b = 1, 2\nc: a\n", `the values go in brackets`},
+		{"name bound twice without brackets", "local a, [b, a] = p\nc: a\n", `"a" is bound twice in one pattern`},
+		{"parameter pattern of wildcards", "local f([_, _]) = 1\na: 1\n", "the pattern of a parameter has to bind at least one name"},
+		{"name bound twice in a parameter pattern", "local f([a, a]) = a\nb: 1\n", `"a" is bound twice in one pattern`},
+		{"parameter pattern repeating a parameter", "local f(a, [b, a]) = a\nc: 1\n", `parameter "a" is declared twice`},
+		{"parameter repeating a pattern's name", "local f([a, b], b) = a\nc: 1\n", `parameter "b" is declared twice`},
+		{"lambda pattern repeating a parameter", "a: ([x, y], x) => x\n", `parameter "x" is declared twice`},
+		{"wildcard as a binding", "local _ = 1\na: 1\n", `"_" discards a value and cannot name a binding`},
+		{"wildcard as a parameter", "local f(_) = 1\na: 1\n", `"_" discards a value and cannot name a parameter`},
+		{"wildcard read as a value", "a: _\n", `"_" discards a value and cannot be read`},
 		{"unterminated comprehension", "a: [x for x in $$.l\n", `expected "]" to close a comprehension`},
 		{"unterminated mapping comprehension", "a: {[x]: 1 for x in $$.l\n", `expected "}" to close a comprehension`},
 		{"alias", "a: *x\n", "anchors and aliases are not supported"},

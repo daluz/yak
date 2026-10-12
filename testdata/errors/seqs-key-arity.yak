@@ -1,2 +1,1 @@
-import std.seqs
-sorted: seqs.sort([1], (a, b) => a)
+sorted: sort([1], (a, b) => a)

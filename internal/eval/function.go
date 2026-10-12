@@ -93,13 +93,17 @@ func (f *Function) run(pos token.Pos, args map[string]*Thunk) (Value, error) {
 	s := &scope{outer: f.env.scope, binds: make(map[string]*Thunk, len(f.decl.Params))}
 	inner := &Env{doc: f.env.doc, self: f.env.self, scope: s}
 	for _, p := range f.decl.Params {
-		switch t, ok := args[p.Name]; {
-		case ok:
+		t, ok := args[p.Label()]
+		if !ok {
+			if p.Default == nil {
+				return nil, missingArgument(who, p.Label(), pos)
+			}
+			t = &Thunk{node: p.Default, env: inner, pos: p.Default.Pos()}
+		}
+		if p.Pattern == nil {
 			s.binds[p.Name] = t
-		case p.Default != nil:
-			s.binds[p.Name] = &Thunk{node: p.Default, env: inner, pos: p.Default.Pos()}
-		default:
-			return nil, missingArgument(who, p.Name, pos)
+		} else {
+			destructure(p.Pattern, t, inner, Comments{}, s.binds)
 		}
 	}
 	session.depth++
@@ -145,7 +149,7 @@ func byPosition(fn callee, params []*ast.Param, pos token.Pos, args []*Thunk) (m
 	}
 	matched := make(map[string]*Thunk, len(args))
 	for i, t := range args {
-		matched[params[i].Name] = t
+		matched[params[i].Label()] = t
 	}
 	return matched, nil
 }
@@ -163,7 +167,7 @@ func matchArguments(fn callee, params []*ast.Param, node *ast.Call, env *Env) (m
 			return nil, errorf(arg.Value.Pos(), "%s takes at most %s, found %d",
 				fn, argumentCount(len(params)), len(node.Args))
 		case name == "":
-			name = params[i].Name
+			name = params[i].Label()
 		case paramNamed(params, name) == nil:
 			return nil, errorf(arg.NamePos, "%s has no parameter named %q%s",
 				fn, name, parameterNames(params))
@@ -208,7 +212,7 @@ func parameterNames(params []*ast.Param) string {
 	}
 	names := make([]string, len(params))
 	for i, p := range params {
-		names[i] = p.Name
+		names[i] = p.Label()
 	}
 	return "; parameters: " + quoteNames(names)
 }

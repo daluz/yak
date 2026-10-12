@@ -479,6 +479,59 @@ A rebinding names the binding it replaces rather than itself, so `local a = a`
 is a circular reference while a second `local a = a` is not. A binding that is
 never used is never evaluated.
 
+### Destructuring
+
+A binding may name the items of a sequence rather than the sequence itself, by
+writing a pattern of names where the name would go. The brackets around the
+outermost pattern may be left out, so these two bindings are the same:
+
+```yaml
+local pair = ["web", 8080]
+local [name, port] = pair
+local name, port = pair
+
+service: "\(name):\(port)"
+```
+
+Each item of a pattern may itself be a pattern, which destructures the item it
+stands for, and `_` stands for an item that binds nothing. Only the outermost
+brackets are optional: an inner pattern keeps its own, and so does a pattern
+of a single item, since `local [a] = x` takes the one item of `x` while
+`local a = x` takes `x` itself.
+
+```yaml
+local host, _ = ["registry.example.com", "latest"]
+local [[_, tag]] = [["mirror", "1.4"]]
+```
+
+A pattern may be written in a `local { ... }` block like any other binding.
+The commas between its names do not end the binding, since a binding's name
+is never followed by one, but the brackets read better when bindings share a
+line:
+
+```yaml
+local { bounds = [1, 10], [low, high] = bounds }
+```
+
+The value is a single sequence, so `local a, b = 1, 2` is an error; it is
+written `local a, b = [1, 2]`.
+
+The sequence has to hold exactly as many items as the pattern names, at every
+level, and anything other than a sequence where a pattern expects one is an
+error. Nothing is evaluated until one of the names is read; the first read
+checks the whole value against the pattern, so a value that does not fit is
+reported the same way whichever name is read. The items themselves stay lazy,
+unless a nested pattern has to look at one to see its shape.
+
+The names of a pattern are ordinary bindings in every other respect. They
+shadow, rebind and resolve exactly as a single name does, so
+`local [a, b] = [b, a]` below earlier bindings of `a` and `b` swaps them, and
+the comments written on the pattern travel to every name it binds. A name may
+appear only once in a pattern, and a pattern has to bind at least one name.
+
+`_` is not a name: it cannot name a binding or a parameter, and reading it as
+a value is an error.
+
 ## Functions
 
 A binding whose name is followed by a parameter list is a function. Calling it
@@ -525,6 +578,21 @@ may name a parameter declared before it:
 ```yaml
 local span(from, to = from) = "\(from)..\(to)"
 ```
+
+A parameter may be a [pattern](#destructuring), which destructures its
+argument exactly as a binding does. Commas already separate the parameters,
+so its brackets cannot be left out:
+
+```yaml
+local address([host, port], scheme = "https") = "\(scheme)://\(host):\(port)"
+
+a: address(["web.example.com", 443])
+```
+
+A pattern has no name for an argument to give, so it is given by position, and
+a diagnostic names it by the pattern it was written as. The names it binds
+count as parameters of the function, so none of them may repeat a name another
+parameter binds.
 
 ### What a function sees
 
@@ -576,7 +644,8 @@ local apply(fn, to) = fn(to)
 v: apply((s) => "\(s)\(s)", "ab")   # abab
 ```
 
-The parameters are the ones a binding declares, defaults included, and
+The parameters are the ones a binding declares, defaults and patterns
+included, so `([key, value]) => value` takes a pair apart, and
 everything in [What a function sees](#what-a-function-sees) holds here too:
 the body is evaluated where it was written, so it reads the bindings and the
 `.name` fields around it, and a function that returns one keeps the arguments
@@ -607,7 +676,7 @@ argument out.
 | --- | --- |
 | `size(value)` | How much is in a sequence, a mapping, or a string. |
 | `empty(value)` | Whether the value is `null`, `{}`, `[]` or `""`. |
-| `nullify(value)` | `null` when `empty(value)`, and the value itself otherwise. |
+| `nempty(value)` | `null` when `empty(value)`, and the value itself otherwise. |
 
 `size` counts items, entries, or characters:
 
@@ -621,13 +690,13 @@ Hidden entries count, because `size` describes the value rather than what the
 renderer will write out. A value with nothing to measure — a number, a
 boolean, `null`, or a function — is an error naming the type that was found.
 
-`empty` and `nullify` accept anything. Only `null` and the three empty
+`empty` and `nempty` accept anything. Only `null` and the three empty
 collections are empty; `0`, `false` and `"abc"` are values like any other,
-exactly as they are for `??` and `:?`. Pairing `nullify` with `:?` is how an
+exactly as they are for `??` and `:?`. Pairing `nempty` with `:?` is how an
 entry disappears when the context supplies nothing useful for it:
 
 ```yaml
-labels:? nullify($$?.labels)
+labels:? nempty($$?.labels)
 ```
 
 With a context of `{labels: {}}` that entry is left out, while `{labels: {app:
@@ -641,11 +710,80 @@ local size(v) = "mine"
 a: size([1, 2])   # "mine"
 ```
 
-Built-ins are bare names, which is why there are few of them and why they are
-about values in general rather than any one kind of value. Everything else
-lives in a module of the [standard library](#the-standard-library) and is
-reached through an import, so that growing the library cannot take a bare name
-out from under a template.
+The operations on [sequences](#sequences) and [mappings](#mappings) are
+built-ins as well. Everything else lives in a module of the
+[standard library](#the-standard-library) and is reached through an import, so
+that growing the library cannot take a bare name out from under a template.
+
+### Sequences
+
+```yaml
+ports: sort(unique($$.ports))
+byWeight: sort($$.services, (s) => s.weight)
+privileged: any($$.ports, (p) => p < 1024)
+```
+
+| Call | Answer |
+| --- | --- |
+| `sort(values, key = null)` | The items in ascending order, or in that of what `key` answers for each. |
+| `reverse(values)` | The items in reverse order. |
+| `unique(values)` | The items without the ones equal to an item before them. |
+| `flatten(values)` | The items of a sequence of sequences, in one sequence. |
+| `take(values, count)` | The first `count` items, or all of them when there are fewer. |
+| `drop(values, count)` | The items after the first `count`, or `[]` when there are fewer. |
+| `range(start, stop = null, step = 1)` | The integers from `start` up to but not including `stop`, counting by `step`. |
+| `sum(values)` | The numbers added up; `0` for `[]`. |
+| `min(values, key = null)` | The item that sorts first, by its `key` when there is one. |
+| `max(values, key = null)` | The item that sorts last, by its `key` when there is one. |
+| `any(values, predicate = null)` | Whether `predicate` answers `true` for some item, or some item is `true`. |
+| `all(values, predicate = null)` | Whether `predicate` answers `true` for every item, or every item is `true`. |
+
+Without a `key`, `sort`, `min` and `max` order the items themselves. Ordering
+is the one `<` uses, so they need items that are all numbers or all strings,
+and a `key` has to answer the same. Sorting is stable: items that sort the
+same keep the order they had, and of several items that are the least or the
+greatest, `min` and `max` answer the first. `unique` compares items as `==`
+does, so they have to be scalars. `sum` answers an integer until a float is
+among the numbers, as `+` does, and `min` and `max` of `[]` are an error.
+
+`range` counts as Python's does. Given only one argument, that argument is
+the stop and the count starts at 0, so `range(3)` is `[0, 1, 2]` and
+`range(1, 4)` is `[1, 2, 3]`. A negative `step` counts down, so
+`range(5, 0, -2)` is `[5, 3, 1]`, a `stop` that `step` cannot reach gives
+`[]`, and a `step` of 0 is an error.
+
+`key` and `predicate` are functions of one parameter, named or anonymous, and
+a `predicate` has to answer a boolean; without one, the items themselves have
+to be booleans. `any` and `all` stop at the first item that decides the
+answer, so `predicate` never sees the items after it, and `any` of `[]` is
+`false` while `all` of `[]` is `true`. Whether a sequence holds an item is
+what [`in`](#operators) asks.
+
+### Mappings
+
+```yaml
+names: keys($$.labels)
+selector: pick($$.labels, ["app", "tier"])
+```
+
+| Call | Answer |
+| --- | --- |
+| `keys(mapping)` | The keys, as a sequence of strings. |
+| `values(mapping)` | The values. |
+| `items(mapping)` | The entries, as a sequence of `[key, value]` pairs. |
+| `pick(mapping, keys)` | The entries whose key is one of `keys`. |
+| `omit(mapping, keys)` | The entries whose key is not one of `keys`. |
+| `visible(mapping)` | The entries that are not hidden. |
+
+Hidden entries count, as they do for `size`, and every answer keeps the order
+the entries were written in rather than that of `keys`. A key in `keys` that
+`mapping` does not hold is no error, and `pick` and `omit` keep everything
+else about an entry, such as being hidden. Whether a mapping holds a key is
+what [`in`](#operators) asks.
+
+`visible` leaves out only the entries written with `::`, and keeps the rest
+as they are: an entry written with `:?` stays whatever its value. Combined
+with the others, `keys(visible(m))` names the keys that are not hidden.
 
 ### `std.strings`
 
@@ -726,78 +864,6 @@ annotations:
 
 `sha1(value)`, `sha256(value)` and `sha512(value)` digest the string `value`,
 answering the digest in lowercase hexadecimal.
-
-### `std.seqs`
-
-```yaml
-import std.seqs
-
-ports: seqs.sort(seqs.unique($$.ports))
-byWeight: seqs.sort($$.services, (s) => s.weight)
-privileged: seqs.any($$.ports, (p) => p < 1024)
-```
-
-`std.sequences` and `std.lists` are other names for the same module.
-
-| Call | Answer |
-| --- | --- |
-| `sort(values, key = null)` | The items in ascending order, or in that of what `key` answers for each. |
-| `reverse(values)` | The items in reverse order. |
-| `unique(values)` | The items without the ones equal to an item before them. |
-| `flatten(values)` | The items of a sequence of sequences, in one sequence. |
-| `take(values, count)` | The first `count` items, or all of them when there are fewer. |
-| `drop(values, count)` | The items after the first `count`, or `[]` when there are fewer. |
-| `range(start, stop = null, step = 1)` | The integers from `start` up to but not including `stop`, counting by `step`. |
-| `sum(values)` | The numbers added up; `0` for `[]`. |
-| `min(values, key = null)` | The item that sorts first, by its `key` when there is one. |
-| `max(values, key = null)` | The item that sorts last, by its `key` when there is one. |
-| `any(values, predicate = null)` | Whether `predicate` answers `true` for some item, or some item is `true`. |
-| `all(values, predicate = null)` | Whether `predicate` answers `true` for every item, or every item is `true`. |
-
-Without a `key`, `sort`, `min` and `max` order the items themselves. Ordering
-is the one `<` uses, so they need items that are all numbers or all strings,
-and a `key` has to answer the same. Sorting is stable: items that sort the
-same keep the order they had, and of several items that are the least or the
-greatest, `min` and `max` answer the first. `unique` compares items as `==`
-does, so they have to be scalars. `sum` answers an integer until a float is
-among the numbers, as `+` does, and `min` and `max` of `[]` are an error.
-
-`range` counts as Python's does. Given only one argument, that argument is
-the stop and the count starts at 0, so `range(3)` is `[0, 1, 2]` and
-`range(1, 4)` is `[1, 2, 3]`. A negative `step` counts down, so
-`range(5, 0, -2)` is `[5, 3, 1]`, a `stop` that `step` cannot reach gives
-`[]`, and a `step` of 0 is an error.
-
-`key` and `predicate` are functions of one parameter, named or anonymous, and
-a `predicate` has to answer a boolean; without one, the items themselves have
-to be booleans. `any` and `all` stop at the first item that decides the
-answer, so `predicate` never sees the items after it, and `any` of `[]` is
-`false` while `all` of `[]` is `true`. Whether a sequence holds an item is
-what [`in`](#operators) asks.
-
-### `std.maps`
-
-```yaml
-import std.maps
-
-names: maps.keys($$.labels)
-selector: maps.pick($$.labels, ["app", "tier"])
-```
-
-`std.objects` is another name for the same module.
-
-| Call | Answer |
-| --- | --- |
-| `keys(mapping)` | The keys, as a sequence of strings. |
-| `values(mapping)` | The values. |
-| `pick(mapping, keys)` | The entries whose key is one of `keys`. |
-| `omit(mapping, keys)` | The entries whose key is not one of `keys`. |
-
-Hidden entries count, as they do for `size`, and every answer keeps the order
-the entries were written in rather than that of `keys`. A key in `keys` that
-`mapping` does not hold is no error, and `pick` and `omit` keep everything
-else about an entry, such as being hidden. Whether a mapping holds a key is
-what [`in`](#operators) asks.
 
 ### `std.regex`
 
@@ -1306,6 +1372,20 @@ anything nested inside the element, and a comprehension may appear inside
 another one. A comprehension opens no mapping of its own, so `.` still names
 the mapping the comprehension is written in.
 
+The name may be a [pattern](#destructuring) instead, which destructures each
+item. Several patterns separated by commas are one pattern written without its
+brackets, so the two loops below are the same, and
+[`items`](#mappings) makes a mapping into the pairs they walk:
+
+```yaml
+local limits = {cpu: 2, memory: 512}
+doubled: {[k]: v * 2 for [k, v] in items(limits)}
+large: [k for k, v in items(limits) if v > 100]
+```
+
+Each item is checked against the pattern as the loop reaches it, whether or
+not anything reads the names it binds.
+
 The source is walked as the comprehension is built, and so is the filter,
 which means both are resolved eagerly; the element itself stays as lazy as
 any other value.
@@ -1455,10 +1535,13 @@ sep         := ":" | "::" | ":?"
 statement   := local | import
 local       := "local" binding | "local" "{" binding+ "}"
 binding     := identifier params? "=" value
+             | (patterns | pattern ("," pattern)+) "=" value
+pattern     := identifier | "_" | patterns
+patterns    := "[" pattern ("," pattern)* "]"
 import      := "import" module | "import" "{" module+ "}"
 module      := (identifier "=")? identifier ("." identifier)*
 params      := "(" (param ("," param)* ","?)? ")"
-param       := identifier ("=" value)?
+param       := (identifier | patterns) ("=" value)?
 lambda      := params "=>" value
 value       := conditional | coalesce
 conditional := "if" coalesce "then" value ("else" value)?
@@ -1472,7 +1555,7 @@ operand     := literal | reference | flowSeq | flowMap | lambda | "(" value ")"
 flowSeq     := "[" ((value loop) | (value ("," value)*)? ","?) "]"
 flowMap     := "{" ((entry loop) | (entry ("," entry)*)?) "}"
 entry       := (key | "<<") sep value
-loop        := "for" identifier "in" value ("if" value)?
+loop        := "for" pattern ("," pattern)* "in" value ("if" value)?
 key         := identifier | string | "[" value "]"
 literal     := string | int | float | "true" | "false" | "null"
 reference   := (dots | builtin | identifier) postfix*

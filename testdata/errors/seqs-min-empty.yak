@@ -1,2 +1,1 @@
-import std.seqs
-least: seqs.min([])
+least: min([])

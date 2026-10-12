@@ -1,2 +1,1 @@
-import std.maps
-picked: maps.pick({a: 1}, ["a", 2])
+picked: pick({a: 1}, ["a", 2])

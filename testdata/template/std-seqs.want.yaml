@@ -99,11 +99,6 @@ quantified:
   allTrue: false
   anyOfNone: false
   allOfNone: true
-aliases:
-  - - 2
-    - 1
-  - - 2
-    - 1
 descending:
   - 8080
   - 443

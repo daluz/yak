@@ -1,0 +1,6 @@
+images:
+  - [registry.example.com, unused]
+  - [unused, "1.4"]
+endpoints:
+  - [api, [api.internal, 443]]
+  - [db, [db.internal, 5432]]

@@ -1,5 +1,3 @@
-import std.seqs
-
 ports: [8080, 443, 80, 443]
 names: ["web", "api", "db"]
 services::
@@ -8,52 +6,47 @@ services::
   - {name: "db", weight: 2}
 
 sorted:
-  numbers: seqs.sort($.ports)
-  strings: seqs.sort($.names)
-  byWeight: [s.name for s in seqs.sort($.services, (s) => s.weight)]
-  named: [s.name for s in seqs.sort(key = (s) => -s.weight, values = $.services)]
-  empty: seqs.sort([])
-  nullKey: seqs.sort([3, 1, 2], null)
-reversed: seqs.reverse($.names)
-unique: seqs.unique($.ports)
-flattened: seqs.flatten([[1, 2], [], [3]])
+  numbers: sort($.ports)
+  strings: sort($.names)
+  byWeight: [s.name for s in sort($.services, (s) => s.weight)]
+  named: [s.name for s in sort(key = (s) => -s.weight, values = $.services)]
+  empty: sort([])
+  nullKey: sort([3, 1, 2], null)
+reversed: reverse($.names)
+unique: unique($.ports)
+flattened: flatten([[1, 2], [], [3]])
 taken:
-  some: seqs.take($.names, 2)
-  more: seqs.take($.names, 10)
+  some: take($.names, 2)
+  more: take($.names, 10)
 dropped:
-  some: seqs.drop($.names, 1)
-  more: seqs.drop($.names, 10)
+  some: drop($.names, 1)
+  more: drop($.names, 10)
 ranges:
-  stop: seqs.range(3)
-  counted: seqs.range(0, 3)
-  offset: seqs.range(8080, 8083)
-  stepped: seqs.range(0, 10, 3)
-  down: seqs.range(5, 0, -2)
-  named: seqs.range(1, step = 2, stop = 6)
-  empty: seqs.range(3, 0)
-  unreachable: seqs.range(0, 3, -1)
+  stop: range(3)
+  counted: range(0, 3)
+  offset: range(8080, 8083)
+  stepped: range(0, 10, 3)
+  down: range(5, 0, -2)
+  named: range(1, step = 2, stop = 6)
+  empty: range(3, 0)
+  unreachable: range(0, 3, -1)
 sums:
-  integers: seqs.sum($.ports)
-  mixed: seqs.sum([1, 0.5])
-  empty: seqs.sum([])
+  integers: sum($.ports)
+  mixed: sum([1, 0.5])
+  empty: sum([])
 extremes:
-  min: seqs.min($.ports)
-  max: seqs.max($.names)
-  lightest: seqs.min($.services, (s) => s.weight).name
-  heaviest: seqs.max($.services, (s) => s.weight).name
+  min: min($.ports)
+  max: max($.names)
+  lightest: min($.services, (s) => s.weight).name
+  heaviest: max($.services, (s) => s.weight).name
 quantified:
-  anyPrivileged: seqs.any($.ports, (p) => p < 1024)
-  allPrivileged: seqs.all($.ports, (p) => p < 1024)
-  anyTrue: seqs.any([false, true])
-  allTrue: seqs.all([true, false])
-  anyOfNone: seqs.any([], (p) => true)
-  allOfNone: seqs.all([], (p) => false)
-
-## Every name of the module imports the same functions.
-import std.sequences
-import std.lists
-aliases: [sequences.reverse([1, 2]), lists.reverse([1, 2])]
+  anyPrivileged: any($.ports, (p) => p < 1024)
+  allPrivileged: all($.ports, (p) => p < 1024)
+  anyTrue: any([false, true])
+  allTrue: all([true, false])
+  anyOfNone: any([], (p) => true)
+  allOfNone: all([], (p) => false)
 
 ## A named function works as a key as well as an anonymous one.
 local negated(n) = -n
-descending: seqs.sort($.ports, negated)
+descending: sort($.ports, negated)

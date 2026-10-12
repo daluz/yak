@@ -5,20 +5,18 @@ import (
 	"github.com/daluz/yak/internal/module"
 )
 
-// The maps module holds the operations on mappings. Hidden entries count, as
-// they do for size, and entries keep the order they were written in. It goes
-// by two names, which import the same module.
+// The operations on mappings are in the root module. Hidden entries count, as
+// they do for size, and entries keep the order they were written in.
 func init() {
 	mapParam := params("mapping")
-	maps := []*eval.Builtin{
+	module.Register(module.BuiltinModule{Builtins: []*eval.Builtin{
 		{Name: "keys", Params: mapParam, Fn: keys},
 		{Name: "values", Params: mapParam, Fn: values},
+		{Name: "items", Params: mapParam, Fn: items},
 		{Name: "pick", Params: params("mapping", "keys"), Fn: selectKeys("pick", true)},
 		{Name: "omit", Params: params("mapping", "keys"), Fn: selectKeys("omit", false)},
-	}
-	for _, path := range []string{"std.maps", "std.objects"} {
-		module.Register(module.BuiltinModule{Path: path, Builtins: maps})
-	}
+		{Name: "visible", Params: mapParam, Fn: visible},
+	}})
 }
 
 func mapArg(name string, arg *eval.Thunk) (*eval.Object, error) {
@@ -57,6 +55,21 @@ func values(args []*eval.Thunk) (eval.Value, error) {
 	return eval.NewArray(items), nil
 }
 
+// items answers the entries as [key, value] pairs, which is how a
+// comprehension walks a mapping. The values stay lazy, as they do for values.
+func items(args []*eval.Thunk) (eval.Value, error) {
+	o, err := mapArg("items", args[0])
+	if err != nil {
+		return nil, err
+	}
+	pairs := make([]*eval.Elem, o.Len())
+	for i, f := range o.Fields() {
+		pair := []*eval.Elem{eval.Item(eval.String(f.Name)), {Value: f.Value}}
+		pairs[i] = eval.Item(eval.NewArray(pair))
+	}
+	return eval.NewArray(pairs), nil
+}
+
 // selectKeys makes pick, which keeps the entries named in keys, and omit,
 // which keeps the others. A key the mapping does not hold is no error, and
 // the entries keep the mapping's order rather than that of keys.
@@ -87,4 +100,20 @@ func selectKeys(name string, keep bool) func([]*eval.Thunk) (eval.Value, error) 
 		}
 		return out, nil
 	}
+}
+
+// visible answers the mapping without its "::" entries. A ":?" entry stays,
+// since whether it is written out depends on a value that is still lazy.
+func visible(args []*eval.Thunk) (eval.Value, error) {
+	o, err := mapArg("visible", args[0])
+	if err != nil {
+		return nil, err
+	}
+	out := eval.NewObject()
+	for _, f := range o.Fields() {
+		if !f.Hidden {
+			out.Add(f)
+		}
+	}
+	return out, nil
 }

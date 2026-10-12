@@ -16,8 +16,11 @@ const (
 // Thunk is a value that is computed on first use and remembered afterwards.
 type Thunk struct {
 	node ast.Node
-	env  *Env
-	pos  token.Pos
+	// fn computes the value in place of node, for a thunk that reads a
+	// part of another value rather than evaluating an expression.
+	fn  func() (Value, error)
+	env *Env
+	pos token.Pos
 	// comments are the ones written on the binding this thunk holds, which
 	// travel to every entry that reads the binding back. They are empty
 	// for a thunk that is not a binding's.
@@ -48,7 +51,13 @@ func (t *Thunk) Value() (Value, error) {
 	s := t.env.doc.session
 	s.stack = append(s.stack, t.pos)
 
-	v, err := evalNode(t.node, t.env)
+	var v Value
+	var err error
+	if t.fn != nil {
+		v, err = t.fn()
+	} else {
+		v, err = evalNode(t.node, t.env)
+	}
 
 	s.stack = s.stack[:len(s.stack)-1]
 	t.state = resolved
