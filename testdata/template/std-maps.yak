@@ -1,0 +1,17 @@
+import std.maps
+
+labels::
+  app: "web"
+  tier: "frontend"
+  team: "platform"
+  secret:: "hidden"
+
+keys: maps.keys($.labels)
+values: maps.values($.labels)
+picked: maps.pick($.labels, ["team", "app", "missing"])
+omitted: maps.omit($.labels, ["tier", "secret"])
+empty: maps.keys({})
+
+## std.objects is another name for the same module.
+import std.objects
+aliased: objects.keys({b: 1, a: 2})

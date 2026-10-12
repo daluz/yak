@@ -19,7 +19,7 @@ local {
   # A binding renders nothing of its own, so a comment written on one comes
   # out wherever the binding is read back.
   region = "us-east-1"
-  zone = "{region}a"   # so does one written beside the binding
+  zone = "\(region)a"   # so does one written beside the binding
 }
 
 local defaults =

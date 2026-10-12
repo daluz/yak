@@ -1,0 +1,1 @@
+json-encode-function.yak:2:17: "encode" cannot encode its value: cannot render a value of type function

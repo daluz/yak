@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -71,34 +72,74 @@ var precedence = [][]token.Kind{
 	{token.Or},
 	{token.And},
 	{token.Eq, token.Ne},
-	{token.Lt, token.Le, token.Gt, token.Ge},
+	{token.Lt, token.Le, token.Gt, token.Ge, token.In, token.NotIn},
 	{token.Plus, token.Merge, token.Dash},
 	{token.Star, token.Slash, token.Percent},
 }
 
+// notLevel is the level a "not" is read at. It binds looser than every
+// comparison and tighter than "and", so "not a == b" negates the comparison.
+const notLevel = 2
+
 func (p *parser) parseBinary(level int) (ast.Node, error) {
 	if level == len(precedence) {
 		return p.parseUnary()
+	}
+	if level == notLevel && p.atKeyword(token.KeywordNot) {
+		t := p.next()
+		x, err := p.parseBinary(level)
+		if err != nil {
+			return nil, err
+		}
+		return &ast.Unary{Base: ast.At(t.Pos), Op: token.Not, X: x}, nil
 	}
 	x, err := p.parseBinary(level + 1)
 	if err != nil {
 		return nil, err
 	}
 	for p.atBinaryOp(level) {
+		kind := p.operator()
 		op := p.next()
+		if kind == token.NotIn {
+			p.next()
+		}
 		y, err := p.parseBinary(level + 1)
 		if err != nil {
 			return nil, err
 		}
-		x = &ast.Binary{Base: ast.At(x.Pos()), Op: op.Kind, OpPos: op.Pos, X: x, Y: y}
+		x = &ast.Binary{Base: ast.At(x.Pos()), Op: kind, OpPos: op.Pos, X: x, Y: y}
 	}
 	return x, nil
+}
+
+// wordOperators maps the keywords that are written as operators to the kinds
+// they stand for.
+var wordOperators = map[string]token.Kind{
+	token.KeywordAnd: token.And,
+	token.KeywordOr:  token.Or,
+	token.KeywordIn:  token.In,
+}
+
+// operator answers the kind of the current token, reading a word operator as
+// the operator it is. A "not" followed by "in" is the one operator spelled
+// with two words.
+func (p *parser) operator() token.Kind {
+	t := p.cur()
+	if k, ok := wordOperators[t.Lit]; ok && p.atKeyword(t.Lit) {
+		return k
+	}
+	if p.atKeyword(token.KeywordNot) {
+		if next := p.toks[p.i+1]; next.Kind == token.Ident && next.Lit == token.KeywordIn {
+			return token.NotIn
+		}
+	}
+	return t.Kind
 }
 
 // atBinaryOp reports whether an operator of the given level stands at the
 // current position, ready to extend the operand already parsed.
 func (p *parser) atBinaryOp(level int) bool {
-	if !p.atAny(precedence[level]) || p.cur().Line() != p.prevEnd.Line {
+	if !slices.Contains(precedence[level], p.operator()) || p.cur().Line() != p.prevEnd.Line {
 		return false
 	}
 	// A "-" may appear inside an identifier and may negate what follows it,
@@ -110,17 +151,8 @@ func (p *parser) atBinaryOp(level int) bool {
 	return true
 }
 
-func (p *parser) atAny(kinds []token.Kind) bool {
-	for _, k := range kinds {
-		if p.at(k) {
-			return true
-		}
-	}
-	return false
-}
-
 func (p *parser) parseUnary() (ast.Node, error) {
-	if p.at(token.Not) || p.at(token.Dash) {
+	if p.at(token.Dash) {
 		t := p.next()
 		x, err := p.parseUnary()
 		if err != nil {
@@ -334,6 +366,10 @@ func (p *parser) parseIdent() (ast.Node, error) {
 		// An "if" is looser than every operator, so one written where an
 		// operand belongs has to say which way it groups.
 		return nil, p.errorf(t.Pos, "an %q cannot be used as an operand here; wrap it in parentheses", "if")
+	case token.KeywordNot:
+		// A "not" is looser than every comparison and every arithmetic
+		// operator, so it cannot stand on the right of one unwrapped.
+		return nil, p.errorf(t.Pos, "a %q cannot be used as an operand here; wrap it in parentheses", "not")
 	}
 	if msg, ok := unsupportedKeywords[t.Lit]; ok {
 		return nil, p.errorf(t.Pos, "%s", msg)

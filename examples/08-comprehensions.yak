@@ -5,7 +5,7 @@
 
 ## The single element is followed by "for name in source", and the element is
 ## evaluated once per item with the name bound to it.
-names: ["port-{p.name}" for p in $$.ports]
+names: ["port-\(p.name)" for p in $$.ports]
 
 ## A mapping comprehension builds entries instead. Two items producing the
 ## same key are a duplicate rather than an overwrite.
@@ -16,18 +16,18 @@ privileged: [p.name for p in $$.ports if p.number < 1024]
 
 ## Any key form works, so an interpolated string is as good as a bracketed
 ## expression.
-urls: {"{p.name}-url": "http://{$$.host}:{p.number}" for p in $$.ports}
+urls: {"\(p.name)-url": "http://\($$.host):\(p.number)" for p in $$.ports}
 
 ## The loop variable is an ordinary binding, so it is visible to anything
 ## nested inside the element, and comprehensions may nest.
-matrix: [["{a}-{b}" for b in $$.suffixes] for a in $$.prefixes]
+matrix: [["\(a)-\(b)" for b in $$.suffixes] for a in $$.prefixes]
 
 ## A comprehension opens no mapping of its own, so "." still names the
 ## mapping it is written in.
 service:
   name: "shop"
-  aliases: ["{.name}-{p.name}" for p in $$.ports]
+  aliases: ["\(.name)-\(p.name)" for p in $$.ports]
 
 ## "$yak.contextpaths" is empty rather than absent when no context file was
 ## given, so walking it needs no guard.
-contexts: ["given {c}" for c in $yak.contextpaths]
+contexts: ["given \(c)" for c in $yak.contextpaths]

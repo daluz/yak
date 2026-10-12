@@ -41,7 +41,7 @@ All the YAML quoting forms are available:
 
 ```yaml
 double: "escapes \t and \u00e9 are processed"
-single: 'only '' is an escape'
+single: 'and so they are here'
 literal: |
   line breaks are preserved
 folded: >
@@ -49,42 +49,79 @@ folded: >
   joined with spaces
 ```
 
+Unlike YAML, single and double quotes mean the same thing, as they do in
+Python: both process the backslash escapes of YAML's double-quoted strings,
+and both interpolate. The only difference is which quote has to be escaped,
+so a string holding one kind is easiest to write in the other:
+
+```yaml
+apostrophe: "it's"
+quoted: 'say "hi"'
+both: 'it\'s "quoted"'
+```
+
+YAML's doubled quote is not an escape: `'it''s'` is an error that says to
+write `\'` instead. Every escape that a quoted string accepts:
+
+| Escape | Produces |
+| --- | --- |
+| `\n`, `\t`, `\r` | A line feed, a tab, a carriage return. |
+| `\0`, `\a`, `\b`, `\v`, `\f`, `\e` | NUL, bell, backspace, vertical tab, form feed, escape. |
+| `\"`, `\'`, `\\`, `\/`, `\ ` | The character itself; `\ ` is a space. |
+| `\xHH`, `\uHHHH`, `\UHHHHHHHH` | A byte, or a code point, in 2, 4 or 8 hexadecimal digits. |
+| `\N`, `\_`, `\L`, `\P` | Next line, non-breaking space, line separator, paragraph separator. |
+| `\` at the end of a line | Nothing: the line break and the next line's indentation are dropped. |
+
+Any other backslash sequence, such as `\d`, is an error. Block scalars have no
+escapes at all, since their line breaks are written as line breaks.
+
 Block scalars accept the usual chomping and indentation indicators: `|-`, `|+`,
 `>-`, `>+`, and `|2`.
 
 ### Every string interpolates
 
-Any string may contain `{ expression }`:
+Any string may contain `\( expression )`:
 
 ```yaml
 name: "web"
-title: "the {.name} service"
-url: "https://{$$.host}:{$$.port}/"
+title: "the \(.name) service"
+url: "https://\($$.host):\($$.port)/"
 ```
 
-Double a brace to write a literal one: `{{` produces `{` and `}}` produces
-`}`, so `"{{not an expression}}"` renders `{not an expression}`. A closing
-brace standing on its own needs no escaping; an opening one that is never
-closed is an error rather than literal text.
+Braces, `$` and every other character are plain text, so the templates and
+queries that Kubernetes configuration carries pass through untouched:
 
-Doubling is the only escape there is, which is what makes it work identically
-in every interpolating form, including single-quoted strings and block
-scalars, where backslash escapes do not exist.
+```yaml
+summary: "{{ $labels.instance }} is down"   # a Prometheus template
+query: "up{job=\"api\"}"
+script: |
+  echo "${SHELL_VARIABLE}"
+```
+
+Write `\\(` for a literal `\(`, so `"\\(not an expression)"` renders
+`\(not an expression)`. A `\(` that is never closed is an error rather than
+literal text.
+
+`\\(` is the escape in every interpolating form. In a quoted string it is the
+ordinary `\\` escape followed by a `(`. Block scalars have no backslash
+escapes, so there `\\(` is the only sequence a backslash changes: `\\n` in a
+block scalar is still two backslashes and an `n`.
 
 To turn interpolation off for a whole string, prefix it with `r`. Raw strings
 also disable backslash escapes:
 
 ```yaml
-pattern: r"\d+ and {literal}"
+pattern: r"^\(\d+\)$"
 script: r|
-  echo "${SHELL_VARIABLE}"
+  sed 's/\(v[0-9]*\)/x/'
 ```
 
-A raw string is usually the better answer for text that is dense with braces,
-such as a Go template or a query with a label selector in it.
+A raw string is usually the better answer for text that is dense with
+backslashes, such as a regular expression with groups in it.
 
-Because a raw double-quoted string has no escapes, it cannot contain a `"`; use
-`r'...'` or a raw block scalar instead.
+Because a raw string has no escapes, it cannot contain its own quote: write
+`r'...'` for text with a `"` in it, `r"..."` for text with a `'`, and a raw
+block scalar for text with both.
 
 ### Only `true` and `false` are booleans
 
@@ -94,8 +131,9 @@ error that tells you to use `true`/`false` or add quotes.
 ### Anchors and tags are gone
 
 `&anchor`, `*alias`, and `!!tag` are all rejected. Anchors are replaced by
-references and `local` bindings. Tags will return with schemas; `!` on its
-own is the boolean `not` operator, so only the `!!` form still names a tag.
+references and `local` bindings. Tags will return with schemas. A `!` on its
+own is an error too, one that points to `not`, which is how yak negates a
+boolean.
 
 YAML's `<<` survives the loss of the anchors it used to name, and merges any
 mapping an expression can produce.
@@ -107,14 +145,15 @@ A key is one of:
 ```yaml
 plain-key: 1              # any identifier: letters, digits, _, and interior -
 "a key with spaces": 2    # any quoted string, interpolation included
-["computed-{$$.env}"]: 3  # an expression in brackets
+["computed-\($$.env)"]: 3  # an expression in brackets
 ```
 
 Numbers and reserved words must be quoted to be used as keys. Duplicate keys
 are an error rather than a silent overwrite.
 
-`if`, `then`, `else`, `for` and `in` mean something only where a value is
-expected, so they stay usable as bare keys: `for: 3` is an ordinary entry.
+`if`, `then`, `else`, `for`, `in`, `and`, `or` and `not` mean something
+only where a value is expected, so they stay usable as bare keys: `for: 3` is
+an ordinary entry.
 They cannot name a binding or a loop variable, because reading such a name
 back would be read as the keyword instead.
 
@@ -130,7 +169,7 @@ defaults::
   tag: "3.20"
 services:
   web:
-    image: "{$.defaults.image}:{$.defaults.tag}"
+    image: "\($.defaults.image):\($.defaults.tag)"
 ```
 
 renders as:
@@ -285,7 +324,7 @@ than the document, and its fields are read like any other mapping's.
 # rendering: yak template deploy/app.yak -c base.yaml -c prod.yaml
 a: $yak.filepath            # "deploy/app.yak"
 b: $yak.contextpaths[0]     # "base.yaml"
-c: "built by yak {$yak.version}"
+c: "built by yak \($yak.version)"
 ```
 
 The path is reported as it was written rather than resolved against the
@@ -344,7 +383,7 @@ local name = "web"
 local port = 8080
 
 service: name
-url: "http://{name}:{port}"
+url: "http://\(name):\(port)"
 ```
 
 Bindings produce no output of their own. They are the replacement for YAML
@@ -357,7 +396,7 @@ separate them with commas to fit them on one:
 ```yaml
 local {
   region = "us-east-1"
-  zone = "{region}a"
+  zone = "\(region)a"
 }
 local { retries = 3, timeout = 30 }
 ```
@@ -369,7 +408,7 @@ local defaults =
   image: "alpine"
   tag: "3.20"
 
-image: "{defaults.image}:{defaults.tag}"
+image: "\(defaults.image):\(defaults.tag)"
 ```
 
 ### Scope
@@ -387,7 +426,7 @@ so they can read its fields with `.name`:
 
 ```yaml
 name: "shop"
-local label = "{.name}-web"
+local label = "\(.name)-web"
 labels:
   app: label
 ```
@@ -412,7 +451,7 @@ replaces:
 local size = "small"
 dev:
   tier: size           # "small"
-local size = "{size}-ish"
+local size = "\(size)-ish"
 prod:
   tier: size           # "small-ish"
 ```
@@ -446,7 +485,7 @@ A binding whose name is followed by a parameter list is a function. Calling it
 evaluates its value with the parameters bound to the arguments:
 
 ```yaml
-local url(host, port) = "https://{host}:{port}"
+local url(host, port) = "https://\(host):\(port)"
 
 endpoint: url($$.host, 8080)
 ```
@@ -457,7 +496,7 @@ value:
 
 ```yaml
 local endpoint(name) =
-  host: "{name}.example.com"
+  host: "\(name).example.com"
   port: 443
 
 web: endpoint("web")
@@ -467,7 +506,7 @@ A parameter may declare the value to use when a call leaves it out. Arguments
 are given by position, by name, or by position and then by name:
 
 ```yaml
-local url(host, port = 8080, scheme = "https") = "{scheme}://{host}:{port}"
+local url(host, port = 8080, scheme = "https") = "\(scheme)://\(host):\(port)"
 
 a: url("web.example.com")                   # https://web.example.com:8080
 b: url("web.example.com", 443)              # https://web.example.com:443
@@ -484,7 +523,7 @@ A default is evaluated at the call, in the same scope as the parameters, so it
 may name a parameter declared before it:
 
 ```yaml
-local span(from, to = from) = "{from}..{to}"
+local span(from, to = from) = "\(from)..\(to)"
 ```
 
 ### What a function sees
@@ -501,7 +540,7 @@ it reads is the binding in effect at the declaration rather than at the call:
 
 ```yaml
 name: "shop"
-local label(suffix) = "{.name}-{suffix}"
+local label(suffix) = "\(.name)-\(suffix)"
 labels:
   app: label("web")
 ```
@@ -517,7 +556,7 @@ a hidden field, and passed to another function:
 
 ```yaml
 local apply(fn, to) = fn(to)
-local twice(s) = "{s}{s}"
+local twice(s) = "\(s)\(s)"
 
 v: apply(twice, "ab")   # abab
 ```
@@ -534,7 +573,7 @@ from. Its parameters go in parentheses, and `=>` separates them from the body:
 ```yaml
 local apply(fn, to) = fn(to)
 
-v: apply((s) => "{s}{s}", "ab")   # abab
+v: apply((s) => "\(s)\(s)", "ab")   # abab
 ```
 
 The parameters are the ones a binding declares, defaults included, and
@@ -548,7 +587,7 @@ local adder = (n) => (x) => x + n
 v: adder(5)(3)                    # 8
 ```
 
-The parentheses are not optional, so `s => "{s}"` is an error rather than a
+The parentheses are not optional, so `s => "\(s)"` is an error rather than a
 function of one parameter, and the body is a single expression. A function
 whose body wants a block of its own is written as a binding, which also gives
 it a name: a diagnostic about a call reports the name it was declared under,
@@ -558,8 +597,11 @@ and says where an anonymous function was written when there is none.
 
 Some functions are built in. They are written without qualification, and they
 behave in every other way like a function declared in the template: arguments
-go by position or by name, and a built-in is a value that can be passed to
-another function.
+go by position or by name, a parameter written with `= default` may be left
+out, and a built-in is a value that can be passed to another function. A
+default of `null` stands for something the parameter cannot otherwise say,
+which the built-in describes, and passing `null` means the same as leaving the
+argument out.
 
 | Call | Answer |
 | --- | --- |
@@ -618,16 +660,15 @@ hosts: strings.split($$.hosts, ",")
 | --- | --- |
 | `upper(value)` | `value` in upper case. |
 | `lower(value)` | `value` in lower case. |
-| `trim(value)` | `value` without the whitespace at either end. |
+| `trim(value, characters = null)` | `value` without any of `characters` at either end, or without whitespace when there are none. |
 | `trimPrefix(value, prefix)` | `value` without `prefix` at its start, or `value` itself. |
 | `trimSuffix(value, suffix)` | `value` without `suffix` at its end, or `value` itself. |
-| `contains(value, substring)` | Whether `substring` appears in `value`. |
 | `startsWith(value, prefix)` | Whether `value` starts with `prefix`. |
 | `endsWith(value, suffix)` | Whether `value` ends with `suffix`. |
 | `replace(value, old, new)` | `value` with every `old` replaced by `new`. |
 | `repeat(value, count)` | `value` written `count` times over. |
 | `truncate(value, length)` | The first `length` characters of `value`, or all of it when it is shorter. |
-| `split(value, separator)` | The sequence of the pieces of `value` between each `separator`. |
+| `split(value, separator = null)` | The sequence of the pieces of `value` between each `separator`, or between runs of whitespace when there is none. |
 | `join(values, separator)` | The strings of a sequence written one after another, with `separator` between them. |
 
 Every argument but a count is a string, and anything else is an error naming
@@ -636,14 +677,163 @@ Lengths are in characters rather than bytes, as they are for `size`, so
 `truncate("café", 3)` is `"caf"`.
 
 `split` with an empty separator splits `value` into its characters, and
-splitting `""` gives `[]`. `join` needs every item of the sequence to be a
+splitting `""` gives `[]`. Without a separator, whitespace at either end is
+dropped rather than giving empty pieces, so `split("  a  b ")` is
+`["a", "b"]`. `join` needs every item of the sequence to be a
 string already rather than converting it, so a number that ends up in the
 middle of a joined string is one the template wrote there on purpose:
 
 ```yaml
 ports: [80, 443]
-list: strings.join(["{p}" for p in .ports], ",")   # "80,443"
+list: strings.join(["\(p)" for p in .ports], ",")   # "80,443"
 ```
+
+### `std.json`, `std.yaml` and `std.base64`
+
+```yaml
+import { std.json, std.yaml, std.base64 }
+
+annotation: json.encode(.config)      # '{"name":"web","ports":[80,443]}'
+file: yaml.encode(.config)
+password: base64.encode($$.password)
+```
+
+| Call | Answer |
+| --- | --- |
+| `json.encode(value, indent = 0)` | `value` as compact JSON on a single line, or indented by `indent` spaces a level when `indent` is more than 0. |
+| `json.decode(value)` | The value that the JSON string `value` holds. |
+| `yaml.encode(value)` | `value` as block YAML, ending in a newline as a file would. |
+| `yaml.decode(value)` | The value that the YAML string `value` holds; `null` for an empty one. |
+| `base64.encode(value)` | The standard base64 encoding of the string `value`. |
+| `base64.decode(value)` | The text that the base64 string `value` holds. |
+
+`encode` writes what the output format of the same name would, so hidden and
+`:?` entries are left out and a function in `value` is an error. `decode`
+reads plain JSON or YAML rather than yak, exactly as a
+[context file](#context) is read, except that the document may be any value
+rather than only a mapping, and there has to be exactly one. Bytes that
+`base64.decode` finds that are not UTF-8 text are an error, since a string
+cannot hold them.
+
+### `std.hash`
+
+```yaml
+import { std.hash, std.yaml }
+
+annotations:
+  "checksum/config": hash.sha256(yaml.encode(.config))
+```
+
+`sha1(value)`, `sha256(value)` and `sha512(value)` digest the string `value`,
+answering the digest in lowercase hexadecimal.
+
+### `std.seqs`
+
+```yaml
+import std.seqs
+
+ports: seqs.sort(seqs.unique($$.ports))
+byWeight: seqs.sort($$.services, (s) => s.weight)
+privileged: seqs.any($$.ports, (p) => p < 1024)
+```
+
+`std.sequences` and `std.lists` are other names for the same module.
+
+| Call | Answer |
+| --- | --- |
+| `sort(values, key = null)` | The items in ascending order, or in that of what `key` answers for each. |
+| `reverse(values)` | The items in reverse order. |
+| `unique(values)` | The items without the ones equal to an item before them. |
+| `flatten(values)` | The items of a sequence of sequences, in one sequence. |
+| `take(values, count)` | The first `count` items, or all of them when there are fewer. |
+| `drop(values, count)` | The items after the first `count`, or `[]` when there are fewer. |
+| `range(start, stop = null, step = 1)` | The integers from `start` up to but not including `stop`, counting by `step`. |
+| `sum(values)` | The numbers added up; `0` for `[]`. |
+| `min(values, key = null)` | The item that sorts first, by its `key` when there is one. |
+| `max(values, key = null)` | The item that sorts last, by its `key` when there is one. |
+| `any(values, predicate = null)` | Whether `predicate` answers `true` for some item, or some item is `true`. |
+| `all(values, predicate = null)` | Whether `predicate` answers `true` for every item, or every item is `true`. |
+
+Without a `key`, `sort`, `min` and `max` order the items themselves. Ordering
+is the one `<` uses, so they need items that are all numbers or all strings,
+and a `key` has to answer the same. Sorting is stable: items that sort the
+same keep the order they had, and of several items that are the least or the
+greatest, `min` and `max` answer the first. `unique` compares items as `==`
+does, so they have to be scalars. `sum` answers an integer until a float is
+among the numbers, as `+` does, and `min` and `max` of `[]` are an error.
+
+`range` counts as Python's does. Given only one argument, that argument is
+the stop and the count starts at 0, so `range(3)` is `[0, 1, 2]` and
+`range(1, 4)` is `[1, 2, 3]`. A negative `step` counts down, so
+`range(5, 0, -2)` is `[5, 3, 1]`, a `stop` that `step` cannot reach gives
+`[]`, and a `step` of 0 is an error.
+
+`key` and `predicate` are functions of one parameter, named or anonymous, and
+a `predicate` has to answer a boolean; without one, the items themselves have
+to be booleans. `any` and `all` stop at the first item that decides the
+answer, so `predicate` never sees the items after it, and `any` of `[]` is
+`false` while `all` of `[]` is `true`. Whether a sequence holds an item is
+what [`in`](#operators) asks.
+
+### `std.maps`
+
+```yaml
+import std.maps
+
+names: maps.keys($$.labels)
+selector: maps.pick($$.labels, ["app", "tier"])
+```
+
+`std.objects` is another name for the same module.
+
+| Call | Answer |
+| --- | --- |
+| `keys(mapping)` | The keys, as a sequence of strings. |
+| `values(mapping)` | The values. |
+| `pick(mapping, keys)` | The entries whose key is one of `keys`. |
+| `omit(mapping, keys)` | The entries whose key is not one of `keys`. |
+
+Hidden entries count, as they do for `size`, and every answer keeps the order
+the entries were written in rather than that of `keys`. A key in `keys` that
+`mapping` does not hold is no error, and `pick` and `omit` keep everything
+else about an entry, such as being hidden. Whether a mapping holds a key is
+what [`in`](#operators) asks.
+
+### `std.regex`
+
+```yaml
+import std.regex
+
+tag: regex.find($$.image, r"\d+\.\d+\.\d+")
+```
+
+| Call | Answer |
+| --- | --- |
+| `match(value, pattern)` | Whether `pattern` matches somewhere in `value`. |
+| `find(value, pattern)` | The first text that `pattern` matches, or `null`. |
+| `findAll(value, pattern)` | Every text that `pattern` matches, in order. |
+| `replace(value, pattern, replacement)` | `value` with every match replaced by `replacement`. |
+
+Patterns are RE2, which matches in time linear in the input whatever the
+pattern, and match anywhere unless they anchor themselves with `^` and `$`. A
+`replacement` names a group of the pattern as `$1` or `${name}`, and `$$`
+writes a dollar sign. A raw string keeps a pattern's backslashes as they
+are, so an escaped parenthesis such as `\(` is not read as an interpolation.
+
+### `std.math`
+
+```yaml
+import std.math
+
+replicas: math.ceil($$.nodes / 2)
+```
+
+`abs(value)` answers the size of a number. `floor(value)`, `ceil(value)` and
+`round(value)` round a float down, up, or to the nearest integer with halves
+going away from zero, and answer an integer, so that the result can count
+things; an integer is answered as it is. `round(value, digits = null)` given
+`digits` instead rounds a float to that many places after the point and
+answers a float, so `round(3.14159, 2)` is `3.14`.
 
 ## Modules
 
@@ -665,7 +855,7 @@ hands out a function or a default without rendering it:
 ```yaml
 import mydirectory.mymodule
 
-image: "{mymodule.defaults.image}:{mymodule.defaults.tag}"
+image: "\(mymodule.defaults.image):\(mymodule.defaults.tag)"
 ```
 
 Writing `name = path` chooses the namespace instead of taking it from the
@@ -833,7 +1023,7 @@ entry that came through a merge still reads the mapping it was written in, so
 overriding a key does not reach back into a sibling that referred to it:
 
 ```yaml
-local base = {name: "web", label: "{.name}-1"}
+local base = {name: "web", label: "\(.name)-1"}
 
 v: (base << {name: "api"}).label   # "web-1", not "api-1"
 ```
@@ -860,24 +1050,54 @@ except that an integer and a float compare as the numbers they are, so
 rather than a silent `false`. Ordering is defined for two numbers or two
 strings; anything else is an error naming both types.
 
-`&&`, `||` and `!` combine booleans, and only booleans: yak has no
-truthiness, so `if 1` is an error rather than a guess. `&&` and `||`
+`x in y` asks whether `y` holds `x`, and answers a boolean. `x not in y` is
+its opposite, and means the same as `not (x in y)`:
+
+| `y` is | `x in y` is true when |
+| --- | --- |
+| A sequence | One of its items `==` `x`. |
+| A mapping | `x` is a string naming one of its keys, hidden ones included. |
+| A string | `x` is a string that appears somewhere in `y`. |
+
+Looking through a sequence asks what `==` asks, so `x` has to be a scalar,
+and an item that is itself a collection is passed over rather than reported.
+Anything else on the right is an error naming its type. Which substring a
+string holds is the one question about strings that `in` answers; the rest
+are in [`std.strings`](#stdstrings):
+
+```yaml
+web: "web" in $$.roles               # a sequence of strings
+tls: "tls" in $$.listener            # a key of a mapping
+secure: "https://" in $$.url         # a substring
+legacy: $$.region not in ["eu", "us"]
+```
+
+`and`, `or` and `not` combine booleans, and only booleans: yak has no
+truthiness, so `if 1` is an error rather than a guess. `and` and `or`
 short-circuit, leaving the right hand side unevaluated whenever the left one
-already decides the answer.
+already decides the answer. yak spells them as words, so `&&`, `||` and `!`
+are errors that name the word to write instead.
 
 Operators bind tighter the further down this list they appear, and every
-level is left associative:
+binary level is left associative:
 
 ```
 ??
-||
-&&
+or
+and
+not
 ==  !=
-<  <=  >  >=
+<  <=  >  >=  in  not in
 +  <<  -
 *  /  %
-!  -
+-
 ```
+
+`not` sits below the comparisons, so it negates a whole one: `not a == b` is
+`not (a == b)`, and `not x in xs` is `x not in xs`. For the same reason a
+`not` cannot be the right hand side of a comparison or of arithmetic without
+parentheses: `a == (not b)`. The `-` at the bottom is negation, written flush
+against its operand.
 
 Because `-` may appear inside an identifier and may also negate what follows
 it, a subtraction is the one written with whitespace on both sides. The three
@@ -926,7 +1146,7 @@ tier: if .replicas > 3 then "gold" else if .replicas > 1 then "silver" else "bro
 ```
 
 A conditional binds looser than every operator, so one used as an operand has
-to say how it groups: `!(if c then a else b)`. It may be spread over several
+to say how it groups: `not (if c then a else b)`. It may be spread over several
 lines, since `then` and `else` continue the expression they belong to:
 
 ```yaml
@@ -943,7 +1163,7 @@ builds itself by walking a sequence, evaluating the element once per item
 with `name` bound to it:
 
 ```yaml
-names: ["port-{p.name}" for p in $$.ports]
+names: ["port-\(p.name)" for p in $$.ports]
 byName: {[p.name]: p.number for p in $$.ports}
 ```
 
@@ -984,7 +1204,7 @@ every document of a file, and the paths it came from are
 [`$yak.contextpaths`](#builtin-variables).
 
 Context data is plain YAML or JSON rather than yak, so none of it is a
-template: a `{` in a context string is a `{`, and an unquoted scalar there is
+template: a `\(` in a context string is a `\(`, and an unquoted scalar there is
 the string YAML reads it as. Several sources merge into the one mapping, with
 a later one winning; how they are given and merged is the tool's business, and
 [CLI.md](CLI.md#context-files) covers it.
@@ -1128,9 +1348,12 @@ param       := identifier ("=" value)?
 lambda      := params "=>" value
 value       := conditional | coalesce
 conditional := "if" coalesce "then" value ("else" value)?
-coalesce    := binary ("??" binary)*
+coalesce    := or
+or          := and ("or" and)*
+and         := not ("and" not)*
+not         := "not" not | binary
 binary      := unary (op unary)*                  -- see the precedence list
-unary       := ("!" | "-")* operand
+unary       := "-"* operand
 operand     := literal | reference | flowSeq | flowMap | lambda | "(" value ")"
 flowSeq     := "[" ((value loop) | (value ("," value)*)? ","?) "]"
 flowMap     := "{" ((entry loop) | (entry ("," entry)*)?) "}"

@@ -15,7 +15,7 @@ type decoded struct {
 	buf []byte
 	pos []token.Pos
 	// escaped marks bytes produced by an escape sequence. Such bytes never
-	// start an interpolation, which is what makes `\u007b` a literal brace.
+	// start an interpolation, which is what makes `"\\("` a literal `\(`.
 	escaped []bool
 	start   token.Pos
 }
@@ -67,10 +67,11 @@ func (l *lexer) scanQuotedAt(start token.Pos, raw bool) error {
 		switch {
 		case c == quote:
 			l.advance()
-			if quote == '\'' && l.peek() == '\'' {
-				l.advance()
-				d.addByte('\'', p, true)
-				continue
+			if l.peek() == quote {
+				if raw {
+					return l.errorf(p, "a raw string cannot contain its own quote; use the other quote or a raw block scalar")
+				}
+				return l.errorf(p, `a doubled quote is not an escape; write \%c instead`, quote)
 			}
 			closed = true
 		case c == '\n':
@@ -92,22 +93,16 @@ func (l *lexer) scanQuotedAt(start token.Pos, raw bool) error {
 				d.addByte(' ', p, false)
 			}
 			continue
-		case c == '\\' && quote == '"' && !raw:
-			if err := l.scanEscape(d); err != nil {
+		case c == '\\' && !raw && l.peekAt(1) == '(':
+			// Copy the interpolation verbatim so that a quote inside it, as
+			// in "\( $$.m["k"] )", does not end the enclosing string. The
+			// splitter re-reads the same region afterwards.
+			if err := l.copyInterpolation(d); err != nil {
 				return err
 			}
 			continue
-		case c == '{' && !raw && l.peekAt(1) == '{':
-			// The "{{" escape for a literal brace: copy it through for the
-			// splitter to collapse.
-			l.copyByte(d)
-			l.copyByte(d)
-			continue
-		case c == '{' && !raw:
-			// Copy the interpolation verbatim so that a quote inside it, as
-			// in "{ $$.m["k"] }", does not end the enclosing string. The
-			// splitter re-reads the same region afterwards.
-			if err := l.copyInterpolation(d); err != nil {
+		case c == '\\' && !raw:
+			if err := l.scanEscape(d); err != nil {
 				return err
 			}
 			continue
@@ -131,19 +126,20 @@ func (l *lexer) copyByte(d *decoded) byte {
 	return c
 }
 
-// copyInterpolation copies a "{ ... }" region verbatim, tracking brace depth
-// and nested string literals so that the enclosing string is not terminated
-// early by a quote belonging to the expression.
+// copyInterpolation copies a `\( ... )` region verbatim, tracking parenthesis
+// depth and nested string literals so that the enclosing string is not
+// terminated early by a quote belonging to the expression.
 func (l *lexer) copyInterpolation(d *decoded) error {
 	start := l.pos()
-	l.copyByte(d) // {
+	l.copyByte(d) // backslash
+	l.copyByte(d) // (
 	depth := 1
 	for !l.eof() {
 		switch l.peek() {
-		case '{':
+		case '(':
 			depth++
 			l.copyByte(d)
-		case '}':
+		case ')':
 			depth--
 			l.copyByte(d)
 			if depth == 0 {
@@ -157,7 +153,7 @@ func (l *lexer) copyInterpolation(d *decoded) error {
 			l.copyByte(d)
 		}
 	}
-	return l.errorf(start, "unterminated string interpolation: missing %q; write %q for a literal brace", "}", "{{")
+	return l.errorf(start, "%s", errUnterminatedInterp)
 }
 
 func (l *lexer) copyNestedQuoted(d *decoded) error {
@@ -165,7 +161,7 @@ func (l *lexer) copyNestedQuoted(d *decoded) error {
 	quote := l.copyByte(d)
 	for !l.eof() {
 		c := l.peek()
-		if c == '\\' && quote == '"' {
+		if c == '\\' {
 			l.copyByte(d)
 			if l.eof() {
 				break
@@ -175,14 +171,10 @@ func (l *lexer) copyNestedQuoted(d *decoded) error {
 		}
 		l.copyByte(d)
 		if c == quote {
-			if quote == '\'' && l.peek() == '\'' {
-				l.copyByte(d)
-				continue
-			}
 			return nil
 		}
 	}
-	return l.errorf(start, "unterminated string literal inside an interpolation; write %q for a literal brace", "{{")
+	return l.errorf(start, `unterminated string literal inside an interpolation; write "\\(" for a literal "\("`)
 }
 
 func (l *lexer) scanEscape(d *decoded) error {
@@ -501,11 +493,11 @@ func (l *lexer) emitString(start, end token.Pos, d *decoded, raw bool) error {
 	return nil
 }
 
-// splitInterpolations breaks decoded string content into literal and {...}
-// expression chunks. A doubled brace is the escape for a literal one: "{{"
-// yields "{" and "}}" yields "}". Doubling is the only escape, so it works in
-// every interpolating string form, including block scalars and single-quoted
-// strings where backslash escapes do not exist.
+// splitInterpolations breaks decoded string content into literal and \(...)
+// expression chunks. `\\(` is the escape for a literal `\(`, and it works in
+// every interpolating string form: a quoted string has decoded it into an
+// escaped backslash already, and in block scalars, where no other backslash
+// escape exists, it is collapsed here.
 func splitInterpolations(d *decoded) ([]token.Chunk, error) {
 	var (
 		chunks []token.Chunk
@@ -528,26 +520,27 @@ func splitInterpolations(d *decoded) ([]token.Chunk, error) {
 	}
 
 	buf := d.buf
-	doubled := func(i int) bool {
-		return i+1 < len(buf) && buf[i+1] == buf[i] && !d.escaped[i+1]
+	at := func(i int, c byte) bool {
+		return i < len(buf) && buf[i] == c && !d.escaped[i]
 	}
 
 	for i := 0; i < len(buf); {
-		if (buf[i] == '{' || buf[i] == '}') && !d.escaped[i] && doubled(i) {
-			addLitByte(buf[i], d.posAt(i))
-			i += 2
+		if at(i, '\\') && at(i+1, '\\') && at(i+2, '(') {
+			addLitByte('\\', d.posAt(i))
+			addLitByte('(', d.posAt(i+2))
+			i += 3
 			continue
 		}
-		if buf[i] == '{' && !d.escaped[i] {
-			end, err := matchBrace(buf, i+1)
+		if at(i, '\\') && at(i+1, '(') {
+			end, err := matchParen(buf, i+2)
 			if err != nil {
 				return nil, &Error{Pos: d.posAt(i), Msg: err.Error()}
 			}
 			flush()
 			chunks = append(chunks, token.Chunk{
-				Text:   string(buf[i+1 : end]),
+				Text:   string(buf[i+2 : end]),
 				IsExpr: true,
-				Pos:    d.posAt(i + 1),
+				Pos:    d.posAt(i + 2),
 			})
 			i = end + 1
 			continue
@@ -559,39 +552,26 @@ func splitInterpolations(d *decoded) ([]token.Chunk, error) {
 	return chunks, nil
 }
 
-// matchBrace finds the "}" closing an interpolation that starts at from,
-// skipping over nested braces and over quoted strings inside the expression.
-func matchBrace(buf []byte, from int) (int, error) {
+// matchParen finds the ")" closing an interpolation that starts at from,
+// skipping over nested parentheses and over quoted strings inside the
+// expression.
+func matchParen(buf []byte, from int) (int, error) {
 	depth := 1
 	for i := from; i < len(buf); i++ {
 		switch buf[i] {
-		case '{':
+		case '(':
 			depth++
-		case '}':
+		case ')':
 			depth--
 			if depth == 0 {
 				return i, nil
 			}
-		case '"':
+		case '"', '\'':
+			quote := buf[i]
 			i++
-			for i < len(buf) && buf[i] != '"' {
+			for i < len(buf) && buf[i] != quote {
 				if buf[i] == '\\' {
 					i++
-				}
-				i++
-			}
-			if i >= len(buf) {
-				return 0, errUnterminatedInterp
-			}
-		case '\'':
-			i++
-			for i < len(buf) {
-				if buf[i] == '\'' {
-					if i+1 < len(buf) && buf[i+1] == '\'' {
-						i += 2
-						continue
-					}
-					break
 				}
 				i++
 			}
@@ -603,7 +583,7 @@ func matchBrace(buf []byte, from int) (int, error) {
 	return 0, errUnterminatedInterp
 }
 
-var errUnterminatedInterp = interpError("unterminated string interpolation: missing \"}\"; write \"{{\" for a literal brace")
+var errUnterminatedInterp = interpError(`unterminated string interpolation: missing ")"; write "\\(" for a literal "\("`)
 
 type interpError string
 

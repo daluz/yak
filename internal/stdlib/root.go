@@ -6,13 +6,29 @@ package stdlib
 import (
 	"unicode/utf8"
 
+	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/eval"
 	"github.com/daluz/yak/internal/module"
 )
 
+// params declares parameters that every call has to supply.
+func params(names ...string) []*ast.Param {
+	ps := make([]*ast.Param, len(names))
+	for i, name := range names {
+		ps[i] = &ast.Param{Name: name}
+	}
+	return ps
+}
+
+// optional declares a parameter that a call may leave out, and the literal
+// it takes then.
+func optional(name string, def ast.Node) *ast.Param {
+	return &ast.Param{Name: name, Default: def}
+}
+
 // valueParam is the single parameter shared by the built-ins that take one
 // thing and answer something about it.
-var valueParam = []string{"value"}
+var valueParam = params("value")
 
 // The root module has no namespace: its built-ins are available unqualified.
 func init() {

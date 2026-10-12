@@ -11,7 +11,7 @@ service:
 local {
   # A comment on a binding travels to wherever the binding is read.
   region = "us-east-1"
-  zone = "{region}a"   # so does one written beside it
+  zone = "\(region)a"   # so does one written beside it
 }
 
 local defaults =
@@ -42,7 +42,7 @@ credentials::
 spare:: defaults       # a hidden entry carries nothing out either
 
 ### A banner is not the marker, so this comment is kept.
-endpoint: "https://{$$.host}/"
+endpoint: "https://\($$.host)/"
 
 # Whatever is left at the end comes out at the end.
 ---

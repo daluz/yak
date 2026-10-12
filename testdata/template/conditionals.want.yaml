@@ -16,6 +16,12 @@ checks:
   negated: true
   both: true
   either: true
+# "in" asks whether a sequence, a mapping or a string holds something.
+membership:
+  item: true
+  key: true
+  substring: true
+  missing: true
 # The branch that is not taken is never evaluated, so this one is safe even
 # though the context has no "replicas" field.
 override: default

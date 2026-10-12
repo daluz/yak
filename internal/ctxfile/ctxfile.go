@@ -46,16 +46,65 @@ func Load(paths []string) (eval.Value, error) {
 // such as \/ that YAML rejects; any other name is read as YAML, which accepts
 // most JSON too.
 func Decode(name string, data []byte) (eval.Value, error) {
+	src := source{name: name, what: "context file " + name, data: data}
 	if strings.EqualFold(filepath.Ext(name), ExtJSON) {
-		return decodeJSON(name, data)
+		return decodeJSON(src)
 	}
-	return decodeYAML(name, data)
+	return decodeYAML(src)
+}
+
+// source is what a decoder reads. name prefixes a position within data, and
+// what says what was being parsed when the whole of it is at fault.
+type source struct {
+	name string
+	what string
+	data []byte
+}
+
+// ValueYAML reads the one YAML document data holds, which may be a value of
+// any type; an empty one is null. name stands for data in diagnostics.
+func ValueYAML(name string, data []byte) (eval.Value, error) {
+	src := source{name: name, what: name, data: data}
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	var doc yaml.Node
+	if err := dec.Decode(&doc); errors.Is(err, io.EOF) {
+		return eval.Null{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", src.what, err)
+	}
+	var next yaml.Node
+	if err := dec.Decode(&next); err == nil {
+		return nil, fmt.Errorf("parsing %s: it holds more than one document", src.what)
+	} else if !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("parsing %s: %w", src.what, err)
+	}
+	return convert(&doc, src)
+}
+
+// ValueJSON reads the one JSON value data holds, which may be of any type.
+// name stands for data in diagnostics.
+func ValueJSON(name string, data []byte) (eval.Value, error) {
+	src := source{name: name, what: name, data: data}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, jsonError(src, err)
+	}
+	v, err := jsonValue(dec, tok, src)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("parsing %s: it holds more than one value", src.what)
+	}
+	return v, nil
 }
 
 // decodeYAML reads a YAML stream. Every document must hold a mapping, and the
 // documents are merged in order so a stream behaves like separate files.
-func decodeYAML(name string, data []byte) (eval.Value, error) {
-	dec := yaml.NewDecoder(bytes.NewReader(data))
+func decodeYAML(src source) (eval.Value, error) {
+	dec := yaml.NewDecoder(bytes.NewReader(src.data))
 	merged := eval.Value(eval.NewObject())
 	seen := false
 	for {
@@ -65,13 +114,13 @@ func decodeYAML(name string, data []byte) (eval.Value, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("parsing context file %s: %w", name, err)
+			return nil, fmt.Errorf("parsing %s: %w", src.what, err)
 		}
-		v, err := convert(&doc, name)
+		v, err := convert(&doc, src)
 		if err != nil {
 			return nil, err
 		}
-		if err := requireMapping(name, v); err != nil {
+		if err := requireMapping(src, v); err != nil {
 			return nil, err
 		}
 		merged = Merge(merged, v)
@@ -86,8 +135,8 @@ func decodeYAML(name string, data []byte) (eval.Value, error) {
 // decodeJSON reads a JSON file. Like the YAML path it accepts more than one
 // top-level value, merging them in order, and it keeps object keys in the
 // order they appear so the rendered output follows the source.
-func decodeJSON(name string, data []byte) (eval.Value, error) {
-	dec := json.NewDecoder(bytes.NewReader(data))
+func decodeJSON(src source) (eval.Value, error) {
+	dec := json.NewDecoder(bytes.NewReader(src.data))
 	dec.UseNumber()
 	merged := eval.Value(eval.NewObject())
 	seen := false
@@ -97,13 +146,13 @@ func decodeJSON(name string, data []byte) (eval.Value, error) {
 			break
 		}
 		if err != nil {
-			return nil, jsonError(name, data, err)
+			return nil, jsonError(src, err)
 		}
-		v, err := jsonValue(dec, tok, name, data)
+		v, err := jsonValue(dec, tok, src)
 		if err != nil {
 			return nil, err
 		}
-		if err := requireMapping(name, v); err != nil {
+		if err := requireMapping(src, v); err != nil {
 			return nil, err
 		}
 		merged = Merge(merged, v)
@@ -118,16 +167,16 @@ func decodeJSON(name string, data []byte) (eval.Value, error) {
 // jsonValue converts the value that starts at tok, reading the rest of it from
 // dec. Tokens are used instead of unmarshalling into a map so that key order
 // survives.
-func jsonValue(dec *json.Decoder, tok json.Token, name string, data []byte) (eval.Value, error) {
+func jsonValue(dec *json.Decoder, tok json.Token, src source) (eval.Value, error) {
 	switch t := tok.(type) {
 	case json.Delim:
 		switch t {
 		case '{':
-			return jsonObject(dec, name, data)
+			return jsonObject(dec, src)
 		case '[':
-			return jsonArray(dec, name, data)
+			return jsonArray(dec, src)
 		}
-		return nil, fmt.Errorf("parsing context file %s: unexpected %q", name, t)
+		return nil, fmt.Errorf("parsing %s: unexpected %q", src.what, t)
 
 	case nil:
 		return eval.Null{}, nil
@@ -136,32 +185,32 @@ func jsonValue(dec *json.Decoder, tok json.Token, name string, data []byte) (eva
 	case string:
 		return eval.String(t), nil
 	case json.Number:
-		return jsonNumber(t, name, data, dec.InputOffset())
+		return jsonNumber(t, src, dec.InputOffset())
 
 	default:
-		return nil, fmt.Errorf("parsing context file %s: unexpected %v", name, tok)
+		return nil, fmt.Errorf("parsing %s: unexpected %v", src.what, tok)
 	}
 }
 
-func jsonObject(dec *json.Decoder, name string, data []byte) (eval.Value, error) {
+func jsonObject(dec *json.Decoder, src source) (eval.Value, error) {
 	obj := eval.NewObject()
 	for {
 		tok, err := dec.Token()
 		if err != nil {
-			return nil, jsonError(name, data, err)
+			return nil, jsonError(src, err)
 		}
 		if d, ok := tok.(json.Delim); ok && d == '}' {
 			return obj, nil
 		}
 		key, ok := tok.(string)
 		if !ok {
-			return nil, fmt.Errorf("parsing context file %s: object keys must be strings", name)
+			return nil, fmt.Errorf("parsing %s: object keys must be strings", src.what)
 		}
 		tok, err = dec.Token()
 		if err != nil {
-			return nil, jsonError(name, data, err)
+			return nil, jsonError(src, err)
 		}
-		val, err := jsonValue(dec, tok, name, data)
+		val, err := jsonValue(dec, tok, src)
 		if err != nil {
 			return nil, err
 		}
@@ -169,17 +218,17 @@ func jsonObject(dec *json.Decoder, name string, data []byte) (eval.Value, error)
 	}
 }
 
-func jsonArray(dec *json.Decoder, name string, data []byte) (eval.Value, error) {
+func jsonArray(dec *json.Decoder, src source) (eval.Value, error) {
 	var items []*eval.Elem
 	for {
 		tok, err := dec.Token()
 		if err != nil {
-			return nil, jsonError(name, data, err)
+			return nil, jsonError(src, err)
 		}
 		if d, ok := tok.(json.Delim); ok && d == ']' {
 			return eval.NewArray(items), nil
 		}
-		v, err := jsonValue(dec, tok, name, data)
+		v, err := jsonValue(dec, tok, src)
 		if err != nil {
 			return nil, err
 		}
@@ -189,37 +238,37 @@ func jsonArray(dec *json.Decoder, name string, data []byte) (eval.Value, error) 
 
 // jsonNumber keeps whole numbers integral and falls back to a float for
 // everything else, including values too large for an int64.
-func jsonNumber(n json.Number, name string, data []byte, offset int64) (eval.Value, error) {
+func jsonNumber(n json.Number, src source, offset int64) (eval.Value, error) {
 	if i, err := strconv.ParseInt(n.String(), 10, 64); err == nil {
 		return eval.Int(i), nil
 	}
 	f, err := strconv.ParseFloat(n.String(), 64)
 	if err != nil {
-		line, col := position(data, offset)
-		return nil, fmt.Errorf("%s:%d:%d: %s is out of range", name, line, col, n.String())
+		line, col := position(src.data, offset)
+		return nil, fmt.Errorf("%s:%d:%d: %s is out of range", src.name, line, col, n.String())
 	}
 	return eval.Float(f), nil
 }
 
-func requireMapping(name string, v eval.Value) error {
+func requireMapping(src source, v eval.Value) error {
 	if _, ok := v.(*eval.Object); ok {
 		return nil
 	}
-	return fmt.Errorf("context file %s must contain a mapping at the top level, found %s", name, v.TypeName())
+	return fmt.Errorf("%s must contain a mapping at the top level, found %s", src.what, v.TypeName())
 }
 
 // jsonError reports a decoding failure, pointing at the offending byte when
 // the decoder tells us where it was.
-func jsonError(name string, data []byte, err error) error {
+func jsonError(src source, err error) error {
 	var syntax *json.SyntaxError
 	if errors.As(err, &syntax) {
-		line, col := position(data, syntax.Offset)
-		return fmt.Errorf("%s:%d:%d: %s", name, line, col, syntax.Error())
+		line, col := position(src.data, syntax.Offset)
+		return fmt.Errorf("%s:%d:%d: %s", src.name, line, col, syntax.Error())
 	}
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-		return fmt.Errorf("parsing context file %s: unexpected end of file", name)
+		return fmt.Errorf("parsing %s: unexpected end of file", src.what)
 	}
-	return fmt.Errorf("parsing context file %s: %w", name, err)
+	return fmt.Errorf("parsing %s: %w", src.what, err)
 }
 
 // position turns a byte offset into the 1-based line and column used by the
@@ -276,16 +325,16 @@ func Merge(base, over eval.Value) eval.Value {
 	return out
 }
 
-func convert(n *yaml.Node, name string) (eval.Value, error) {
+func convert(n *yaml.Node, src source) (eval.Value, error) {
 	switch n.Kind {
 	case yaml.DocumentNode:
 		if len(n.Content) == 0 {
 			return eval.Null{}, nil
 		}
-		return convert(n.Content[0], name)
+		return convert(n.Content[0], src)
 
 	case yaml.AliasNode:
-		return convert(n.Alias, name)
+		return convert(n.Alias, src)
 
 	case yaml.MappingNode:
 		obj := eval.NewObject()
@@ -293,9 +342,9 @@ func convert(n *yaml.Node, name string) (eval.Value, error) {
 			keyNode, valNode := n.Content[i], n.Content[i+1]
 			var key string
 			if err := keyNode.Decode(&key); err != nil {
-				return nil, fmt.Errorf("%s:%d:%d: context mapping keys must be strings", name, keyNode.Line, keyNode.Column)
+				return nil, fmt.Errorf("%s:%d:%d: mapping keys must be strings", src.name, keyNode.Line, keyNode.Column)
 			}
-			val, err := convert(valNode, name)
+			val, err := convert(valNode, src)
 			if err != nil {
 				return nil, err
 			}
@@ -306,7 +355,7 @@ func convert(n *yaml.Node, name string) (eval.Value, error) {
 	case yaml.SequenceNode:
 		items := make([]*eval.Elem, 0, len(n.Content))
 		for _, c := range n.Content {
-			v, err := convert(c, name)
+			v, err := convert(c, src)
 			if err != nil {
 				return nil, err
 			}
@@ -315,17 +364,17 @@ func convert(n *yaml.Node, name string) (eval.Value, error) {
 		return eval.NewArray(items), nil
 
 	case yaml.ScalarNode:
-		return convertScalar(n, name)
+		return convertScalar(n, src)
 
 	default:
 		return eval.Null{}, nil
 	}
 }
 
-func convertScalar(n *yaml.Node, name string) (eval.Value, error) {
+func convertScalar(n *yaml.Node, src source) (eval.Value, error) {
 	var raw any
 	if err := n.Decode(&raw); err != nil {
-		return nil, fmt.Errorf("%s:%d:%d: %w", name, n.Line, n.Column, err)
+		return nil, fmt.Errorf("%s:%d:%d: %w", src.name, n.Line, n.Column, err)
 	}
 	switch v := raw.(type) {
 	case nil:

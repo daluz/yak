@@ -1,0 +1,20 @@
+keys:
+  - app
+  - tier
+  - team
+  - secret
+values:
+  - web
+  - frontend
+  - platform
+  - hidden
+picked:
+  app: web
+  team: platform
+omitted:
+  app: web
+  team: platform
+empty: []
+aliased:
+  - b
+  - a

@@ -1,0 +1,51 @@
+json:
+  compact: '{"name":"web","ports":[80,443],"debug":false,"owner":null}'
+  indented: |-
+    {
+      "name": "web",
+      "ports": [
+        80,
+        443
+      ],
+      "debug": false,
+      "owner": null
+    }
+  scalar: '"say \"hi\""'
+  decoded:
+    b:
+      - 1
+      - 2.5
+      - true
+      - null
+    a: x
+  number: 42
+  roundTrip:
+    name: web
+    ports:
+      - 80
+      - 443
+    debug: false
+    owner: null
+yaml:
+  file: |
+    name: web
+    ports:
+      - 80
+      - 443
+    debug: false
+    owner: null
+  decoded:
+    replicas: 3
+    image: nginx
+  empty: null
+  sequence:
+    - a
+    - b
+base64:
+  encoded: dXNlcjpww6Rzc3dvcmQ=
+  decoded: user:pässword
+  empty: ""
+secret:
+  data:
+    username: YWRtaW4=
+    password: aHVudGVyMg==

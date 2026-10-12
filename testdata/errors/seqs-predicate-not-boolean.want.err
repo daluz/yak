@@ -1,0 +1,1 @@
+seqs-predicate-not-boolean.yak:2:23: "any" needs a predicate that answers a boolean, found integer at index 0

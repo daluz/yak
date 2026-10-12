@@ -129,14 +129,14 @@ func TestInterpolation(t *testing.T) {
 		context string
 		want    string
 	}{
-		{"string", `a: "x"` + "\n" + `b: "{.a}y"` + "\n", "", "a: x\nb: xy\n"},
-		{"integer", "n: 3\ns: \"n={.n}\"\n", "", "n: 3\ns: n=3\n"},
-		{"boolean", "b: true\ns: \"b={.b}\"\n", "", "b: true\ns: b=true\n"},
-		{"float", "f: 1.5\ns: \"f={.f}\"\n", "", "f: 1.5\ns: f=1.5\n"},
-		{"null", "n: null\ns: \"n={.n}\"\n", "", "n: null\ns: n=null\n"},
-		{"context", `s: "{$$.a}-{$$.b}"` + "\n", "a: one\nb: two\n", "s: one-two\n"},
-		{"in block scalar", "name: \"web\"\ntext: |\n  hello {.name}\n", "", "name: web\ntext: |\n  hello web\n"},
-		{"in computed key", "k: \"dyn\"\n[\"{.k}-key\"]: 1\n", "", "k: dyn\ndyn-key: 1\n"},
+		{"string", `a: "x"` + "\n" + `b: "\(.a)y"` + "\n", "", "a: x\nb: xy\n"},
+		{"integer", "n: 3\ns: \"n=\\(.n)\"\n", "", "n: 3\ns: n=3\n"},
+		{"boolean", "b: true\ns: \"b=\\(.b)\"\n", "", "b: true\ns: b=true\n"},
+		{"float", "f: 1.5\ns: \"f=\\(.f)\"\n", "", "f: 1.5\ns: f=1.5\n"},
+		{"null", "n: null\ns: \"n=\\(.n)\"\n", "", "n: null\ns: n=null\n"},
+		{"context", `s: "\($$.a)-\($$.b)"` + "\n", "a: one\nb: two\n", "s: one-two\n"},
+		{"in block scalar", "name: \"web\"\ntext: |\n  hello \\(.name)\n", "", "name: web\ntext: |\n  hello web\n"},
+		{"in computed key", "k: \"dyn\"\n[\"\\(.k)-key\"]: 1\n", "", "k: dyn\ndyn-key: 1\n"},
 	}
 
 	for _, tc := range tests {
@@ -172,7 +172,7 @@ func TestLocals(t *testing.T) {
 		},
 		{
 			name: "bindings see each other",
-			src:  "local a = \"x\"\nlocal b = \"{a}y\"\nv: b\n",
+			src:  "local a = \"x\"\nlocal b = \"\\(a)y\"\nv: b\n",
 			want: "v: xy\n",
 		},
 		{
@@ -182,7 +182,7 @@ func TestLocals(t *testing.T) {
 		},
 		{
 			name: "block form",
-			src:  "local {\n  region = \"us-east-1\"\n  zone = \"{region}a\"\n}\nwhere: zone\n",
+			src:  "local {\n  region = \"us-east-1\"\n  zone = \"\\(region)a\"\n}\nwhere: zone\n",
 			want: "where: us-east-1a\n",
 		},
 		{
@@ -192,7 +192,7 @@ func TestLocals(t *testing.T) {
 		},
 		{
 			name: "a binding can read the enclosing mapping",
-			src:  "local label = \"{.name}-web\"\nname: \"shop\"\nlabel: label\n",
+			src:  "local label = \"\\(.name)-web\"\nname: \"shop\"\nlabel: label\n",
 			want: "name: shop\nlabel: shop-web\n",
 		},
 		{
@@ -202,7 +202,7 @@ func TestLocals(t *testing.T) {
 		},
 		{
 			name: "a rebinding reads the binding it replaces",
-			src:  "local size = \"small\"\ndev: size\nlocal size = \"{size}-ish\"\nprod: size\n",
+			src:  "local size = \"small\"\ndev: size\nlocal size = \"\\(size)-ish\"\nprod: size\n",
 			want: "dev: small\nprod: small-ish\n",
 		},
 		{
@@ -237,7 +237,7 @@ func TestLocals(t *testing.T) {
 		},
 		{
 			name: "a nested scope still sees the outer bindings",
-			src:  "local n = \"outer\"\nchild:\n  local m = \"inner\"\n  v: \"{n}-{m}\"\n",
+			src:  "local n = \"outer\"\nchild:\n  local m = \"inner\"\n  v: \"\\(n)-\\(m)\"\n",
 			want: "child:\n  v: outer-inner\n",
 		},
 		{
@@ -350,7 +350,7 @@ func TestCoalesceAndOptionalAccess(t *testing.T) {
 		},
 		{
 			name: "an optional access inside interpolation",
-			src:  "v: \"port {$$?.port ?? 80}\"\n",
+			src:  "v: \"port \\($$?.port ?? 80)\"\n",
 			want: "v: port 80\n",
 		},
 	}
@@ -377,9 +377,24 @@ func TestOperators(t *testing.T) {
 		{"inequality", "v: 1 != 2\n", "v: true\n"},
 		{"string ordering", `v: "a" < "b"` + "\n", "v: true\n"},
 		{"mixed number ordering", "v: 1 < 1.5\n", "v: true\n"},
-		{"negation", "v: !false\n", "v: true\n"},
-		{"conjunction", "v: true && false\n", "v: false\n"},
-		{"disjunction", "v: false || true\n", "v: true\n"},
+		{"negation", "v: not false\n", "v: true\n"},
+		{"negating a comparison", "v: not 1 == 2\n", "v: true\n"},
+		{"not an item, with not in", "v: 3 not in [1, 2]\n", "v: true\n"},
+		{"an item, with not in", "v: 2 not in [1, 2]\n", "v: false\n"},
+		{"not a key, with not in", `v: "b" not in {a: 1}` + "\n", "v: true\n"},
+		{"not a substring, with not in", `v: "xyz" not in "hello"` + "\n", "v: true\n"},
+		{"conjunction", "v: true and false\n", "v: false\n"},
+		{"disjunction", "v: false or true\n", "v: true\n"},
+		{"an item of a sequence", "v: 2 in [1, 2]\n", "v: true\n"},
+		{"not an item of a sequence", "v: 3 in [1, 2]\n", "v: false\n"},
+		{"an item equal as a number", "v: 1.0 in [1]\n", "v: true\n"},
+		{"collection items are passed over", "v: 1 in [[1], {a: 1}, 1]\n", "v: true\n"},
+		{"a key of a mapping", `v: "a" in {a: 1}` + "\n", "v: true\n"},
+		{"a hidden key of a mapping", "m:: {a:: 1}\nv: \"a\" in .m\n", "v: true\n"},
+		{"not a key of a mapping", `v: "b" in {a: 1}` + "\n", "v: false\n"},
+		{"a substring", `v: "ell" in "hello"` + "\n", "v: true\n"},
+		{"not a substring", `v: "xyz" in "hello"` + "\n", "v: false\n"},
+		{"the empty substring", `v: "" in "hello"` + "\n", "v: true\n"},
 	}
 
 	for _, tc := range tests {
@@ -399,8 +414,8 @@ func TestLogicalOperatorsShortCircuit(t *testing.T) {
 		src  string
 		want string
 	}{
-		{"and stops at false", "v: false && .missing\n", "v: false\n"},
-		{"or stops at true", "v: true || .missing\n", "v: true\n"},
+		{"and stops at false", "v: false and .missing\n", "v: false\n"},
+		{"or stops at true", "v: true or .missing\n", "v: true\n"},
 	}
 
 	for _, tc := range tests {
@@ -426,7 +441,7 @@ func TestMergeLeavesItsOperandsAlone(t *testing.T) {
 // still reads the mapping it was written in, so overriding "name" does not
 // reach back into a sibling that referred to it.
 func TestMergedFieldKeepsItsOwnScope(t *testing.T) {
-	src := "local base = {name: \"web\", label: \"{.name}-1\"}\nv: (base << {name: \"api\"}).label\n"
+	src := "local base = {name: \"web\", label: \"\\(.name)-1\"}\nv: (base << {name: \"api\"}).label\n"
 	want := "v: web-1\n"
 	if got := mustRender(t, src, ""); got != want {
 		t.Errorf("rendered %q, want %q", got, want)
@@ -506,7 +521,7 @@ func TestComprehensions(t *testing.T) {
 		},
 		{
 			name:    "sequence over the context",
-			src:     "v: [\"n-{x}\" for x in $$.list]\n",
+			src:     "v: [\"n-\\(x)\" for x in $$.list]\n",
 			context: "list: [1, 2]\n",
 			want:    "v:\n  - n-1\n  - n-2\n",
 		},
@@ -529,7 +544,7 @@ func TestComprehensions(t *testing.T) {
 		},
 		{
 			name:    "mapping keyed by interpolation",
-			src:     "v: {\"k{x}\": x for x in $$.list}\n",
+			src:     "v: {\"k\\(x)\": x for x in $$.list}\n",
 			context: "list: [1, 2]\n",
 			want:    "v:\n  k1: 1\n  k2: 2\n",
 		},
@@ -575,27 +590,27 @@ func TestFunctions(t *testing.T) {
 	}{
 		{
 			name: "positional arguments",
-			src:  "local f(a, b) = \"{a}-{b}\"\nv: f(1, 2)\n",
+			src:  "local f(a, b) = \"\\(a)-\\(b)\"\nv: f(1, 2)\n",
 			want: "v: 1-2\n",
 		},
 		{
 			name: "named arguments in any order",
-			src:  "local f(a, b) = \"{a}-{b}\"\nv: f(b = 2, a = 1)\n",
+			src:  "local f(a, b) = \"\\(a)-\\(b)\"\nv: f(b = 2, a = 1)\n",
 			want: "v: 1-2\n",
 		},
 		{
 			name: "a named argument after the positional ones",
-			src:  "local f(a, b) = \"{a}-{b}\"\nv: f(1, b = 2)\n",
+			src:  "local f(a, b) = \"\\(a)-\\(b)\"\nv: f(1, b = 2)\n",
 			want: "v: 1-2\n",
 		},
 		{
 			name: "a default fills in a missing argument",
-			src:  "local f(a, b = 2) = \"{a}-{b}\"\nv: f(1)\nw: f(1, 3)\n",
+			src:  "local f(a, b = 2) = \"\\(a)-\\(b)\"\nv: f(1)\nw: f(1, 3)\n",
 			want: "v: 1-2\nw: 1-3\n",
 		},
 		{
 			name: "a default may name an earlier parameter",
-			src:  "local f(a, b = a) = \"{a}-{b}\"\nv: f(1)\n",
+			src:  "local f(a, b = a) = \"\\(a)-\\(b)\"\nv: f(1)\n",
 			want: "v: 1-1\n",
 		},
 		{
@@ -610,7 +625,7 @@ func TestFunctions(t *testing.T) {
 		},
 		{
 			name: "the body sees the scope it was written in",
-			src:  "local suffix = \"s\"\nlocal f(a) = \"{a}-{suffix}\"\nv:\n  local suffix = \"inner\"\n  w: f(1)\n",
+			src:  "local suffix = \"s\"\nlocal f(a) = \"\\(a)-\\(suffix)\"\nv:\n  local suffix = \"inner\"\n  w: f(1)\n",
 			want: "v:\n  w: 1-s\n",
 		},
 		{
@@ -635,17 +650,17 @@ func TestFunctions(t *testing.T) {
 		},
 		{
 			name: "a function is a value that may be passed on",
-			src:  "local apply(fn, to) = fn(to)\nlocal twice(s) = \"{s}{s}\"\nv: apply(twice, \"ab\")\n",
+			src:  "local apply(fn, to) = fn(to)\nlocal twice(s) = \"\\(s)\\(s)\"\nv: apply(twice, \"ab\")\n",
 			want: "v: abab\n",
 		},
 		{
 			name: "a hidden field may hold a function",
-			src:  "f:: g\nlocal g(a) = \"g-{a}\"\nv: .f(1)\n",
+			src:  "f:: g\nlocal g(a) = \"g-\\(a)\"\nv: .f(1)\n",
 			want: "v: g-1\n",
 		},
 		{
 			name:    "a call inside a comprehension",
-			src:     "local f(a) = \"n-{a}\"\nv: [f(x) for x in $$.list]\n",
+			src:     "local f(a) = \"n-\\(a)\"\nv: [f(x) for x in $$.list]\n",
 			context: "list: [1, 2]\n",
 			want:    "v:\n  - n-1\n  - n-2\n",
 		},
@@ -661,7 +676,7 @@ func TestFunctions(t *testing.T) {
 }
 
 func TestHiddenFields(t *testing.T) {
-	got := mustRender(t, "secret:: \"s3cret\"\nvisible: \"{.secret}!\"\n", "")
+	got := mustRender(t, "secret:: \"s3cret\"\nvisible: \"\\(.secret)!\"\n", "")
 	want := "visible: s3cret!\n"
 	if got != want {
 		t.Errorf("rendered %q, want %q", got, want)
@@ -756,11 +771,11 @@ func TestEvalErrors(t *testing.T) {
 		{"self past root", "a: ..b\n", "", "reaches past the outermost mapping"},
 		{"direct cycle", "a: .a\n", "", "circular reference"},
 		{"indirect cycle", "a: .b\nb: .a\n", "", "circular reference"},
-		{"interpolation cycle", `a: "{.b}"` + "\n" + `b: "{.a}"` + "\n", "", "circular reference"},
+		{"interpolation cycle", `a: "\(.b)"` + "\n" + `b: "\(.a)"` + "\n", "", "circular reference"},
 		{"field of scalar", "a: 1\nb: .a.c\n", "", "cannot read field"},
 		{"index out of range", "a:\n  - 1\nb: $.a[5]\n", "", "out of range"},
 		{"index with wrong type", "a:\n  - 1\nb: $.a[\"x\"]\n", "", "index must be an integer"},
-		{"interpolate a mapping", "a:\n  b: 1\ns: \"{.a}\"\n", "", "cannot interpolate a mapping"},
+		{"interpolate a mapping", "a:\n  b: 1\ns: \"\\(.a)\"\n", "", "cannot interpolate a mapping"},
 		{"unknown identifier", "a: hello\n", "", `unknown identifier "hello"`},
 		{"yaml yes", "a: yes\n", "", `"yes" is not a boolean in yak`},
 		{"yaml off", "a: off\n", "", `"off" is not a boolean in yak`},
@@ -775,8 +790,14 @@ func TestEvalErrors(t *testing.T) {
 		{"optional access does not hide a type error", "a: 1\nb: .a?.c\n", "", "cannot read field"},
 		{"optional index does not hide a type error", "a:\n  - 1\nb: $.a?[\"x\"]\n", "", "index must be an integer"},
 		{"a non-boolean condition", "a: if 1 then 2 else 3\n", "", `the condition of an "if" must be a boolean`},
-		{"a non-boolean operand of and", "a: 1 && true\n", "", `the left side of "&&" must be a boolean`},
-		{"a non-boolean operand of not", "a: !1\n", "", `the operand of "!" must be a boolean`},
+		{"a non-boolean operand of and", "a: 1 and true\n", "", `the left side of "and" must be a boolean`},
+		{"a non-boolean operand of or", "a: false or 1\n", "", `the right side of "or" must be a boolean`},
+		{"looking for a collection in a sequence", "a: [1] in [[1]]\n", "", "cannot compare a sequence"},
+		{"looking for a number among keys", "a: 1 in {a: 1}\n", "", `"in" needs a string to look for among the keys of a mapping, found integer`},
+		{"looking for a number in a string", `a: 1 in "1"` + "\n", "", `"in" needs a string to look for in a string, found integer`},
+		{"looking in a number", "a: 1 in 1\n", "", `"in" needs a sequence, mapping or string to look in, found integer`},
+		{"a non-boolean operand of not", "a: not 1\n", "", `the operand of "not" must be a boolean`},
+		{"not in names itself", "a: 1 not in 1\n", "", `"not in" needs a sequence, mapping or string to look in, found integer`},
 		{"ordering mismatched types", `a: "x" < 1` + "\n", "", "cannot compare string with integer"},
 		{"comparing collections", "a: [1] == [1]\n", "", "cannot compare a sequence"},
 		{"adding mismatched types", `a: [1] + {b: 2}` + "\n", "", "cannot add mapping to sequence"},
@@ -798,7 +819,7 @@ func TestEvalErrors(t *testing.T) {
 		{"a parameter given twice", "local f(a) = a\nv: f(1, a = 2)\n", "", `is given twice`},
 		{"calling something else", "local f = 1\nv: f(1)\n", "", "cannot call a value of type integer"},
 		{"rendering a function", "local f(a) = a\nv: f\n", "", "cannot render a value of type function"},
-		{"interpolating a function", "local f(a) = a\nv: \"{f}\"\n", "", "cannot interpolate a function"},
+		{"interpolating a function", "local f(a) = a\nv: \"\\(f)\"\n", "", "cannot interpolate a function"},
 		{"endless recursion", "local f(a) = f(a)\nv: f(1)\n", "", "may not terminate"},
 	}
 

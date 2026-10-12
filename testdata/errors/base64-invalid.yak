@@ -1,0 +1,2 @@
+import std.base64
+secret: base64.decode("not base64!")

@@ -74,10 +74,14 @@ const (
 	// Question is the "?" of an optional access, always followed directly by
 	// "." or "[".
 	Question
-	// Not is the "!" of a negated boolean.
+	// Not, And, Or, In and NotIn are written as words. They lex as
+	// identifiers, and the parser reads one as an operator where an operator
+	// may stand. NotIn is the two words "not in".
 	Not
 	And
 	Or
+	In
+	NotIn
 	Eq
 	Ne
 	Lt
@@ -114,9 +118,11 @@ var spelling = map[Kind]string{
 	Arrow:         "=>",
 	Coalesce:      "??",
 	Question:      "?",
-	Not:           "!",
-	And:           "&&",
-	Or:            "||",
+	Not:           KeywordNot,
+	And:           KeywordAnd,
+	Or:            KeywordOr,
+	In:            KeywordIn,
+	NotIn:         KeywordNot + " " + KeywordIn,
 	Eq:            "==",
 	Ne:            "!=",
 	Lt:            "<",
@@ -161,7 +167,7 @@ func (k Kind) IsSeparator() bool {
 }
 
 // Chunk is one piece of a string literal: either literal text or an
-// interpolated expression written as { ... }.
+// interpolated expression written as \( ... ).
 type Chunk struct {
 	// Text holds the decoded literal text when IsExpr is false, and the raw
 	// expression source when IsExpr is true.
@@ -243,6 +249,9 @@ const (
 	KeywordElse = "else"
 	KeywordFor  = "for"
 	KeywordIn   = "in"
+	KeywordAnd  = "and"
+	KeywordOr   = "or"
+	KeywordNot  = "not"
 )
 
 // IsReserved reports whether name is a reserved word that may not be used as a
@@ -260,7 +269,7 @@ func IsReserved(name string) bool {
 // reading such a name back would be read as the keyword instead.
 func IsKeyword(name string) bool {
 	switch name {
-	case KeywordIf, KeywordThen, KeywordElse, KeywordFor, KeywordIn:
+	case KeywordIf, KeywordThen, KeywordElse, KeywordFor, KeywordIn, KeywordAnd, KeywordOr, KeywordNot:
 		return true
 	}
 	return false

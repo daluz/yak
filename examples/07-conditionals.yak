@@ -21,12 +21,12 @@ banner:
   then "serving live traffic"
   else "not for production use"
 
-## The condition has to be a boolean — yak has no truthiness — and "&&",
-## "||" and "!" combine them, short-circuiting as usual. "??" binds looser
+## The condition has to be a boolean — yak has no truthiness — and "and",
+## "or" and "not" combine them, short-circuiting as usual. "??" binds looser
 ## than everything, so the fallback here needs its parentheses to belong to
-## the access rather than to the whole "&&".
-alerting: .env == "prod" && ($$?.alerts?.enabled ?? false)
-internal: !(.env == "prod") || $$.private
+## the access rather than to the whole "and".
+alerting: .env == "prod" and ($$?.alerts?.enabled ?? false)
+internal: not .env == "prod" or $$.private
 
 ## Arithmetic works on numbers. Two integers answer an integer, except that
 ## "/" always answers a float rather than truncating. "." names the mapping

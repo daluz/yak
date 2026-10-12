@@ -7,8 +7,8 @@ trimmed:
   prefix: 1.2.3
   suffix: app
   untouched: 1.2.3
+  characters: title
 tests:
-  contains: true
   starts: true
   ends: false
 replaced: a/b/c
@@ -26,6 +26,10 @@ split:
     - b
     - c
   empty: []
+  whitespace:
+    - --verbose
+    - --port
+    - "80"
 joined: a.example.com | b.example.com
 named: a-b
 applied: loud

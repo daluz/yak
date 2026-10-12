@@ -7,8 +7,8 @@ local region = "us-east-1"
 
 ## Several bindings share a block, one per line or separated by commas.
 local {
-  zone = "{region}a"
-  cluster = "prod-{region}"
+  zone = "\(region)a"
+  cluster = "prod-\(region)"
 }
 local { retries = 3, timeout = 30 }
 
@@ -22,7 +22,7 @@ placement:
   zone: zone
   cluster: cluster
 
-image: "{defaults.image}:{defaults.tag}"
+image: "\(defaults.image):\(defaults.tag)"
 
 client:
   retries: retries
@@ -31,14 +31,14 @@ client:
 ## Bindings resolve lazily, so one may be read above the line declaring it,
 ## and two may refer to each other in any order.
 owner: team
-local team = "{group}-platform"
+local team = "\(group)-platform"
 local group = "infra"
 
 ## A binding written among the entries of a mapping belongs to that whole
 ## mapping, so it can read the mapping's own fields.
 service:
   name: "shop"
-  local label = "{.name}-web"
+  local label = "\(.name)-web"
   labels:
     app: label
 
@@ -54,10 +54,10 @@ api:
 ## the rebinding reads the binding it replaces.
 local tag = "v1"
 staging:
-  image: "app:{tag}"
-local tag = "{tag}-patched"
+  image: "app:\(tag)"
+local tag = "\(tag)-patched"
 production:
-  image: "app:{tag}"
+  image: "app:\(tag)"
 
 ## A binding that is never used is never evaluated, so this one's missing
 ## field costs nothing.

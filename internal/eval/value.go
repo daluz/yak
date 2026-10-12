@@ -131,6 +131,9 @@ func (o *Object) Set(name string, hidden bool, v *Thunk) {
 	o.fields = append(o.fields, &Field{Name: name, Hidden: hidden, Value: v})
 }
 
+// Add appends a copy of f, the whole field rather than just its value.
+func (o *Object) Add(f *Field) { o.add(f) }
+
 // add appends a copy of f, or replaces an existing field of the same name
 // while keeping its position. Unlike Set it carries the whole field over,
 // which is what merging two mappings with "<<" needs.

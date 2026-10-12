@@ -1,13 +1,13 @@
 # Each document has its own root, and $context is shared by all of them.
 kind: "ConfigMap"
-name: "{$$.app}-config"
+name: "\($$.app)-config"
 data:
   self-kind: ..kind
   note: |
     a block scalar may end right above the marker
 ---
 kind: "Service"
-name: "{$$.app}-svc"
+name: "\($$.app)-svc"
 selector:
   app: $.name
 ports: [80, 443]

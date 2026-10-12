@@ -31,7 +31,7 @@ func evalUnary(node *ast.Unary, env *Env) (Value, error) {
 	if node.Op == token.Dash {
 		return evalNegate(node, env)
 	}
-	x, err := condition(node.X, env, `the operand of "!"`)
+	x, err := condition(node.X, env, "the operand of "+node.Op.String())
 	if err != nil {
 		return nil, err
 	}
@@ -88,6 +88,12 @@ func evalBinary(node *ast.Binary, env *Env) (Value, error) {
 			return nil, err
 		}
 		return v, nil
+	case token.In, token.NotIn:
+		found, err := member(node.Op, node.OpPos, x, y)
+		if err != nil {
+			return nil, err
+		}
+		return Bool(found == (node.Op == token.In)), nil
 	}
 	c, err := compare(x, y)
 	if err != nil {
@@ -108,10 +114,7 @@ func evalBinary(node *ast.Binary, env *Env) (Value, error) {
 // evalLogical short-circuits, so the right hand side is left unevaluated
 // whenever the left one already decides the answer.
 func evalLogical(node *ast.Binary, env *Env) (Value, error) {
-	name := `"&&"`
-	if node.Op == token.Or {
-		name = `"||"`
-	}
+	name := node.Op.String()
 	x, err := condition(node.X, env, "the left side of "+name)
 	if err != nil {
 		return nil, err
@@ -271,6 +274,12 @@ func combined(old, new *Field) (*Thunk, error) {
 	return Done(merged), nil
 }
 
+// Equal answers what "==" does, and fails where it would.
+func Equal(x, y Value) (bool, error) { return equal(x, y) }
+
+// Compare answers the order "<" sees, and fails where it would.
+func Compare(x, y Value) (int, error) { return compare(x, y) }
+
 // equal compares two values for "==". Values of different types are never
 // equal, except that integers and floats compare as the numbers they are.
 func equal(x, y Value) (bool, error) {
@@ -328,6 +337,47 @@ func compare(x, y Value) (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("cannot compare %s with %s", x.TypeName(), y.TypeName())
+}
+
+// member answers "x in y", which op names for its errors. A sequence holds x when one of its items equals it,
+// a mapping when x names one of its keys, hidden ones included, and a string
+// when x appears somewhere within it.
+//
+// Looking for x among the items of a sequence asks the same question "=="
+// does, so x has to be a scalar. An item that is a collection is never equal
+// to one, so it is passed over rather than reported.
+func member(op token.Kind, pos token.Pos, x, y Value) (bool, error) {
+	switch c := y.(type) {
+	case *Array:
+		if err := requireScalar(x); err != nil {
+			return false, errorf(pos, "%s", err.Error())
+		}
+		for _, item := range c.Items() {
+			v, err := item.Value.Value()
+			if err != nil {
+				return false, err
+			}
+			if same, err := equal(x, v); err == nil && same {
+				return true, nil
+			}
+		}
+		return false, nil
+	case *Object:
+		k, ok := x.(String)
+		if !ok {
+			return false, errorf(pos, "%s needs a string to look for among the keys of a mapping, found %s",
+				op, x.TypeName())
+		}
+		_, held := c.Lookup(string(k))
+		return held, nil
+	case String:
+		s, ok := x.(String)
+		if !ok {
+			return false, errorf(pos, "%s needs a string to look for in a string, found %s", op, x.TypeName())
+		}
+		return strings.Contains(string(c), string(s)), nil
+	}
+	return false, errorf(pos, "%s needs a sequence, mapping or string to look in, found %s", op, y.TypeName())
 }
 
 // requireScalar rejects the values that equality has no useful answer for.

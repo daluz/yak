@@ -1,0 +1,17 @@
+abs:
+  integer: 3
+  float: 2.5
+floor:
+  positive: 2
+  negative: -3
+  integer: 4
+ceil:
+  positive: 3
+  negative: -2
+round:
+  down: 2
+  half: 3
+  negativeHalf: -3
+  digits: 3.14
+  integerDigits: 7
+replicas: 3

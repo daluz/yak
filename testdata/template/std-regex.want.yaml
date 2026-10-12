@@ -1,0 +1,17 @@
+image: registry.example.com/team/web:1.4.2
+match:
+  tagged: true
+  anchored: false
+find:
+  tag: 1.4.2
+  none: null
+findAll:
+  numbers:
+    - "1"
+    - "22"
+    - "333"
+  none: []
+replace:
+  groups: 01-web, 02-api
+  named: "1.2"
+  dollar: $&

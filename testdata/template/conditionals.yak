@@ -9,7 +9,7 @@ replicas: if production then $$.scale.max else $$.scale.min
 tier: if production then "gold" else if env == "staging" then "silver" else "bronze"
 
 # Without an "else" the conditional is null, which ":?" drops entirely.
-debug:? if !production then true
+debug:? if not production then true
 profiler:? if production then true
 
 # Conditions are built from the comparison and boolean operators.
@@ -20,9 +20,16 @@ checks:
   atMost: $$.scale.min <= 1
   greater: $$.scale.max > 1
   atLeast: $$.scale.max >= 4
-  negated: !production
-  both: env == "staging" && $$.scale.max > 1
-  either: production || $$.scale.min == 1
+  negated: not production
+  both: env == "staging" and $$.scale.max > 1
+  either: production or $$.scale.min == 1
+
+# "in" asks whether a sequence, a mapping or a string holds something.
+membership:
+  item: env in ["dev", "staging"]
+  key: "max" in $$.scale
+  substring: "stag" in env
+  missing: "prod" not in ["dev", "staging"]
 
 # The branch that is not taken is never evaluated, so this one is safe even
 # though the context has no "replicas" field.
@@ -35,4 +42,4 @@ banner:
   else "not for production use"
 
 # An "if" is looser than every operator, so it needs parentheses to be one.
-inverted: !(if production then false else true)
+inverted: not (if production then false else true)

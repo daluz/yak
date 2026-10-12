@@ -54,18 +54,23 @@ func TestQuotedStrings(t *testing.T) {
 		{"tab escape", `"a\tb"`, "a\tb"},
 		{"unicode escape", `"\u00e9"`, "é"},
 		{"hex escape", `"\x41"`, "A"},
-		{"single quote doubling", `'it''s'`, "it's"},
+		{"escaped single quote", `'it\'s'`, "it's"},
+		{"double quote in single quotes", `'say "hi"'`, `say "hi"`},
+		{"single quote in double quotes", `"it's"`, "it's"},
 		{"raw double quoted", `r"a\nb"`, `a\nb`},
-		{"raw keeps interpolation literal", `r"{.x}"`, "{.x}"},
-		{"doubled brace escape", `"{{.x}}"`, "{.x}"},
-		{"doubled brace in single quotes", `'{{.x}}'`, "{.x}"},
-		{"brace from an escape is not a sigil", `"\u007b.x}"`, "{.x}"},
-		{"lone closing brace", `"a } b"`, "a } b"},
+		{"raw keeps interpolation literal", `r"\(.x)"`, `\(.x)`},
+		{"escaped interpolation", `"\\(.x)"`, `\(.x)`},
+		{"escaped interpolation in single quotes", `'\\(.x)'`, `\(.x)`},
+		{"backslash from an escape is not a sigil", `"\u005c(.x)"`, `\(.x)`},
+		{"braces are literal", `"{.x} and {{ .y }}"`, "{.x} and {{ .y }}"},
+		{"escapes in single quotes", `'a\tb\\c\u00e9'`, "a\tb\\cé"},
+		{"lone closing paren", `"a ) b"`, "a ) b"},
 		{"lone dollar", `"cost: $5"`, "cost: $5"},
 		{"line folding", "\"a\nb\"", "a b"},
 		{"blank line folding", "\"a\n\nb\"", "a\nb"},
 		{"line continuation", "\"a\\\n  b\"", "ab"},
-		{"no escapes in single quotes", `'a\nb'`, `a\nb`},
+		{"newline escape in single quotes", `'a\nb'`, "a\nb"},
+		{"raw single quoted", `r'a\nb'`, `a\nb`},
 	}
 
 	for _, tc := range tests {
@@ -87,12 +92,17 @@ func TestInterpolationChunks(t *testing.T) {
 		src  string
 		want []string
 	}{
-		{"only expression", `"{.a}"`, []string{"expr(.a)"}},
-		{"prefix and suffix", `"a{.b}c"`, []string{`text(a)`, `expr(.b)`, `text(c)`}},
-		{"two expressions", `"{.a}{.b}"`, []string{"expr(.a)", "expr(.b)"}},
-		{"nested string in expression", `"{$$.m["k"]}"`, []string{`expr($$.m["k"])`}},
-		{"brace inside expression", `"{ {a: 1} }"`, []string{"expr( {a: 1} )"}},
-		{"escape then expression", `"{{x}}{.y}"`, []string{"text({x})", "expr(.y)"}},
+		{"only expression", `"\(.a)"`, []string{"expr(.a)"}},
+		{"prefix and suffix", `"a\(.b)c"`, []string{`text(a)`, `expr(.b)`, `text(c)`}},
+		{"two expressions", `"\(.a)\(.b)"`, []string{"expr(.a)", "expr(.b)"}},
+		{"nested string in expression", `"\($$.m["k"])"`, []string{`expr($$.m["k"])`}},
+		{"brace inside expression", `"\( {a: 1} )"`, []string{"expr( {a: 1} )"}},
+		{"parens inside expression", `"\(f((1 + 2) * 3))"`, []string{"expr(f((1 + 2) * 3))"}},
+		{"interpolated string inside expression", `"\(f("\(x)"))"`, []string{`expr(f("\(x)"))`}},
+		{"single quotes inside single quotes", `'\($$['k'])'`, []string{`expr($$['k'])`}},
+		{"escaped quote inside a nested string", `'\(f('it\'s'))'`, []string{`expr(f('it\'s'))`}},
+		{"escape then expression", `"\\(x)\(.y)"`, []string{`text(\(x))`, "expr(.y)"}},
+		{"escape then expression in single quotes", `'\\(x)\(.y)'`, []string{`text(\(x))`, "expr(.y)"}},
 	}
 
 	for _, tc := range tests {
@@ -114,14 +124,14 @@ func TestInterpolationChunks(t *testing.T) {
 }
 
 func TestInterpolationPositions(t *testing.T) {
-	tok := firstString(t, "key: \"a{.b}\"\n")
+	tok := firstString(t, "key: \"a\\(.b)\"\n")
 	if len(tok.Chunks) != 2 {
 		t.Fatalf("got %d chunks, want 2", len(tok.Chunks))
 	}
 	expr := tok.Chunks[1]
-	// Source columns:  k=1 ... "=6, a=7, {=8, .=9
-	if expr.Pos.Line != 1 || expr.Pos.Col != 9 {
-		t.Errorf("interpolation position = %d:%d, want 1:9", expr.Pos.Line, expr.Pos.Col)
+	// Source columns:  k=1 ... "=6, a=7, \=8, (=9, .=10
+	if expr.Pos.Line != 1 || expr.Pos.Col != 10 {
+		t.Errorf("interpolation position = %d:%d, want 1:10", expr.Pos.Line, expr.Pos.Col)
 	}
 }
 
@@ -142,8 +152,10 @@ func TestBlockScalars(t *testing.T) {
 		{"explicit indent", "k: |2\n    a\n", "  a\n"},
 		{"nested indentation", "a:\n  k: |\n    x\n", "x\n"},
 		{"ends at dedent", "a:\n  k: |\n    x\nb: 1\n", "x\n"},
-		{"raw literal", "k: r|\n  {.a}\n", "{.a}\n"},
-		{"doubled brace escape", "k: |\n  {{.a}}\n", "{.a}\n"},
+		{"raw literal", "k: r|\n  \\(.a)\n", "\\(.a)\n"},
+		{"escaped interpolation", "k: |\n  \\\\(.a)\n", "\\(.a)\n"},
+		{"braces are literal", "k: |\n  {{ .a }} {b}\n", "{{ .a }} {b}\n"},
+		{"lone backslash", "k: |\n  a\\b \\\\n\n", "a\\b \\\\n\n"},
 	}
 
 	for _, tc := range tests {
@@ -160,15 +172,15 @@ func TestBlockScalars(t *testing.T) {
 }
 
 func TestBlockScalarInterpolation(t *testing.T) {
-	tok := firstString(t, "k: |\n  hello {.name}\n")
+	tok := firstString(t, "k: |\n  hello \\(.name)\n")
 	if len(tok.Chunks) != 3 {
 		t.Fatalf("got %d chunks, want 3: %+v", len(tok.Chunks), tok.Chunks)
 	}
 	if tok.Chunks[0].Text != "hello " || !tok.Chunks[1].IsExpr || tok.Chunks[1].Text != ".name" {
 		t.Errorf("unexpected chunks: %+v", tok.Chunks)
 	}
-	if tok.Chunks[1].Pos.Line != 2 || tok.Chunks[1].Pos.Col != 10 {
-		t.Errorf("interpolation position = %d:%d, want 2:10", tok.Chunks[1].Pos.Line, tok.Chunks[1].Pos.Col)
+	if tok.Chunks[1].Pos.Line != 2 || tok.Chunks[1].Pos.Col != 11 {
+		t.Errorf("interpolation position = %d:%d, want 2:11", tok.Chunks[1].Pos.Line, tok.Chunks[1].Pos.Col)
 	}
 }
 
@@ -264,15 +276,6 @@ func TestOperatorTokens(t *testing.T) {
 		}},
 		{"inequality", "a: 1 != 2\n", []token.Kind{
 			token.Ident, token.Colon, token.Int, token.Ne, token.Int, token.EOF,
-		}},
-		{"negation", "a: !b\n", []token.Kind{
-			token.Ident, token.Colon, token.Not, token.Ident, token.EOF,
-		}},
-		{"conjunction", "a: b && c\n", []token.Kind{
-			token.Ident, token.Colon, token.Ident, token.And, token.Ident, token.EOF,
-		}},
-		{"disjunction", "a: b || c\n", []token.Kind{
-			token.Ident, token.Colon, token.Ident, token.Or, token.Ident, token.EOF,
 		}},
 		{"a folded scalar is still a string", "a: >\n  text\n", []token.Kind{
 			token.Ident, token.Colon, token.String, token.EOF,
@@ -419,14 +422,22 @@ func TestLexErrors(t *testing.T) {
 		want string
 	}{
 		{"anchor", "a: &x 1\n", "anchors and aliases are not supported"},
+		{"symbolic and", "a: b && c\n", `"&&" is written "and"`},
+		{"symbolic or", "a: b || c\n", `"||" is written "or"`},
+		{"symbolic not", "a: !b\n", `"!" is written "not"`},
 		{"tag", "a: !!str 1\n", "tags are not supported"},
 		{"explicit key", "? a\n", "explicit key indicators"},
 		{"directive", "%YAML 1.2\n", "directives"},
 		{"unterminated string", `a: "oops`, "unterminated string literal"},
 		{"unknown escape", `a: "\q"`, "unknown escape sequence"},
+		{"unknown escape in single quotes", `a: '\q'`, "unknown escape sequence"},
+		{"doubled single quote", `a: 'it''s'`, `a doubled quote is not an escape; write \' instead`},
+		{"doubled double quote", `a: "say ""hi"""`, `a doubled quote is not an escape; write \" instead`},
+		{"own quote in a raw string", `a: r'it''s'`, "a raw string cannot contain its own quote"},
 		{"tab indentation", "a:\n\tb: 1\n", "tabs may not be used for indentation"},
-		{"unterminated interpolation", `a: "{.x`, "unterminated string interpolation"},
-		{"unterminated nested string", `a: "{.x"`, "unterminated string literal inside an interpolation"},
+		{"unterminated interpolation", `a: "\(.x`, "unterminated string interpolation"},
+		{"unterminated interpolation in a block scalar", "a: |\n  \\(.x\n", "unterminated string interpolation"},
+		{"unterminated nested string", `a: "\(.x"`, "unterminated string literal inside an interpolation"},
 		{"content after block header", "a: | junk\n  x\n", "unexpected content after block scalar header"},
 	}
 

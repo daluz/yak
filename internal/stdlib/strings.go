@@ -3,6 +3,7 @@ package stdlib
 import (
 	"strings"
 
+	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/eval"
 	"github.com/daluz/yak/internal/module"
 )
@@ -13,17 +14,16 @@ func init() {
 	module.Register(module.BuiltinModule{Path: "std.strings", Builtins: []*eval.Builtin{
 		{Name: "upper", Params: valueParam, Fn: mapString("upper", strings.ToUpper)},
 		{Name: "lower", Params: valueParam, Fn: mapString("lower", strings.ToLower)},
-		{Name: "trim", Params: valueParam, Fn: mapString("trim", strings.TrimSpace)},
-		{Name: "trimPrefix", Params: []string{"value", "prefix"}, Fn: mapPair("trimPrefix", strings.TrimPrefix)},
-		{Name: "trimSuffix", Params: []string{"value", "suffix"}, Fn: mapPair("trimSuffix", strings.TrimSuffix)},
-		{Name: "contains", Params: []string{"value", "substring"}, Fn: testPair("contains", strings.Contains)},
-		{Name: "startsWith", Params: []string{"value", "prefix"}, Fn: testPair("startsWith", strings.HasPrefix)},
-		{Name: "endsWith", Params: []string{"value", "suffix"}, Fn: testPair("endsWith", strings.HasSuffix)},
-		{Name: "replace", Params: []string{"value", "old", "new"}, Fn: replace},
-		{Name: "repeat", Params: []string{"value", "count"}, Fn: repeat},
-		{Name: "truncate", Params: []string{"value", "length"}, Fn: truncate},
-		{Name: "split", Params: []string{"value", "separator"}, Fn: split},
-		{Name: "join", Params: []string{"values", "separator"}, Fn: join},
+		{Name: "trim", Params: append(params("value"), optional("characters", &ast.Null{})), Fn: trim},
+		{Name: "trimPrefix", Params: params("value", "prefix"), Fn: mapPair("trimPrefix", strings.TrimPrefix)},
+		{Name: "trimSuffix", Params: params("value", "suffix"), Fn: mapPair("trimSuffix", strings.TrimSuffix)},
+		{Name: "startsWith", Params: params("value", "prefix"), Fn: testPair("startsWith", strings.HasPrefix)},
+		{Name: "endsWith", Params: params("value", "suffix"), Fn: testPair("endsWith", strings.HasSuffix)},
+		{Name: "replace", Params: params("value", "old", "new"), Fn: replace},
+		{Name: "repeat", Params: params("value", "count"), Fn: repeat},
+		{Name: "truncate", Params: params("value", "length"), Fn: truncate},
+		{Name: "split", Params: append(params("value"), optional("separator", &ast.Null{})), Fn: split},
+		{Name: "join", Params: params("values", "separator"), Fn: join},
 	}})
 }
 
@@ -102,20 +102,62 @@ func truncate(args []*eval.Thunk) (eval.Value, error) {
 	return eval.String(s), nil
 }
 
-// split cuts a string around every separator. An empty separator splits it
-// into its characters, and an empty string splits into nothing.
-func split(args []*eval.Thunk) (eval.Value, error) {
-	s, sep, err := stringPair("split", args)
+// trim removes whitespace from either end of a string, or any of the given
+// characters when there are some.
+func trim(args []*eval.Thunk) (eval.Value, error) {
+	s, err := stringArg("trim", args[0])
 	if err != nil {
 		return nil, err
 	}
-	var items []*eval.Elem
-	if s != "" {
-		for _, part := range strings.Split(s, sep) {
-			items = append(items, eval.Item(eval.String(part)))
-		}
+	chars, given, err := optionalString("trim", args[1])
+	if err != nil {
+		return nil, err
+	}
+	if !given {
+		return eval.String(strings.TrimSpace(s)), nil
+	}
+	return eval.String(strings.Trim(s, chars)), nil
+}
+
+// split cuts a string around every separator. An empty separator splits it
+// into its characters, and an empty string splits into nothing. Without a
+// separator it cuts around every run of whitespace, leaving out whitespace
+// at either end.
+func split(args []*eval.Thunk) (eval.Value, error) {
+	s, err := stringArg("split", args[0])
+	if err != nil {
+		return nil, err
+	}
+	sep, given, err := optionalString("split", args[1])
+	if err != nil {
+		return nil, err
+	}
+	var parts []string
+	switch {
+	case !given:
+		parts = strings.Fields(s)
+	case s != "":
+		parts = strings.Split(s, sep)
+	}
+	items := make([]*eval.Elem, len(parts))
+	for i, part := range parts {
+		items[i] = eval.Item(eval.String(part))
 	}
 	return eval.NewArray(items), nil
+}
+
+// optionalString reads an argument that is a string, or null when it was
+// left out.
+func optionalString(name string, arg *eval.Thunk) (string, bool, error) {
+	v, err := arg.Value()
+	if err != nil {
+		return "", false, err
+	}
+	if _, none := v.(eval.Null); none {
+		return "", false, nil
+	}
+	s, err := stringArg(name, arg)
+	return s, err == nil, err
 }
 
 // join is the reverse of split. Its items have to be strings already; one

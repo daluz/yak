@@ -12,9 +12,9 @@ trimmed:
   prefix: strings.trimPrefix("v1.2.3", "v")
   suffix: strings.trimSuffix("app.yak", ".yak")
   untouched: strings.trimPrefix("1.2.3", "v")
+  characters: strings.trim("--==title==--", "-=")
 
 tests:
-  contains: strings.contains(name, "Front")
   starts: strings.startsWith(name, "Web")
   ends: strings.endsWith(name, "web")
 
@@ -29,6 +29,7 @@ split:
   hosts: strings.split($$.hosts, ",")
   characters: strings.split("abc", "")
   empty: strings.split("", ",")
+  whitespace: strings.split("  --verbose \t --port 80\n")
 
 ## join is the reverse of split.
 joined: strings.join(strings.split($$.hosts, ","), " | ")

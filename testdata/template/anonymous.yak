@@ -4,22 +4,22 @@ local apply(fn, to) = fn(to)
 local twice(fn, to) = fn(fn(to))
 local call(fn) = fn()
 
-applied: apply((s) => "{s}!", "web")
-twiced: twice((s) => "{s}{s}", "ab")
+applied: apply((s) => "\(s)!", "web")
+twiced: twice((s) => "\(s)\(s)", "ab")
 nullary: call(() => "no parameters")
 
 ## The parameters are the ones a binding declares, defaults included, and
 ## the function itself may be given by name.
-defaulted: apply((s, mark = "?") => "{s}{mark}", "hm")
-named: apply(fn = (s) => "{s}!", to = "api")
+defaulted: apply((s, mark = "?") => "\(s)\(mark)", "hm")
+named: apply(fn = (s) => "\(s)!", to = "api")
 
 ## One may be bound to a name, and it sees what was in scope where it was
 ## written rather than where it is called.
-local shout = (s) => "{s}!"
+local shout = (s) => "\(s)!"
 bound: shout("api")
 
 name: "shop"
-local label = (suffix) => "{.name}-{suffix}"
+local label = (suffix) => "\(.name)-\(suffix)"
 lexical: label("web")
 
 ## A function may return one, which keeps the arguments of the call that

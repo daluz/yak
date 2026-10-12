@@ -255,7 +255,7 @@ type Coalesce struct {
 	Y Node
 }
 
-// Unary is "!x".
+// Unary is "not x" or "-x".
 type Unary struct {
 	Base
 	Op token.Kind

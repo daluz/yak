@@ -1,0 +1,36 @@
+import {
+  std.json
+  std.yaml
+  std.base64
+}
+
+config::
+  name: "web"
+  ports: [80, 443]
+  debug: false
+  owner: null
+
+json:
+  compact: json.encode($.config)
+  indented: json.encode($.config, 2)
+  scalar: json.encode("say \"hi\"")
+  decoded: json.decode(r'{"b": [1, 2.5, true, null], "a": "x"}')
+  number: json.decode("42")
+  roundTrip: json.decode(json.encode($.config))
+
+yaml:
+  file: yaml.encode($.config)
+  decoded: yaml.decode("replicas: 3\nimage: nginx\n")
+  empty: yaml.decode("")
+  sequence: yaml.decode("- a\n- b\n")
+
+base64:
+  encoded: base64.encode("user:pässword")
+  decoded: base64.decode("dXNlcjpww6Rzc3dvcmQ=")
+  empty: base64.encode("")
+
+## A Secret's data is base64 of each value.
+import std.maps
+local credentials = {username: "admin", password: "hunter2"}
+secret:
+  data: {[k]: base64.encode(credentials[k]) for k in maps.keys(credentials)}

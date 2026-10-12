@@ -1,0 +1,1 @@
+yaml-decode-stream.yak:2:19: "decode" cannot decode its value: parsing YAML: it holds more than one document

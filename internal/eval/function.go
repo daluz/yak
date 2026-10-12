@@ -63,16 +63,33 @@ func evalCall(node *ast.Call, env *Env) (Value, error) {
 // The arguments stay behind thunks of the calling environment, and the
 // parameters share one frame, so a default may name another parameter.
 func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
-	session := f.env.doc.session
-	who := callee{name: f.decl.Name, pos: f.decl.Pos()}
-	if session.depth >= maxCallDepth {
-		return nil, errorf(node.Pos(), "%s is nested more than %d calls deep and may not terminate",
-			who, maxCallDepth)
+	if err := f.checkDepth(node.Pos()); err != nil {
+		return nil, err
 	}
-	args, err := matchArguments(who, f.decl.Params, node, env)
+	args, err := matchArguments(f.callee(), f.decl.Params, node, env)
 	if err != nil {
 		return nil, err
 	}
+	return f.run(node.Pos(), args)
+}
+
+func (f *Function) callee() callee {
+	return callee{name: f.decl.Name, pos: f.decl.Pos()}
+}
+
+func (f *Function) checkDepth(pos token.Pos) error {
+	if f.env.doc.session.depth >= maxCallDepth {
+		return errorf(pos, "%s is nested more than %d calls deep and may not terminate",
+			f.callee(), maxCallDepth)
+	}
+	return nil
+}
+
+// run evaluates the body with args bound to the parameters they name. pos is
+// the call, which a missing argument is reported at.
+func (f *Function) run(pos token.Pos, args map[string]*Thunk) (Value, error) {
+	session := f.env.doc.session
+	who := f.callee()
 	s := &scope{outer: f.env.scope, binds: make(map[string]*Thunk, len(f.decl.Params))}
 	inner := &Env{doc: f.env.doc, self: f.env.self, scope: s}
 	for _, p := range f.decl.Params {
@@ -82,12 +99,55 @@ func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
 		case p.Default != nil:
 			s.binds[p.Name] = &Thunk{node: p.Default, env: inner, pos: p.Default.Pos()}
 		default:
-			return nil, missingArgument(who, p.Name, node)
+			return nil, missingArgument(who, p.Name, pos)
 		}
 	}
 	session.depth++
 	defer func() { session.depth-- }()
 	return evalNode(f.decl.Body, inner)
+}
+
+// Call calls fn with arguments that are already values, which is how a
+// built-in calls a function it was handed. The arguments go by position, and
+// pos is where the call is reported, both for a mistake in the call and as
+// the position of every argument.
+func Call(fn Value, pos token.Pos, args ...Value) (Value, error) {
+	thunks := make([]*Thunk, len(args))
+	for i, a := range args {
+		thunks[i] = &Thunk{state: resolved, val: a, pos: pos}
+	}
+	switch f := fn.(type) {
+	case *Function:
+		if err := f.checkDepth(pos); err != nil {
+			return nil, err
+		}
+		matched, err := byPosition(f.callee(), f.decl.Params, pos, thunks)
+		if err != nil {
+			return nil, err
+		}
+		return f.run(pos, matched)
+	case *Builtin:
+		matched, err := byPosition(callee{name: f.Name}, f.Params, pos, thunks)
+		if err != nil {
+			return nil, err
+		}
+		return f.run(pos, matched)
+	default:
+		return nil, errorf(pos, "cannot call a value of type %s", fn.TypeName())
+	}
+}
+
+// byPosition matches arguments to the parameters they stand in for by
+// position, as matchArguments does for a call written without names.
+func byPosition(fn callee, params []*ast.Param, pos token.Pos, args []*Thunk) (map[string]*Thunk, error) {
+	if len(args) > len(params) {
+		return nil, errorf(pos, "%s takes at most %s, found %d", fn, argumentCount(len(params)), len(args))
+	}
+	matched := make(map[string]*Thunk, len(args))
+	for i, t := range args {
+		matched[params[i].Name] = t
+	}
+	return matched, nil
 }
 
 // matchArguments matches the arguments of a call to the names of the
@@ -119,8 +179,8 @@ func matchArguments(fn callee, params []*ast.Param, node *ast.Call, env *Env) (m
 
 // missingArgument reports a parameter that the call left out and that has no
 // default to fall back on.
-func missingArgument(fn callee, param string, node *ast.Call) error {
-	return errorf(node.Pos(), "%s needs an argument for parameter %q", fn, param)
+func missingArgument(fn callee, param string, pos token.Pos) error {
+	return errorf(pos, "%s needs an argument for parameter %q", fn, param)
 }
 
 // argumentCount counts arguments for a diagnostic.

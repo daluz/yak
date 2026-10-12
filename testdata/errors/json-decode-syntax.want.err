@@ -1,0 +1,1 @@
+json-decode-syntax.yak:2:18: "decode" cannot decode its value: JSON:1:7: missing value after object key

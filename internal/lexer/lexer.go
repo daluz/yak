@@ -193,13 +193,13 @@ func (l *lexer) prevIsSpace() bool {
 // parser can tell apart.
 var operators = []token.Kind{
 	token.DoubleColon, token.ColonQuestion, token.Merge, token.DoubleDollar,
-	token.Arrow, token.Coalesce, token.And, token.Or,
+	token.Arrow, token.Coalesce,
 	token.Eq, token.Ne, token.Le, token.Ge,
 	token.Colon, token.Assign, token.Dash, token.Plus, token.Star,
 	token.Slash, token.Percent, token.Comma, token.Dollar,
 	token.LBracket, token.RBracket, token.LBrace, token.RBrace,
 	token.LParen, token.RParen,
-	token.Lt, token.Gt, token.Not, token.Question,
+	token.Lt, token.Gt, token.Question,
 }
 
 func (l *lexer) scanToken() error {
@@ -241,7 +241,11 @@ func (l *lexer) scanToken() error {
 		l.advance()
 		l.emit(token.Token{Kind: token.DollarIdent, Lit: l.readIdent(), Pos: start})
 		return nil
-	case c == '|' && l.peekAt(1) != '|':
+	case c == '|' && l.peekAt(1) == '|':
+		return l.errorf(start, "%q is written %q in yak", "||", token.KeywordOr)
+	case c == '&' && l.peekAt(1) == '&':
+		return l.errorf(start, "%q is written %q in yak", "&&", token.KeywordAnd)
+	case c == '|':
 		if !l.block {
 			return l.errorf(start, "unexpected %q", string(c))
 		}
@@ -252,11 +256,12 @@ func (l *lexer) scanToken() error {
 		return l.errorf(start,
 			"explicit key indicators (%q) are not supported; use [expr] for a computed key, %q for an optional access, or %q for a default",
 			"?", "?.", "??")
-	case c == '&' && l.peekAt(1) != '&':
+	case c == '&':
 		return l.errorf(start, "anchors and aliases are not supported in yak; use a local variable instead")
 	case c == '!' && l.peekAt(1) == '!':
-		// "!!" can only be a tag: negating a boolean twice says nothing.
 		return l.errorf(start, "tags are not supported in yak yet; they will arrive with schemas")
+	case c == '!' && l.peekAt(1) != '=':
+		return l.errorf(start, "%q is written %q in yak", "!", token.KeywordNot)
 	case c == '%' && l.block && l.col == 1:
 		// A directive is written at the start of a line, which is the one
 		// place a "%" cannot be the remainder operator.

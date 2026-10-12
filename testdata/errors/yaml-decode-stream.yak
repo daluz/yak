@@ -1,0 +1,2 @@
+import std.yaml
+docs: yaml.decode("a: 1\n---\nb: 2\n")

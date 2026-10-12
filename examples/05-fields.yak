@@ -10,7 +10,7 @@ defaults::
 
 services:
   web:
-    image: "{$.defaults.image}:{$.defaults.tag}"
+    image: "\($.defaults.image):\($.defaults.tag)"
 
 ## ":?" hides an entry only when its value turns out to be null, which is how
 ## an entry the context may say nothing about is left out. This context

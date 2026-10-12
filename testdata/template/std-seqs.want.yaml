@@ -1,0 +1,111 @@
+ports:
+  - 8080
+  - 443
+  - 80
+  - 443
+names:
+  - web
+  - api
+  - db
+sorted:
+  numbers:
+    - 80
+    - 443
+    - 443
+    - 8080
+  strings:
+    - api
+    - db
+    - web
+  byWeight:
+    - api
+    - db
+    - web
+  named:
+    - web
+    - db
+    - api
+  empty: []
+  nullKey:
+    - 1
+    - 2
+    - 3
+reversed:
+  - db
+  - api
+  - web
+unique:
+  - 8080
+  - 443
+  - 80
+flattened:
+  - 1
+  - 2
+  - 3
+taken:
+  some:
+    - web
+    - api
+  more:
+    - web
+    - api
+    - db
+dropped:
+  some:
+    - api
+    - db
+  more: []
+ranges:
+  stop:
+    - 0
+    - 1
+    - 2
+  counted:
+    - 0
+    - 1
+    - 2
+  offset:
+    - 8080
+    - 8081
+    - 8082
+  stepped:
+    - 0
+    - 3
+    - 6
+    - 9
+  down:
+    - 5
+    - 3
+    - 1
+  named:
+    - 1
+    - 3
+    - 5
+  empty: []
+  unreachable: []
+sums:
+  integers: 9046
+  mixed: 1.5
+  empty: 0
+extremes:
+  min: 80
+  max: web
+  lightest: api
+  heaviest: web
+quantified:
+  anyPrivileged: true
+  allPrivileged: false
+  anyTrue: true
+  allTrue: false
+  anyOfNone: false
+  allOfNone: true
+aliases:
+  - - 2
+    - 1
+  - - 2
+    - 1
+descending:
+  - 8080
+  - 443
+  - 443
+  - 80

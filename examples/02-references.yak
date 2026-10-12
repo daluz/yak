@@ -8,7 +8,7 @@ region: "us-east-1"
 
 metadata:
   app: ..name             ## the parent mapping's "name"
-  label: "{.app}-web"     ## a sibling of this entry, via "."
+  label: "\(.app)-web"     ## a sibling of this entry, via "."
   same: $self.label       ## "$self" is the long spelling of "."
   annotations:
     root: $.name          ## "$" is the root of this document

@@ -9,8 +9,8 @@
 ## write the Kubernetes dialect of YAML.
 
 local {
-  name = "{$$.app}-{$$.component}"
-  image = "{$$.image.repo}:{$$.image.tag}"
+  name = "\($$.app)-\($$.component)"
+  image = "\($$.image.repo):\($$.image.tag)"
   prod = $$.env == "prod"
 }
 
@@ -51,7 +51,7 @@ spec:
 ---
 ## Nothing carries across a "---": each document has its own bindings and its
 ## own "$". The context is the one thing they share.
-local name = "{$$.app}-{$$.component}"
+local name = "\($$.app)-\($$.component)"
 
 apiVersion: "v1"
 kind: "Service"

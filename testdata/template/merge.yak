@@ -1,5 +1,5 @@
 local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
-local labelled = {inner: {name: "web", label: "{.name}-1"}}
+local labelled = {inner: {name: "web", label: "\(.name)-1"}}
 
 # "<<" merges two mappings at every depth, and the one on the right decides.
 # "limits" is merged rather than replaced, and "port" is appended.
@@ -39,7 +39,7 @@ entry:
 # reference and out of the output.
 hidden:
   <<:: defaults
-  ref: "{.image}:{.limits.cpu}"
+  ref: "\(.image):\(.limits.cpu)"
 
 # ":?" merges nothing when what it names is null, which is how an override
 # the context may not carry is read.

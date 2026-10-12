@@ -12,7 +12,7 @@ local tag = "3.20"
 apiVersion: "apps/v1"
 kind: "Deployment"
 metadata:
-  name: "{$$.app.name}-web"
+  name: "\($$.app.name)-web"
   labels:
     app: ..name
 spec:
@@ -20,7 +20,7 @@ spec:
   selector:
     matchLabels: $.metadata.labels
   containers:
-    - image: "{image}:{tag}"
+    - image: "\(image):\(tag)"
       env:
         - name: "APP_NAME"
           value: $$.app.name
@@ -96,12 +96,13 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
 
 - **Strings are always quoted.** An unquoted value is an expression, which is
   what lets `alias: .name` mean a reference instead of the text ".name".
-- **Every string interpolates.** `"hello {.name}"`. Double a brace for a
-  literal one, and prefix with `r` to turn interpolation off altogether:
-  `r"hello {literal}"`.
+- **Every string interpolates.** `"hello \(.name)"`. Braces are plain text,
+  so `"{{ .Values.name }}"` passes through untouched. Write `\\(` for a
+  literal `\(`, and prefix with `r` to turn interpolation off altogether:
+  `r"hello \(literal)"`.
 - **Only `true` and `false` are booleans.** No `yes`, `no`, `on`, or `off`.
 - **No anchors and no tags.** References and `local` bindings replace anchors;
-  tags return with schemas, and `!` means boolean `not` in the meantime.
+  tags return with schemas.
 - **Relative references.** `.name` is a sibling, `..name` the parent's,
   `...name` the grandparent's, `$.name` the document root's, and `$$.name` the
   context's. `$self`, `$root` and `$context` spell the first, fourth and fifth
@@ -114,7 +115,7 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
   value is null.
 - **Local bindings.** `local name = "web"`, or a `local { ... }` block of
   them. They are named, scoped, and produce no output.
-- **Functions.** `local url(host, port = 8080) = "https://{host}:{port}"`,
+- **Functions.** `local url(host, port = 8080) = "https://\(host):\(port)"`,
   called with arguments by position or by name: `url("web", port = 443)`. An
   anonymous one is written `(x) => x * 2`.
 - **Built-ins.** `size` measures a sequence, mapping or string, `empty` asks
@@ -130,8 +131,9 @@ $ yak template app.toml.yak -O --output-dir build  # writes build/app.toml
 - **Optional access and defaults.** `?.` and `?[` give `null` where a field or
   an index is missing, and `??` supplies the value to use instead.
 - **Conditionals.** `if $$.env == "prod" then 5 else 1`, built on the usual
-  `==`, `<`, `&&` and `!` operators. Leave the `else` out and a false
-  condition yields `null`, which `:?` drops.
+  `==`, `<`, `and`, `or` and `not` operators, and `"web" in $$.roles` (or
+  `not in`) asks whether a sequence, mapping or string holds something. Leave the `else` out and a
+  false condition yields `null`, which `:?` drops.
 - **Comprehensions.** `[p.name for p in $$.ports if p.tls]` builds a
   sequence, and `{[p.name]: p.number for p in $$.ports}` a mapping.
 - **Comments survive.** They are carried into the output, and the ones

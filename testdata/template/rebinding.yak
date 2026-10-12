@@ -7,17 +7,17 @@ local tag = "v1"
 first: tag
 
 ## The rebinding's own value reads the binding it replaces.
-local tag = "{tag}-patched"
+local tag = "\(tag)-patched"
 second: tag
 
 ## A nested block is read at the lines it is written on.
 staging:
-  image: "app:{tag}"
+  image: "app:\(tag)"
 
 local tag = "latest"
 
 production:
-  image: "app:{tag}"
+  image: "app:\(tag)"
 third: tag
 
 ## A rebound function may call the one it replaces.

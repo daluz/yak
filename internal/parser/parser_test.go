@@ -7,6 +7,7 @@ import (
 
 	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/parser"
+	"github.com/daluz/yak/internal/token"
 )
 
 // dump renders a tree as a compact s-expression so that tests can state the
@@ -62,9 +63,16 @@ func dump(n ast.Node) string {
 	case *ast.Coalesce:
 		return "(" + dump(t.X) + "??" + dump(t.Y) + ")"
 	case *ast.Unary:
+		if t.Op == token.Not {
+			return "not(" + dump(t.X) + ")"
+		}
 		return strings.Trim(t.Op.String(), `"`) + dump(t.X)
 	case *ast.Binary:
-		return "(" + dump(t.X) + strings.Trim(t.Op.String(), `"`) + dump(t.Y) + ")"
+		op := strings.Trim(t.Op.String(), `"`)
+		if t.Op == token.And || t.Op == token.Or || t.Op == token.In || t.Op == token.NotIn {
+			op = " " + op + " "
+		}
+		return "(" + dump(t.X) + op + dump(t.Y) + ")"
 	case *ast.If:
 		out := "if(" + dump(t.Cond) + ";" + dump(t.Then)
 		if t.Else != nil {
@@ -225,7 +233,7 @@ func TestParseReferences(t *testing.T) {
 		{"yak", "a: $yak\n", `{"a":yak}`},
 		{"yak field", "a: $yak.version\n", `{"a":yak.version}`},
 		{"yak index", "a: $yak.contextpaths[0]\n", `{"a":yak.contextpaths[0]}`},
-		{"yak in an interpolation", `a: "{$yak.filepath}"`, `{"a":concat(yak.filepath)}`},
+		{"yak in an interpolation", `a: "\($yak.filepath)"`, `{"a":concat(yak.filepath)}`},
 		{"index", "a: $.b[0]\n", `{"a":root.b[0]}`},
 		{"string index", `a: $.b["c"]`, `{"a":root.b["c"]}`},
 		{"chained index", "a: $.b[0].c\n", `{"a":root.b[0].c}`},
@@ -297,7 +305,7 @@ func TestParseFunctions(t *testing.T) {
 		{"chained after a call", "local f(a) = a\nb: f(1).c[0]\n", `{f=fn(a;ident(a)) "b":ident(f)(1).c[0]}`},
 		{"call of a call", "local f(a) = a\nb: f(1)(2)\n", `{f=fn(a;ident(a)) "b":ident(f)(1)(2)}`},
 		{"call binds tighter than an operator", "local f(a) = a\nb: f(1) == 2\n", `{f=fn(a;ident(a)) "b":(ident(f)(1)==2)}`},
-		{"call in an interpolation", "local f(a) = a\nb: \"{f(1)}\"\n", `{f=fn(a;ident(a)) "b":concat(ident(f)(1))}`},
+		{"call in an interpolation", "local f(a) = a\nb: \"\\(f(1))\"\n", `{f=fn(a;ident(a)) "b":concat(ident(f)(1))}`},
 	}
 
 	for _, tc := range tests {
@@ -344,17 +352,29 @@ func TestParseOperators(t *testing.T) {
 		{"equality", "a: 1 == 2\n", `{"a":(1==2)}`},
 		{"inequality", "a: 1 != 2\n", `{"a":(1!=2)}`},
 		{"ordering", "a: 1 < 2\nb: 1 <= 2\nc: 1 > 2\nd: 1 >= 2\n", `{"a":(1<2) "b":(1<=2) "c":(1>2) "d":(1>=2)}`},
-		{"negation", "a: !true\n", `{"a":!true}`},
-		{"double negation needs a space", "a: ! !true\n", `{"a":!!true}`},
-		{"conjunction", "a: true && false\n", `{"a":(true&&false)}`},
-		{"comparison binds tighter than and", "a: 1 < 2 && 3 < 4\n", `{"a":((1<2)&&(3<4))}`},
-		{"and binds tighter than or", "a: true || true && false\n", `{"a":(true||(true&&false))}`},
+		{"negation", "a: not true\n", `{"a":not(true)}`},
+		{"double negation", "a: not not true\n", `{"a":not(not(true))}`},
+		{"not binds looser than comparison", "a: not 1 == 2\n", `{"a":not((1==2))}`},
+		{"not binds looser than membership", "a: not x in y\n", `{"a":not((ident(x) in ident(y)))}`},
+		{"not binds tighter than and", "a: not x and y\n", `{"a":(not(ident(x)) and ident(y))}`},
+		{"not on the right of and", "a: x or not y\n", `{"a":(ident(x) or not(ident(y)))}`},
+		{"not in", "a: x not in y\n", `{"a":(ident(x) not in ident(y))}`},
+		{"not in binds like ordering", "a: x not in y == true\n", `{"a":((ident(x) not in ident(y))==true)}`},
+		{"not in a condition", "a: if not x then 1\n", `{"a":if(not(ident(x));1)}`},
+		{"not stays usable as a key", "not: 1\n", `{"not":1}`},
+		{"conjunction", "a: true and false\n", `{"a":(true and false)}`},
+		{"comparison binds tighter than and", "a: 1 < 2 and 3 < 4\n", `{"a":((1<2) and (3<4))}`},
+		{"and binds tighter than or", "a: true or true and false\n", `{"a":(true or (true and false))}`},
+		{"membership", "a: x in y\n", `{"a":(ident(x) in ident(y))}`},
+		{"membership binds like ordering", "a: x + 1 in y == true\n", `{"a":(((ident(x)+1) in ident(y))==true)}`},
+		{"membership binds tighter than and", "a: x in y and z\n", `{"a":((ident(x) in ident(y)) and ident(z))}`},
+		{"membership in a comprehension filter", "a: [x for x in y if x in z]\n", `{"a":[ident(x) for x in ident(y) if (ident(x) in ident(z))]}`},
+		{"word operators stay usable as keys", "a: 1\nand: 2\nor: 3\n", `{"a":1 "and":2 "or":3}`},
 		{"equality binds looser than ordering", "a: 1 < 2 == true\n", `{"a":((1<2)==true)}`},
-		{"negation binds tighter than comparison", "a: !true == false\n", `{"a":(!true==false)}`},
-		{"coalesce binds looser than or", "a: .x ?? true || false\n", `{"a":(self+0.x??(true||false))}`},
+		{"coalesce binds looser than or", "a: .x ?? true or false\n", `{"a":(self+0.x??(true or false))}`},
 		{"parentheses regroup", "a: (1 < 2) == (3 < 4)\n", `{"a":((1<2)==(3<4))}`},
 		{"left associative", "a: 1 == 2 == true\n", `{"a":((1==2)==true)}`},
-		{"in an interpolation", `a: "{1 < 2}"`, `{"a":concat((1<2))}`},
+		{"in an interpolation", `a: "\(1 < 2)"`, `{"a":concat((1<2))}`},
 		{"greater than beats a folded scalar", "a: .x > 2\n", `{"a":(self+0.x>2)}`},
 		{"addition", "a: 1 + 2\n", `{"a":(1+2)}`},
 		{"subtraction", "a: 1 - 2\n", `{"a":(1-2)}`},
@@ -394,7 +414,7 @@ func TestParseConditionals(t *testing.T) {
 		{"with a comparison", "a: if .n > 1 then 1 else 2\n", `{"a":if((self+0.n>1);1;2)}`},
 		{"wrapped over lines", "a:\n  if true\n  then 1\n  else 2\n", `{"a":if(true;1;2)}`},
 		{"branches may be collections", "a: if true then [1] else {b: 2}\n", `{"a":if(true;[1];{"b":2})}`},
-		{"inside an interpolation", `a: "{if true then "y" else "n"}"`, `{"a":concat(if(true;"y";"n"))}`},
+		{"inside an interpolation", `a: "\(if true then "y" else "n")"`, `{"a":concat(if(true;"y";"n"))}`},
 		{"in a flow sequence", "a: [if true then 1 else 2]\n", `{"a":[if(true;1;2)]}`},
 		{"parenthesized as an operand", "a: (if true then 1 else 2) == 1\n", `{"a":(if(true;1;2)==1)}`},
 		{"a key named else ends it", "a: if true then 1\nelse: 2\n", `{"a":if(true;1) "else":2}`},
@@ -420,7 +440,7 @@ func TestParseComprehensions(t *testing.T) {
 		{"sequence with a filter", "a: [x for x in $$.list if x > 1]\n", `{"a":[ident(x) for x in context.list if (ident(x)>1)]}`},
 		{"sequence over a literal", "a: [x for x in [1, 2]]\n", `{"a":[ident(x) for x in [1 2]]}`},
 		{"mapping with a computed key", "a: {[x]: 1 for x in $$.list}\n", `{"a":{[ident(x)]:1 for x in context.list}}`},
-		{"mapping with an interpolated key", `a: {"k{x}": x for x in $$.list}`, `{"a":{concat("k",ident(x)):ident(x) for x in context.list}}`},
+		{"mapping with an interpolated key", `a: {"k\(x)": x for x in $$.list}`, `{"a":{concat("k",ident(x)):ident(x) for x in context.list}}`},
 		{"mapping with a filter", "a: {[x]: 1 for x in $$.list if true}\n", `{"a":{[ident(x)]:1 for x in context.list if true}}`},
 		{"mapping of hidden entries", "a: {[x]:: 1 for x in $$.list}\n", `{"a":{[ident(x)]::1 for x in context.list}}`},
 		{"a conditional item", "a: [if x then 1 else 2 for x in $$.list]\n", `{"a":[if(ident(x);1;2) for x in context.list]}`},
@@ -443,11 +463,12 @@ func TestParseInterpolation(t *testing.T) {
 		src  string
 		want string
 	}{
-		{"single", `a: "{.b}"`, `{"a":concat(self+0.b)}`},
-		{"surrounded", `a: "x{.b}y"`, `{"a":concat("x",self+0.b,"y")}`},
-		{"nested quotes", `a: "{$$["k"]}"`, `{"a":concat(context["k"])}`},
-		{"raw", `a: r"{.b}"`, `{"a":"{.b}"}`},
-		{"escaped", `a: "{{.b}}"`, `{"a":"{.b}"}`},
+		{"single", `a: "\(.b)"`, `{"a":concat(self+0.b)}`},
+		{"surrounded", `a: "x\(.b)y"`, `{"a":concat("x",self+0.b,"y")}`},
+		{"nested quotes", `a: "\($$["k"])"`, `{"a":concat(context["k"])}`},
+		{"raw", `a: r"\(.b)"`, `{"a":"\\(.b)"}`},
+		{"escaped", `a: "\\(.b)"`, `{"a":"\\(.b)"}`},
+		{"braces", `a: "{.b}"`, `{"a":"{.b}"}`},
 	}
 
 	for _, tc := range tests {
@@ -639,9 +660,13 @@ func TestParseErrors(t *testing.T) {
 		{"dangling dot", "a: $. b\n", "expected a field name"},
 		{"unknown builtin variable", "a: $ctx\n", "unknown builtin variable"},
 		{"super", "a: $super.b\n", `"$super" is not implemented yet`},
-		{"empty interpolation", `a: "{}"`, "empty string interpolation"},
-		{"junk in interpolation", `a: "{.b .c}"`, "unexpected"},
+		{"empty interpolation", `a: "\()"`, "empty string interpolation"},
+		{"junk in interpolation", `a: "\(.b .c)"`, "unexpected"},
 		{"double bang is still a tag", "a: !!true\n", "tags are not supported"},
+		{"bang is written not", "a: !true\n", `"!" is written "not"`},
+		{"symbolic or in an interpolation", `a: "\(b || c)"`, `"||" is written "or"`},
+		{"not as an operand", "a: 1 == not true\n", `a "not" cannot be used as an operand here`},
+		{"not as a binding name", "local not = 1\na: 1\n", `"not" is a keyword and cannot name a binding`},
 		{"if without then", "a: if true 1\n", `expected "then"`},
 		{"if as an operand", "a: 1 == if true then 1 else 2\n", "wrap it in parentheses"},
 		{"a keyword as a value", "a: then\n", `"then" is a keyword`},

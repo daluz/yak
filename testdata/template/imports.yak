@@ -6,7 +6,7 @@ import {
   base
 }
 
-image: "{defaults.image}:{defaults.tag}"
+image: "\(defaults.image):\(defaults.tag)"
 replicas: defaults.replicas
 labels: labels.make("web")
 team: common.team

@@ -4,22 +4,27 @@ double: "hello"
 single: 'hello'
 escapes: "tab:\tquote:\"backslash:\\"
 unicode: "caf\u00e9"
-interpolated: "hello {.who}"
-single-interpolated: 'hello {.who}'
-mixed: "{.who} and {.who}"
-raw-double: r"no {interpolation} here"
-raw-single: r'no {interpolation} here'
-escaped-braces: "a literal {{braces}} pair"
-single-escaped: 'a literal {{braces}} pair'
-lone-close-brace: "a } closes nothing"
+interpolated: "hello \(.who)"
+single-interpolated: 'hello \(.who)'
+mixed: "\(.who) and \(.who)"
+raw-double: r"no \(interpolation) here"
+raw-single: r'no \(interpolation) here'
+braces: "{braces} and {{ .Go }} templates are text"
+single-braces: '{braces} and {{ .Go }} templates are text'
+escaped-interpolation: "a literal \\(paren"
+single-escaped: 'a literal \\(paren'
+single-escapes: 'tab:\tquote:\'backslash:\\'
+double-in-single: 'say "hi"'
+single-in-double: "it's"
+lone-close-paren: "a ) closes nothing"
 lone-dollar: "costs $5"
-nested-quotes: "zone is {$$["region"]}"
+nested-quotes: "zone is \($$["region"])"
 folded-quotes: "one
   two"
 literal-block: |
   first line
-  second line for {.who}
-  a literal {{brace}} needs no backslash here
+  second line for \(.who)
+  a literal {brace} needs no escape, and \\(this) is not interpolated
 literal-strip: |-
   no trailing newline
 literal-keep: |+
@@ -33,7 +38,7 @@ folded-block: >
 folded-strip: >-
   folded without a trailing newline
 raw-block: r|
-  {untouched}
+  \(untouched)
 indented-block: |
   outer
     inner indented

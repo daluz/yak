@@ -1,15 +1,15 @@
 ## Functions: positional and named arguments, and parameter defaults.
-local url(host, port = 8080, scheme = "https") = "{scheme}://{host}:{port}"
-local { shout(s) = "{s}!", tier(replicas) = if replicas > 3 then "gold" else "bronze" }
+local url(host, port = 8080, scheme = "https") = "\(scheme)://\(host):\(port)"
+local { shout(s) = "\(s)!", tier(replicas) = if replicas > 3 then "gold" else "bronze" }
 
 ## A default may name a parameter declared before it.
-local span(from, to = from) = "{from}..{to}"
+local span(from, to = from) = "\(from)..\(to)"
 
 ## The body may be an indented block, and it sees what was in scope where
 ## it was written rather than where it is called.
 local region = $$.region
 local endpoint(name) =
-  host: "{name}.{region}.example.com"
+  host: "\(name).\(region).example.com"
   address: url(.host, port = 443)
 
 services:
