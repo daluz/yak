@@ -1,12 +1,9 @@
 # A tour of yak
 
-This tour introduces yak one feature at a time, starting from a file that
-looks like ordinary YAML and ending with a pair of Kubernetes manifests built
-from layered configuration. Every example is a complete template you can
-paste into a file and render yourself.
-
-The tour explains things by showing them. When you want the precise rules
-behind a feature, [SPEC.md](SPEC.md) defines the language, and
+This tour introduces yak one feature at a time, from a file that looks like
+ordinary YAML to a pair of Kubernetes manifests built from layered
+configuration. Every example is a complete template you can render yourself.
+For the precise rules, [SPEC.md](SPEC.md) defines the language and
 [CLI.md](CLI.md) documents the command line tool.
 
 - [1. Your first template](#1-your-first-template)
@@ -55,10 +52,9 @@ replicas: 2
 greeting: hello from web
 ```
 
-Most of that is plain YAML. The new part is `\(.name)`, which reads the
-`name` entry beside it and writes it into the string. The rest of the tour is
-about what can go between those parentheses, and everywhere else a value can
-be written.
+Most of that is plain YAML. The new part is `\(.name)`, which writes the
+`name` entry beside it into the string. The rest of the tour is about what can
+go between those parentheses, and anywhere else a value can be written.
 
 ## 2. Values
 
@@ -73,9 +69,8 @@ enabled: true
 owner: null
 ```
 
-The first rule to learn is the one that makes everything else possible:
-**strings are always quoted**. An unquoted value is an expression, so
-forgetting the quotes is an error rather than a string:
+The first rule to learn: **strings are always quoted**. An unquoted value is
+an expression, so forgetting the quotes is an error:
 
 ```yaml
 name: web
@@ -86,9 +81,8 @@ $ yak render values.yak
 yak: values.yak:1:7: unknown identifier "web"; strings must be quoted, and no "local" binding is in scope here
 ```
 
-YAML is generous about what counts as a boolean; yak is not. Only `true` and
-`false` are booleans, and the words YAML also accepts are errors that say what
-to write instead:
+Only `true` and `false` are booleans. The other words YAML accepts are errors
+that say what to write instead:
 
 ```yaml
 enabled: yes
@@ -103,9 +97,8 @@ The features in the rest of this tour replace them.
 
 ## 3. Strings
 
-Double and single quotes mean the same thing in yak, as they do in Python.
-Both process backslash escapes, so pick whichever quote the text does not
-contain:
+Double and single quotes mean the same thing, as in Python. Both process
+backslash escapes, so pick whichever quote the text does not contain:
 
 ```yaml
 double: "a tab:\there"
@@ -153,8 +146,8 @@ variables pass through untouched. Writing `\\(` gives a literal `\(`.
 
 ### Raw strings
 
-A string prefixed with `r` turns off both interpolation and escapes. That is
-what text full of backslashes, such as a regular expression, wants:
+An `r` prefix turns off both interpolation and escapes, which suits text full
+of backslashes, such as a regular expression:
 
 ```yaml
 pattern: r"^\(\d+\)$"
@@ -230,9 +223,8 @@ port-81: 3
 for: 4
 ```
 
-Words such as `for` and `if` have a meaning in expressions, but they stay
-usable as keys. Writing the same key twice in one mapping is an error rather
-than a silent overwrite.
+Words such as `for` and `if` mean something in expressions, but still work as
+keys. Writing the same key twice in one mapping is an error.
 
 ## 5. References
 
@@ -302,14 +294,13 @@ name: "web"
 A value that ends up depending on itself is reported as a circular reference,
 along with the positions that form the cycle.
 
-`.` and `$` have longer spellings, `$self` and `$root`, for when a template
-reads better saying which mapping it means.
+`.` and `$` can also be spelled `$self` and `$root`.
 
 ## 6. The context
 
-A template usually renders data that comes from outside it: an environment
-name, a replica count, a list of ports. That data is the *context*, given
-with `-c` as YAML or JSON files, and read with `$$` (or `$context` in full).
+Data from outside the template, such as an environment name or a list of
+ports, is the *context*. It is given with `-c` as YAML or JSON files, and read
+with `$$` (or `$context` in full).
 
 Save this as `prod.yaml`:
 
@@ -334,11 +325,9 @@ environment: prod
 replicas: 3
 ```
 
-Several `-c` files merge into one context, with later files winning, which is
-how a base configuration and an environment's overrides are layered.
-
-The context is plain YAML, not yak: a context file needs no quotes, and
-nothing in it is interpolated.
+Several `-c` files merge into one context, later files winning, which layers
+an environment's overrides on a base configuration. The context is plain
+YAML, not yak: it needs no quotes, and nothing in it is interpolated.
 
 ### Values that may be missing
 
@@ -353,8 +342,7 @@ yak: app.yak:1:9: no field "region" in mapping (the mapping is empty)
 ```
 
 `?.` reads a field that may not be there, giving `null` instead of failing,
-and `??` supplies a value to use in place of a `null`. They are usually
-written together:
+and `??` replaces a `null`. They are usually written together:
 
 ```yaml
 replicas: $$?.replicas ?? 1
@@ -376,9 +364,8 @@ Only `null` triggers `??`; `false`, `0` and `""` are values like any other.
 
 ## 7. Hidden and optional entries
 
-Writing `::` instead of `:` keeps an entry out of the output while leaving it
-available to references. That is how shared defaults sit beside the data that
-uses them:
+`::` instead of `:` keeps an entry out of the output but available to
+references, so shared defaults can sit beside the data that uses them:
 
 ```yaml
 defaults::
@@ -397,9 +384,8 @@ services:
     image: alpine:3.20
 ```
 
-Writing `:?` leaves an entry out only when its value is `null`, which is how
-an entry the context may not supply disappears instead of rendering as
-`null`:
+`:?` leaves an entry out only when its value is `null`, so an entry the
+context may not supply disappears instead of rendering as `null`:
 
 ```yaml
 replicas:? $$?.replicas
@@ -417,8 +403,8 @@ debug: false
 ## 8. Local bindings
 
 A hidden entry still belongs to a mapping. When a value just needs a name,
-`local` gives it one. Bindings render nothing, and reading one back is a
-matter of writing its name:
+`local` gives it one. Bindings render nothing; write the name to read one
+back:
 
 ```yaml
 local name = "web"
@@ -555,9 +541,9 @@ ports:
 Two integers give an integer, except that `/` always gives a float, so
 `3 / 2` is `1.5` rather than a silently truncated `1`.
 
-Because `-` can also appear inside a name like `plain-key`, a subtraction is
-written with spaces on both sides. `a-b` is one name, `a - b` is a
-subtraction, and `a -b` is an error that says so:
+`-` can appear inside a name like `plain-key`, so a subtraction needs spaces
+on both sides. `a-b` is one name, `a - b` is a subtraction, and `a -b` is an
+error that says so:
 
 ```console
 yak: app.yak:2:11: a subtraction needs whitespace on both sides of its "-"
@@ -605,13 +591,12 @@ debug: true
 banner: not for production use
 ```
 
-Leaving out the `else` gives `null` when the condition is false, and paired
-with `:?` that is how an entry appears only under some condition: with
-`env: prod`, `debug` would be left out entirely. A long conditional can be
-spread over several lines, as `banner` is.
+Without `else`, a false condition gives `null`, so with `:?` an entry appears
+only under some condition: with `env: prod`, `debug` would be left out. A long
+conditional can span several lines, as `banner` does.
 
-The condition has to be a boolean. yak has no "truthy" values, so `if 1`
-is an error rather than a guess:
+The condition must be a boolean. yak has no "truthy" values, so `if 1` is an
+error:
 
 ```console
 yak: app.yak:1:7: the condition of an "if" must be a boolean, found integer
@@ -686,10 +671,9 @@ labels:
 
 ### Functions as values
 
-A function is a value like any other: it can be passed to another function,
-returned from one, or bound to a second name. A function written inline has
-no name, so its parameters go in parentheses and `=>` separates them from the
-body:
+A function is a value: it can be passed to another function, returned from
+one, or bound to a second name. An inline function has no name, so its
+parameters go in parentheses and `=>` separates them from the body:
 
 ```yaml
 local apply(fn, to) = fn(to)
@@ -774,10 +758,10 @@ matrix:
 
 ## 13. Built-in functions
 
-A handful of functions are always available without an import. `size`
-measures a sequence, a mapping or a string, `empty` asks whether a value is
-`null` or has nothing in it, and `nempty` turns an empty value into `null`,
-which pairs with `:?`. Given a context of
+A handful of functions need no import. `size` measures a sequence, a mapping
+or a string, `empty` asks whether a value is `null` or has nothing in it, and
+`nempty` turns an empty value into `null`, which pairs with `:?`. Given a
+context of
 `{labels: {}, annotations: {team: platform}}`:
 
 ```yaml
@@ -806,8 +790,8 @@ annotations:
 context was dropped instead of rendering as `{}`.
 
 `render` turns a value into the text an output format would write for it,
-YAML unless it is given the name of another. That is what a ConfigMap wants,
-since it holds whole files as strings:
+YAML unless another is named. A ConfigMap, which holds whole files as
+strings, wants exactly that:
 
 ```yaml
 local config = {name: "web", ports: [80, 443]}
@@ -919,9 +903,9 @@ already uses one of these names keeps working.
 
 ## 14. Destructuring
 
-`items` hands out `[key, value]` pairs, and taking pairs apart is common
-enough to have its own syntax. A binding can name the items of a sequence
-instead of the sequence, and `_` skips an item:
+`items` hands out `[key, value]` pairs, and taking them apart has its own
+syntax. A binding can name the items of a sequence instead of the sequence,
+and `_` skips an item:
 
 ```yaml
 local pair = ["web", 8080]
@@ -1000,10 +984,9 @@ a sequence; that is what `+` is for.
 
 ### The merge key
 
-Written where a key belongs, `<<` merges into the mapping it is written in.
-This is YAML's merge key without the anchor. A mapping reads top to bottom:
-the merge overrides the entries above it, and the entries below it override
-the merge:
+Written where a key belongs, `<<` merges into the mapping it is written in,
+like YAML's merge key without the anchor. The merge overrides the entries
+above it, and the entries below it override the merge:
 
 ```yaml
 local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
@@ -1027,10 +1010,9 @@ container:
     memory: 512
 ```
 
-The entry modifiers work on a merge too. `<<::` brings entries in hidden, so
-references can read them without them being rendered, and `<<:?` merges
-nothing when the value is `null`, which is how optional overrides from the
-context are read:
+The entry modifiers work on a merge too. `<<::` brings entries in hidden, for
+references to read, and `<<:?` merges nothing when the value is `null`, which
+suits optional overrides from the context:
 
 ```yaml
 local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
@@ -1080,9 +1062,8 @@ service:
 placement: us-east-1
 ```
 
-A binding renders nothing of its own, so the comments written on it travel to
-wherever it is read back, which is why the comment on `region` came out above
-`placement`.
+A binding renders nothing, so its comments travel to wherever it is read
+back, which is why the comment on `region` came out above `placement`.
 
 ## 17. Several documents
 
@@ -1202,8 +1183,8 @@ annotations:
 ```
 
 `std.files` reads a text file from beside the template, and `std.gotemplate`
-renders one as a Go template with data computed in yak, which is how a
-configuration file in some other format ends up inside a value:
+renders one as a Go template with data computed in yak, so a configuration
+file in another format can end up inside a value:
 
 ```yaml
 import { std.files, std.gotemplate }
@@ -1216,21 +1197,16 @@ import { std.files, std.gotemplate }
 ### Strict mode
 
 Rendering is strict by default: the same template, context and files always
-produce the same output. That is what keeps a rendered diff meaningful, and
-what makes a template safe to re-render in a GitOps loop, where output that
-changed on its own would look like a change someone made.
-
-Only two things differ between the modes. Everything else in the language
-and the library behaves the same in both.
+produce the same output, so a rendered diff stays meaningful and a template is
+safe to re-render in a GitOps loop. Only two things differ between the modes:
 
 | | Strict (the default) | `--strict=false` |
 | --- | --- | --- |
 | `std.random` | Importing it is an error. | Available. |
 | `std.files` | Reads only beneath the directory of the file calling `read`. | Reads any path, absolute or relative. |
 
-Since an import is a binding, and a binding that is never read is never
-evaluated, the `std.random` error comes when the import is first used rather
-than wherever it is written:
+An import is a binding, so the `std.random` error comes when the import is
+first used rather than where it is written:
 
 ```console
 yak: app.yak:1:8: module "std.random" can answer differently on every rendering, which strict mode does not allow; render with --strict=false to use it
@@ -1249,16 +1225,13 @@ hosts: files.read("/etc/hosts")
 yak: app.yak:3:19: "read" cannot read "/etc/hosts" in strict mode, which reads only beneath the directory of the file calling it; render with --strict=false to read anywhere
 ```
 
-Both errors say that strict mode is the reason and how to turn it off.
-Turning it off is a choice about the run, not the template: the same file
-renders strictly again the next time it is rendered without the flag. A
-template can still tell which mode it is in by reading `$yak.strict`, which is
-`true` unless `--strict=false` was given.
+Both errors say how to turn strict mode off. That is a choice about the run,
+not the template, and a template can read it as `$yak.strict`.
 
 ### Information about the rendering
 
-`$yak` is a mapping that describes the rendering itself rather than the
-document, which is enough for a provenance note:
+`$yak` describes the rendering rather than the document, which is enough for
+a provenance note:
 
 ```yaml
 note: "rendered from \($yak.filepath) by yak \($yak.version)"
@@ -1267,11 +1240,10 @@ contexts: $yak.contextpaths
 
 ## 19. Output formats
 
-Everything so far rendered YAML, but the same template can render JSON,
-JSONC, KYAML, TOML and more. `-f` picks one, or the name of the output file
-or the template does: `app.toml.yak` renders TOML. Comments reach every
-format that has room for them. The template from section 16, rendered with
-`-f jsonc`:
+The same template can render JSON, JSONC, KYAML, TOML and more. `-f` picks
+one, or else the name of the output file or the template does:
+`app.toml.yak` renders TOML. Comments reach every format with room for them.
+The template from section 16, rendered with `-f jsonc`:
 
 ```jsonc
 {
@@ -1297,10 +1269,9 @@ name = "web" # and its DNS label
 port = 8080
 ```
 
-A format that cannot hold what the template produced refuses it rather than
-guessing: JSON takes only one document, and TOML has no `null`.
-[CLI.md](CLI.md#output-formats) lists every format and the flags for writing
-output to files.
+A format that cannot hold what the template produced refuses it: JSON takes
+only one document, and TOML has no `null`. [CLI.md](CLI.md#output-formats)
+lists every format and the flags for writing output to files.
 
 ## 20. Putting it together
 
