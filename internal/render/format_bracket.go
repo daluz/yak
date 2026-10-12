@@ -8,6 +8,46 @@ import (
 	"github.com/daluz/yak/internal/eval"
 )
 
+var (
+	kyamlSpec = formatSpec{
+		name:   "kyaml",
+		floats: yamlFloats,
+		encode: bracketed(bracketStyle{
+			// A KYAML document opens with "---" so that it cannot be
+			// mistaken for JSON, which also starts with "{".
+			header:        "---\n",
+			bareKeys:      true,
+			trailingComma: true,
+			comments:      hashComments,
+			cuddle:        true,
+			foldStrings:   true,
+		}),
+	}
+	jsonSpec = formatSpec{
+		name:   "json",
+		single: true,
+		encode: bracketed(bracketStyle{}),
+	}
+	jsoncSpec = formatSpec{
+		name:   "jsonc",
+		single: true,
+		encode: bracketed(bracketStyle{comments: slashComments}),
+	}
+	jwccSpec = formatSpec{
+		name: "jwcc",
+		// Not all of JSON5, but everything yak writes for jwcc reads as
+		// JSON5.
+		aliases: []string{"jsoncc", "hujson", "json5"},
+		single:  true,
+		encode:  bracketed(bracketStyle{trailingComma: true, comments: slashComments}),
+	}
+	jsonlSpec = formatSpec{
+		name:    "jsonl",
+		aliases: []string{"ndjson"},
+		encode:  bracketed(bracketStyle{compact: true}),
+	}
+)
+
 // commentStyle is how a bracketed format writes a comment, or dropComments
 // when the format has nowhere to put one.
 type commentStyle int

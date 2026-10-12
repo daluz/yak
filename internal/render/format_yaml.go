@@ -10,6 +10,16 @@ import (
 	"github.com/daluz/yak/internal/eval"
 )
 
+var yamlSpec = formatSpec{
+	name:    "yaml",
+	aliases: []string{"yml"},
+	floats:  yamlFloats,
+	encode:  encodeYAML,
+}
+
+// yamlFloats is how YAML, and KYAML with it, spells the non-finite floats.
+var yamlFloats = floatSpelling{nan: ".nan", inf: ".inf", negInf: "-.inf"}
+
 // encodeYAML writes the documents as block YAML, separated by "---".
 func encodeYAML(docs []eval.Value, opts Options, floats floatSpelling) ([]byte, error) {
 	nodes := make([]*yaml.Node, 0, len(docs))

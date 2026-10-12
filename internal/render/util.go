@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/daluz/yak/internal/eval"
 )
 
 // floatSpelling names the three floats that are not written as digits. JSON
@@ -15,11 +17,6 @@ type floatSpelling struct {
 	inf    string
 	negInf string
 }
-
-var (
-	yamlFloats = floatSpelling{nan: ".nan", inf: ".inf", negInf: "-.inf"}
-	tomlFloats = floatSpelling{nan: "nan", inf: "inf", negInf: "-inf"}
-)
 
 // formatFloat spells f for format, whose non-finite floats are named by s.
 func formatFloat(f float64, format Format, s floatSpelling) (string, error) {
@@ -106,4 +103,44 @@ func quote(s string) string {
 	escapeInto(&b, s)
 	b.WriteByte('"')
 	return b.String()
+}
+
+// entry is a field that is written out, or an item of a sequence, paired with
+// the value it resolved to. An item has no name.
+type entry struct {
+	name string
+	eval.Comments
+	value eval.Value
+}
+
+// fieldEntries returns the fields of o that are written out, leaving out the
+// hidden ones and those that hide a null. Documents forces every value before
+// it hands a document to an encoder, so reading one here cannot fail.
+func fieldEntries(o *eval.Object) []entry {
+	out := make([]entry, 0, o.Len())
+	for _, f := range o.Fields() {
+		if omitted, _ := f.Omitted(); omitted {
+			continue
+		}
+		v, _ := f.Value.Value()
+		out = append(out, entry{name: f.Name, Comments: f.Comments, value: v})
+	}
+	return out
+}
+
+// itemEntries returns the items of a, which like fieldEntries relies on
+// Documents having forced them.
+func itemEntries(a *eval.Array) []entry {
+	items := a.Items()
+	out := make([]entry, len(items))
+	for i, item := range items {
+		v, _ := item.Value.Value()
+		out[i] = entry{Comments: item.Comments, value: v}
+	}
+	return out
+}
+
+// unrenderable reports a value that no format can write, such as a function.
+func unrenderable(v eval.Value) error {
+	return fmt.Errorf("cannot render a value of type %s", v.TypeName())
 }

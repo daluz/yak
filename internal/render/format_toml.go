@@ -9,6 +9,13 @@ import (
 	"github.com/daluz/yak/internal/eval"
 )
 
+var tomlSpec = formatSpec{
+	name:   "toml",
+	single: true,
+	floats: floatSpelling{nan: "nan", inf: "inf", negInf: "-inf"},
+	encode: encodeTOML,
+}
+
 // encodeTOML writes a single document as TOML.
 //
 // TOML has no document separator and no null, and its grammar puts every

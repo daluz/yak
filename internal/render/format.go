@@ -49,57 +49,15 @@ type formatSpec struct {
 }
 
 // formatSpecs is indexed by Format, in the order formats are offered to the
-// user.
+// user. Each spec is defined beside its encoder.
 var formatSpecs = [...]formatSpec{
-	FormatYAML: {
-		name:    "yaml",
-		aliases: []string{"yml"},
-		floats:  yamlFloats,
-		encode:  encodeYAML,
-	},
-	FormatKYAML: {
-		name:   "kyaml",
-		floats: yamlFloats,
-		encode: bracketed(bracketStyle{
-			// A KYAML document opens with "---" so that it cannot be
-			// mistaken for JSON, which also starts with "{".
-			header:        "---\n",
-			bareKeys:      true,
-			trailingComma: true,
-			comments:      hashComments,
-			cuddle:        true,
-			foldStrings:   true,
-		}),
-	},
-	FormatJSON: {
-		name:   "json",
-		single: true,
-		encode: bracketed(bracketStyle{}),
-	},
-	FormatJSONC: {
-		name:   "jsonc",
-		single: true,
-		encode: bracketed(bracketStyle{comments: slashComments}),
-	},
-	FormatJWCC: {
-		name: "jwcc",
-		// Not all of JSON5, but everything yak writes for jwcc reads as
-		// JSON5.
-		aliases: []string{"jsoncc", "hujson", "json5"},
-		single:  true,
-		encode:  bracketed(bracketStyle{trailingComma: true, comments: slashComments}),
-	},
-	FormatJSONL: {
-		name:    "jsonl",
-		aliases: []string{"ndjson"},
-		encode:  bracketed(bracketStyle{compact: true}),
-	},
-	FormatTOML: {
-		name:   "toml",
-		single: true,
-		floats: tomlFloats,
-		encode: encodeTOML,
-	},
+	FormatYAML:  yamlSpec,
+	FormatKYAML: kyamlSpec,
+	FormatJSON:  jsonSpec,
+	FormatJSONC: jsoncSpec,
+	FormatJWCC:  jwccSpec,
+	FormatJSONL: jsonlSpec,
+	FormatTOML:  tomlSpec,
 }
 
 // Formats lists every format in the order they are offered to the user.
