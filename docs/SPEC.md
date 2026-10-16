@@ -15,6 +15,21 @@ yak files use the `.yak` extension and hold one or more documents separated by
 extension of an [output format](CLI.md#output-formats) ahead of `.yak`, as
 `app.toml.yak` does, to say what the template renders to.
 
+## Strict mode
+
+Rendering is strict unless the tool is told otherwise
+([CLI.md](CLI.md#strict-mode)). In strict mode the same template, context and
+files always render the same output, so the result is safe to review as a
+diff and to re-render in a GitOps loop.
+
+Strict mode does two things. [Importing](#modules) a module whose answers can
+change between renderings, such as [`std.random`](STDLIB.md#stdrandom), is an
+error, raised when the import is first read. And
+[`std.files`](STDLIB.md#stdfiles) reads only beneath the directory of the file
+that calls it. Both errors name strict mode as the reason and say how to turn
+it off. Every other module behaves the same in either mode. A template can
+check if strict-mode is enabled with [`$yak.strict`](#builtin-variables).
+
 ## What changed from YAML
 
 ### Strings must be quoted
@@ -272,7 +287,7 @@ error; any other `$name` is an error listing the variables that exist.
 | `$yak.version` | The version of yak doing the rendering. |
 | `$yak.filepath` | The template's path, exactly as it was given to the tool. |
 | `$yak.contextpaths` | The context files, in the order they were given. |
-| `$yak.strict` | `true` in [strict mode](STDLIB.md#strict-mode), `false` when it is turned off. |
+| `$yak.strict` | `true` in [strict mode](#strict-mode), `false` when it is turned off. |
 | `$yak.format` | The [output format](CLI.md#output-formats) being rendered, by its name and never an alias. |
 
 ```yaml
@@ -686,7 +701,7 @@ path, which a rename changes as for any import:
 import str = std.strings
 ```
 
-Some modules are refused or restricted in [strict mode](STDLIB.md#strict-mode).
+Some modules are refused or restricted in [strict mode](#strict-mode).
 [STDLIB.md](STDLIB.md) documents every built-in and every module.
 
 ## Missing values

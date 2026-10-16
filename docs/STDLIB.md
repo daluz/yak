@@ -138,69 +138,74 @@ Importing a module binds a mapping of its functions under the last segment of
 its path, so `import std.strings` makes `strings.upper` available. Their
 arguments work as for built-ins.
 
-### `std.strings`
+### `std.base64`
 
 ```yaml
-import std.strings
+import std.base64
 
-name: strings.lower(strings.trim($$.name))
-hosts: strings.split($$.hosts, ",")
-```
-
-| Call | Answer |
-| --- | --- |
-| `upper(value)` | `value` in upper case. |
-| `lower(value)` | `value` in lower case. |
-| `trim(value, characters = null)` | `value` without any of `characters` at either end, or without whitespace when there are none. |
-| `trimPrefix(value, prefix)` | `value` without `prefix` at its start, or `value` itself. |
-| `trimSuffix(value, suffix)` | `value` without `suffix` at its end, or `value` itself. |
-| `startsWith(value, prefix)` | Whether `value` starts with `prefix`. |
-| `endsWith(value, suffix)` | Whether `value` ends with `suffix`. |
-| `replace(value, old, new)` | `value` with every `old` replaced by `new`. |
-| `repeat(value, count)` | `value` written `count` times over. |
-| `truncate(value, length)` | The first `length` characters of `value`, or all of it when it is shorter. |
-| `split(value, separator = null)` | The sequence of the pieces of `value` between each `separator`, or between runs of whitespace when there is none. |
-| `join(values, separator)` | The strings of a sequence written one after another, with `separator` between them. |
-
-Every argument but `count` and `length` is a string, and anything else is an
-error naming its type; `count` and `length` are integers of zero or more.
-Lengths are in characters, as for `size`, so `truncate("café", 3)` is
-`"caf"`.
-
-`split` with an empty separator splits `value` into characters, and splitting
-`""` gives `[]`. Without a separator, whitespace at either end gives no empty
-pieces, so `split("  a  b ")` is `["a", "b"]`. `join` does not convert items,
-so each must already be a string:
-
-```yaml
-ports: [80, 443]
-list: strings.join(["\(p)" for p in .ports], ",")   # "80,443"
-```
-
-### `std.json`, `std.yaml` and `std.base64`
-
-```yaml
-import { std.json, std.yaml, std.base64 }
-
-annotation: json.encode(.config)      # '{"name":"web","ports":[80,443]}'
-file: yaml.encode(.config)
 password: base64.encode($$.password)
 ```
 
 | Call | Answer |
 | --- | --- |
-| `json.encode(value, indent = 0)` | `value` as compact JSON on a single line, or indented by `indent` spaces a level when `indent` is more than 0. |
-| `json.decode(value)` | The value that the JSON string `value` holds. |
-| `yaml.encode(value)` | `value` as block YAML, ending in a newline as a file would. |
-| `yaml.decode(value)` | The value that the YAML string `value` holds; `null` for an empty one. |
-| `base64.encode(value)` | The standard base64 encoding of the string `value`. |
-| `base64.decode(value)` | The text that the base64 string `value` holds. |
+| `encode(value)` | The standard base64 encoding of the string `value`. |
+| `decode(value)` | The text that the base64 string `value` holds. |
 
-`encode` writes what the output format of the same name would, so hidden and
-`:?` entries are left out and a function in `value` is an error. `decode`
-reads plain JSON or YAML as a [context file](SPEC.md#context) is read, except
-that there must be exactly one document, which may be any value. Decoded
-base64 that is not UTF-8 text is an error.
+Decoded base64 that is not UTF-8 text is an error.
+
+### `std.files`
+
+```yaml
+import std.files
+
+motd: files.read("files/motd.txt")
+```
+
+`read(path)` answers the text of the file at `path` as it is, with no
+interpolation. A relative path is relative to the directory of the file that
+calls `read`, as an `import` resolves, so a module reads from beside itself
+rather than beside the template importing it. A missing file, or one that is
+not UTF-8 text, is an error.
+
+In [strict mode](SPEC.md#strict-mode), `path` must stay beneath that
+directory: an absolute path, one that climbs out with `..`, and a symbolic
+link that leads out are errors. With strict mode off, `path` may name any
+file.
+
+### `std.gotemplate`
+
+```yaml
+import { std.files, std.gotemplate }
+
+"nginx.conf": gotemplate.render(files.read("nginx.conf.tmpl"), {
+  name: $$.name,
+  servers: [s for s in $$.servers if s.enabled],
+})
+```
+
+`render(template, data = null)` renders the string `template` as a
+[Go template](https://pkg.go.dev/text/template) with `data` as its `.`, and
+answers the text. It suits plain text that a yak string would make awkward,
+such as a configuration file in another format. Go's `{{ ... }}` actions are
+plain text to yak, but a `\(` in the template is still interpolated by yak
+first unless the string is raw, as with `r|`.
+
+`data` reaches the template as an output format would see it: hidden and `:?`
+entries are left out, and a function in it is an error. Mappings arrive as Go
+maps, which `range` walks in key order rather than source order. A key the
+data does not hold is an error rather than Go's `<no value>`.
+
+Besides Go's `text/template` functions, the following extra template functions are available:
+
+| Call | Answer |
+| --- | --- |
+| `quote VALUE` | `VALUE` written as a double-quoted string, escapes included, or `""` for `null`. |
+| `indent N TEXT` | `TEXT` with `N` spaces in front of every line. |
+| `nindent N TEXT` | A line break and then `indent N TEXT`, for a value that starts on a line of its own, as in `{{ .labels \| nindent 4 }}`. |
+
+There are fewer functions than, for example, Helm, because you should compute everything
+else in yak and pass it in `data`, such as YAML from `std.yaml`, so the template only lays
+text out. Other functions might be added in the future if they prove to be helpful.
 
 ### `std.hash`
 
@@ -214,25 +219,23 @@ annotations:
 `sha1(value)`, `sha256(value)` and `sha512(value)` answer the digest of the
 string `value` in lowercase hexadecimal.
 
-### `std.regex`
+### `std.json`
 
 ```yaml
-import std.regex
+import std.json
 
-tag: regex.find($$.image, r"\d+\.\d+\.\d+")
+annotation: json.encode(.config)      # '{"name":"web","ports":[80,443]}'
 ```
 
 | Call | Answer |
 | --- | --- |
-| `match(value, pattern)` | Whether `pattern` matches somewhere in `value`. |
-| `find(value, pattern)` | The first text that `pattern` matches, or `null`. |
-| `findAll(value, pattern)` | Every text that `pattern` matches, in order. |
-| `replace(value, pattern, replacement)` | `value` with every match replaced by `replacement`. |
+| `encode(value, indent = 0)` | `value` as compact JSON on a single line, or indented by `indent` spaces a level when `indent` is more than 0. |
+| `decode(value)` | The value that the JSON string `value` holds. |
 
-Patterns are RE2, which matches in linear time, and match anywhere unless
-anchored with `^` and `$`. A `replacement` names a group as `$1` or
-`${name}`, and `$$` writes a dollar sign. Write patterns as raw strings, so
-that an escaped parenthesis such as `\(` is not read as an interpolation.
+`encode` writes what the `json` output format would, so hidden and `:?`
+entries are left out and a function in `value` is an error. `decode` reads
+plain JSON as a [context file](SPEC.md#context) is read, except that there
+must be exactly one document, which may be any value.
 
 ### `std.math`
 
@@ -272,59 +275,6 @@ means the same file wherever it is rendered. The answers are those of Go's
 `path` package: `ext("Makefile")` is `""`, and `join(["a", "../b"])` is
 `"b"`.
 
-### `std.files`
-
-```yaml
-import std.files
-
-motd: files.read("files/motd.txt")
-```
-
-`read(path)` answers the text of the file at `path` as it is, with no
-interpolation. A relative path is relative to the directory of the file that
-calls `read`, as an `import` resolves, so a module reads from beside itself
-rather than beside the template importing it. A missing file, or one that is
-not UTF-8 text, is an error.
-
-In [strict mode](#strict-mode), `path` must stay beneath that directory: an
-absolute path, one that climbs out with `..`, and a symbolic link that leads
-out are errors. With strict mode off, `path` may name any file.
-
-### `std.gotemplate`
-
-```yaml
-import { std.files, std.gotemplate }
-
-"nginx.conf": gotemplate.render(files.read("nginx.conf.tmpl"), {
-  name: $$.name,
-  servers: [s for s in $$.servers if s.enabled],
-})
-```
-
-`render(template, data = null)` renders the string `template` as a
-[Go template](https://pkg.go.dev/text/template) with `data` as its `.`, and
-answers the text. It suits plain text that a yak string would make awkward,
-such as a configuration file in another format. Go's `{{ ... }}` actions are
-plain text to yak, but a `\(` in the template is still interpolated by yak
-first unless the string is raw, as with `r|`.
-
-`data` reaches the template as an output format would see it: hidden and `:?`
-entries are left out, and a function in it is an error. Mappings arrive as Go
-maps, which `range` walks in key order rather than source order. A key the
-data does not hold is an error rather than Go's `<no value>`.
-
-Besides Go's `text/template` functions, the following extra template functions are available:
-
-| Call | Answer |
-| --- | --- |
-| `quote VALUE` | `VALUE` written as a double-quoted string, escapes included, or `""` for `null`. |
-| `indent N TEXT` | `TEXT` with `N` spaces in front of every line. |
-| `nindent N TEXT` | A line break and then `indent N TEXT`, for a value that starts on a line of its own, as in `{{ .labels \| nindent 4 }}`. |
-
-There are fewer functions than, for example, Helm, because you should compute everything
-else in yak and pass it in `data`, such as YAML from `std.yaml`, so the template only lays
-text out. Other functions might be added in the future if they prove to be helpful.
-
 ### `std.random`
 
 ```yaml
@@ -342,18 +292,81 @@ suffix: random.choice(["a", "b", "c"])
 | `uuid()` | A random version 4 UUID. |
 
 The answers change between renderings, so this module is only available with
-[strict mode](#strict-mode) off.
+[strict mode](SPEC.md#strict-mode) off.
 
-## Strict mode
+### `std.regex`
 
-Rendering is strict unless the tool is told otherwise
-([CLI.md](CLI.md#strict-mode)). In strict mode the same template, context and
-files always render the same output, so the result is safe to review as a
-diff and to re-render in a GitOps loop.
+```yaml
+import std.regex
 
-Strict mode does two things. Importing a module whose answers can change
-between renderings, such as `std.random`, is an error, raised when the import
-is first read. And `std.files` reads only beneath the directory of the file
-that calls it. Both errors name strict mode as the reason and say how to turn
-it off. Every other module behaves the same in either mode. A template reads
-the mode as [`$yak.strict`](SPEC.md#builtin-variables).
+tag: regex.find($$.image, r"\d+\.\d+\.\d+")
+```
+
+| Call | Answer |
+| --- | --- |
+| `match(value, pattern)` | Whether `pattern` matches somewhere in `value`. |
+| `find(value, pattern)` | The first text that `pattern` matches, or `null`. |
+| `findAll(value, pattern)` | Every text that `pattern` matches, in order. |
+| `replace(value, pattern, replacement)` | `value` with every match replaced by `replacement`. |
+
+Patterns are RE2, which matches in linear time, and match anywhere unless
+anchored with `^` and `$`. A `replacement` names a group as `$1` or
+`${name}`, and `$$` writes a dollar sign. Write patterns as raw strings, so
+that an escaped parenthesis such as `\(` is not read as an interpolation.
+
+### `std.strings`
+
+```yaml
+import std.strings
+
+name: strings.lower(strings.trim($$.name))
+hosts: strings.split($$.hosts, ",")
+```
+
+| Call | Answer |
+| --- | --- |
+| `upper(value)` | `value` in upper case. |
+| `lower(value)` | `value` in lower case. |
+| `trim(value, characters = null)` | `value` without any of `characters` at either end, or without whitespace when there are none. |
+| `trimPrefix(value, prefix)` | `value` without `prefix` at its start, or `value` itself. |
+| `trimSuffix(value, suffix)` | `value` without `suffix` at its end, or `value` itself. |
+| `startsWith(value, prefix)` | Whether `value` starts with `prefix`. |
+| `endsWith(value, suffix)` | Whether `value` ends with `suffix`. |
+| `replace(value, old, new)` | `value` with every `old` replaced by `new`. |
+| `repeat(value, count)` | `value` written `count` times over. |
+| `truncate(value, length)` | The first `length` characters of `value`, or all of it when it is shorter. |
+| `split(value, separator = null)` | The sequence of the pieces of `value` between each `separator`, or between runs of whitespace when there is none. |
+| `join(values, separator)` | The strings of a sequence written one after another, with `separator` between them. |
+
+Every argument but `count` and `length` is a string, and anything else is an
+error naming its type; `count` and `length` are integers of zero or more.
+Lengths are in characters, as for `size`, so `truncate("café", 3)` is
+`"caf"`.
+
+`split` with an empty separator splits `value` into characters, and splitting
+`""` gives `[]`. Without a separator, whitespace at either end gives no empty
+pieces, so `split("  a  b ")` is `["a", "b"]`. `join` does not convert items,
+so each must already be a string:
+
+```yaml
+ports: [80, 443]
+list: strings.join(["\(p)" for p in .ports], ",")   # "80,443"
+```
+
+### `std.yaml`
+
+```yaml
+import std.yaml
+
+file: yaml.encode(.config)
+```
+
+| Call | Answer |
+| --- | --- |
+| `encode(value)` | `value` as block YAML, ending in a newline as a file would. |
+| `decode(value)` | The value that the YAML string `value` holds; `null` for an empty one. |
+
+`encode` writes what the `yaml` output format would, so hidden and `:?`
+entries are left out and a function in `value` is an error. `decode` reads
+plain YAML as a [context file](SPEC.md#context) is read, except that there
+must be exactly one document, which may be any value.

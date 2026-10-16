@@ -1,6 +1,6 @@
 BIN := yak
 
-.PHONY: build test update fmt vet check install clean
+.PHONY: build test update fmt vet check install clean docs docs-serve
 
 build:
 	go build -o $(BIN) ./cmd/yak
@@ -26,4 +26,12 @@ install:
 
 clean:
 	rm -f $(BIN)
+	rm -rf site
 	go clean -testcache
+
+# The docs site is built with Zensical, run through uvx so nothing is installed.
+docs:
+	uvx zensical build --clean
+
+docs-serve:
+	uvx zensical serve

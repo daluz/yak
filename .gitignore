@@ -1,4 +1,5 @@
 /yak
 /dist/
+/site/
 *.test
 *.out
