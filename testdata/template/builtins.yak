@@ -10,7 +10,7 @@ sizes:
 
 ## A hidden entry counts too: size describes the value rather than what
 ## the renderer writes out.
-local defaults =
+let defaults =
   image: "alpine"
   tag:: "3.20"
 hidden-counted: size(defaults)
@@ -32,10 +32,10 @@ service:
   region:? nempty($$?.region)
 
 ## A built-in is a value, so it can be passed to a function.
-local apply(fn, to) = fn(to)
+let apply(fn, to) = fn(to)
 applied: apply(size, $.ports)
 
 ## A binding of the same name shadows a built-in.
 shadowed:
-  local size(v) = "not the built-in"
+  let size(v) = "not the built-in"
   value: size($.ports)

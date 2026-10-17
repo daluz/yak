@@ -3,36 +3,36 @@
 ## a name reads the first one.
 early: tag
 
-local tag = "v1"
+let tag = "v1"
 first: tag
 
 ## The rebinding's own value reads the binding it replaces.
-local tag = "\(tag)-patched"
+let tag = "\(tag)-patched"
 second: tag
 
 ## A nested block is read at the lines it is written on.
 staging:
   image: "app:\(tag)"
 
-local tag = "latest"
+let tag = "latest"
 
 production:
   image: "app:\(tag)"
 third: tag
 
 ## A rebound function may call the one it replaces.
-local bump(n) = n + 1
-local bump(n) = bump(n) * 2
+let bump(n) = n + 1
+let bump(n) = bump(n) * 2
 bumped: bump(3)
 
 ## A comment travels from the binding that is actually read.
-local {
+let {
   # The platform team owns this.
   owner = "platform"
 }
 before: owner
 
-local {
+let {
   # Ownership moved to infra.
   owner = "infra"
 }

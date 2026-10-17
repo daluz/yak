@@ -257,7 +257,7 @@ func (l *lexer) scanToken() error {
 			"explicit key indicators (%q) are not supported; use [expr] for a computed key, %q for an optional access, or %q for a default",
 			"?", "?.", "??")
 	case c == '&':
-		return l.errorf(start, "anchors and aliases are not supported in yak; use a local variable instead")
+		return l.errorf(start, "anchors and aliases are not supported in yak; use a let binding instead")
 	case c == '!' && l.peekAt(1) == '!':
 		return l.errorf(start, "tags are not supported in yak yet; they will arrive with schemas")
 	case c == '!' && l.peekAt(1) != '=':

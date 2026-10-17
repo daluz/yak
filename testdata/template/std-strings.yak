@@ -1,7 +1,7 @@
 import std.strings
 
 name: "  Web-Frontend  "
-local name = strings.trim($.name)
+let name = strings.trim($.name)
 
 case:
   upper: strings.upper(name)
@@ -36,7 +36,7 @@ joined: strings.join(strings.split($$.hosts, ","), " | ")
 named: strings.join(separator = "-", values = ["a", "b"])
 
 ## Like any built-in, a module's functions are values.
-local apply(fn, to) = fn(to)
+let apply(fn, to) = fn(to)
 applied: apply(strings.lower, "LOUD")
 
 ## The module can be imported under another name.

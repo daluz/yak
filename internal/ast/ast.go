@@ -40,7 +40,7 @@ type Document struct {
 // or in flow form with braces.
 type Mapping struct {
 	Base
-	// Binds holds the "local" and "import" bindings written among the entries. They cover
+	// Binds holds the "let" and "import" bindings written among the entries. They cover
 	// the whole mapping, wherever in it they appear, and they can see the
 	// mapping itself, so a binding may refer to a field with ".name".
 	Binds   []*Binding
@@ -48,7 +48,7 @@ type Mapping struct {
 	Flow    bool
 }
 
-// Binding is one "name = value" pair introduced by "local", or one module
+// Binding is one "name = value" pair introduced by "let", or one module
 // introduced by "import", whose Value is then an *Import. A binding written
 // as "[a, b] = value" has a Pattern instead of a Name.
 type Binding struct {
@@ -65,7 +65,7 @@ type Binding struct {
 // Wildcard is the name a pattern writes for an item it binds nothing to.
 const Wildcard = "_"
 
-// Pattern is what a "for" or a "local" binds a value to: a name, the
+// Pattern is what a "for" or a "let" binds a value to: a name, the
 // wildcard, or a bracketed list of patterns, which destructures a sequence
 // of exactly that many items.
 type Pattern struct {
@@ -142,10 +142,10 @@ type Import struct {
 	Path []string
 }
 
-// Local scopes bindings over a body that is not a mapping. Bindings written
+// Let scopes bindings over a body that is not a mapping. Bindings written
 // in a mapping belong to the Mapping instead, so that they can refer to its
 // fields.
-type Local struct {
+type Let struct {
 	Base
 	Binds []*Binding
 	Body  Node
@@ -364,7 +364,7 @@ type MapComp struct {
 	Entry *Entry
 }
 
-// Ident is a bare identifier, which names a "local" binding.
+// Ident is a bare identifier, which names a "let" binding.
 type Ident struct {
 	Base
 	Name string

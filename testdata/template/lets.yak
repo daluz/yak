@@ -1,10 +1,10 @@
 ## Bindings, defaults, and optional context lookups.
-local name = $$.app.name
-local {
+let name = $$.app.name
+let {
   region = $$?.region ?? "us-east-1"
   zone = "\(region)a"
 }
-local labels =
+let labels =
   app: name
   region: region
 
@@ -15,14 +15,14 @@ service:
   zone: zone
   # A binding may read the mapping it sits in, and may be declared after use.
   endpoint: url
-  local url = "https://\(.name).\(.zone).example.com"
+  let url = "https://\(.name).\(.zone).example.com"
   tls: $$?.tls?.enabled ?? false
 
 workers:
-  - local role = "queue"
+  - let role = "queue"
     name: "\(name)-\(role)"
     labels: labels
-  - local role = "cron"
+  - let role = "cron"
     name: "\(name)-\(role)"
     labels: labels
 

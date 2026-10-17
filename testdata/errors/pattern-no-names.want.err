@@ -1,1 +1,1 @@
-pattern-no-names.yak:1:7: the pattern of a binding has to bind at least one name
+pattern-no-names.yak:1:5: the pattern of a binding has to bind at least one name

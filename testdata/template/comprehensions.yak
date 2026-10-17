@@ -1,4 +1,4 @@
-local ports = $$.ports
+let ports = $$.ports
 
 # A sequence comprehension evaluates its item once per item of the source.
 names: ["port-\(p.name)" for p in ports]

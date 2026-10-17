@@ -1,6 +1,6 @@
 import tiers
 
-local make(app) =
+let make(app) =
   app: app
   tier: tiers.default
 

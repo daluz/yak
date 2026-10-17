@@ -1,5 +1,5 @@
 import std.gotemplate
 
-local f(x) = x
+let f(x) = x
 
 v: gotemplate.render("{{ .f }}", {f: f})

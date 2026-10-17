@@ -48,5 +48,5 @@ quantified:
   allOfNone: all([], (p) => false)
 
 ## A named function works as a key as well as an anonymous one.
-local negated(n) = -n
+let negated(n) = -n
 descending: sort($.ports, negated)

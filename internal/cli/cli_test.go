@@ -219,7 +219,7 @@ func TestYakFormatIsCanonical(t *testing.T) {
 
 func TestRenderDropsNullDocuments(t *testing.T) {
 	dir := t.TempDir()
-	tmpl := write(t, dir, "app.yak", "local unused = 1\n---\nname: \"web\"\n")
+	tmpl := write(t, dir, "app.yak", "let unused = 1\n---\nname: \"web\"\n")
 
 	out, err := run(t, "render", tmpl)
 	if err != nil {
@@ -232,7 +232,7 @@ func TestRenderDropsNullDocuments(t *testing.T) {
 
 func TestRenderKeepsNullDocumentsOnRequest(t *testing.T) {
 	dir := t.TempDir()
-	tmpl := write(t, dir, "app.yak", "local unused = 1\n---\nname: \"web\"\n")
+	tmpl := write(t, dir, "app.yak", "let unused = 1\n---\nname: \"web\"\n")
 
 	out, err := run(t, "render", tmpl, "--keep-null-documents")
 	if err != nil {

@@ -1,1 +1,1 @@
-pattern-duplicate-name.yak:1:14: "a" is bound twice in one pattern
+pattern-duplicate-name.yak:1:12: "a" is bound twice in one pattern

@@ -13,7 +13,7 @@ For the precise rules, [SPEC.md](SPEC.md) defines the language and
 - [5. References](#5-references)
 - [6. The context](#6-the-context)
 - [7. Hidden and optional entries](#7-hidden-and-optional-entries)
-- [8. Local bindings](#8-local-bindings)
+- [8. Let bindings](#8-let-bindings)
 - [9. Operators](#9-operators)
 - [10. Conditionals](#10-conditionals)
 - [11. Functions](#11-functions)
@@ -78,7 +78,7 @@ name: web
 
 ```console
 $ yak render values.yak
-yak: values.yak:1:7: unknown identifier "web"; strings must be quoted, and no "local" binding is in scope here
+yak: values.yak:1:7: unknown identifier "web"; strings must be quoted, and no "let" binding is in scope here
 ```
 
 Only `true` and `false` are booleans. The other words YAML accepts are errors
@@ -400,15 +400,15 @@ Rendered without a context, only `debug` remains, because `false` is not
 debug: false
 ```
 
-## 8. Local bindings
+## 8. Let bindings
 
 A hidden entry still belongs to a mapping. When a value just needs a name,
-`local` gives it one. Bindings render nothing; write the name to read one
+`let` gives it one. Bindings render nothing; write the name to read one
 back:
 
 ```yaml
-local name = "web"
-local port = 8080
+let name = "web"
+let port = 8080
 
 service: name
 url: "http://\(name):\(port)"
@@ -421,18 +421,18 @@ service: web
 url: http://web:8080
 ```
 
-Several bindings can share a `local { ... }` block, one per line or separated
+Several bindings can share a `let { ... }` block, one per line or separated
 by commas, and a binding's value may be an indented block like any mapping
 value:
 
 ```yaml
-local {
+let {
   region = "us-east-1"
   zone = "\(region)a"
 }
-local { retries = 3, timeout = 30 }
+let { retries = 3, timeout = 30 }
 
-local defaults =
+let defaults =
   image: "alpine"
   tag: "3.20"
 
@@ -458,15 +458,15 @@ inside it. One in an inner block shadows an outer one of the same name, and
 one written among the entries of a mapping can read that mapping's fields:
 
 ```yaml
-local tier = "shared"
+let tier = "shared"
 web:
-  local tier = "frontend"
+  let tier = "frontend"
   tier: tier
 api:
   tier: tier
 service:
   name: "shop"
-  local label = "\(.name)-web"
+  let label = "\(.name)-web"
   labels:
     app: label
 ```
@@ -491,10 +491,10 @@ Binding a name again in the same block rebinds it from that line down, and
 the new value can build on the old one:
 
 ```yaml
-local tag = "v1"
+let tag = "v1"
 staging:
   image: "app:\(tag)"
-local tag = "\(tag)-patched"
+let tag = "\(tag)-patched"
 production:
   image: "app:\(tag)"
 ```
@@ -609,7 +609,7 @@ can have a default, and arguments are given by position, by name, or by
 position and then by name:
 
 ```yaml
-local url(host, port = 8080, scheme = "https") = "\(scheme)://\(host):\(port)"
+let url(host, port = 8080, scheme = "https") = "\(scheme)://\(host):\(port)"
 
 default: url("web.example.com")
 positional: url("web.example.com", 443)
@@ -630,7 +630,7 @@ The body of a function can be an indented block, so a function can build a
 whole mapping:
 
 ```yaml
-local endpoint(name) =
+let endpoint(name) =
   host: "\(name).example.com"
   port: 443
 
@@ -654,7 +654,7 @@ called. Here `.name` always means the `name` beside the declaration:
 
 ```yaml
 name: "shop"
-local label(suffix) = "\(.name)-\(suffix)"
+let label(suffix) = "\(.name)-\(suffix)"
 labels:
   app: label("web")
   tier: label("api")
@@ -676,13 +676,13 @@ one, or bound to a second name. An inline function has no name, so its
 parameters go in parentheses and `=>` separates them from the body:
 
 ```yaml
-local apply(fn, to) = fn(to)
-local twice(s) = "\(s)\(s)"
+let apply(fn, to) = fn(to)
+let twice(s) = "\(s)\(s)"
 
 named: apply(twice, "ab")
 anonymous: apply((s) => "<\(s)>", "tag")
 
-local adder = (n) => (x) => x + n
+let adder = (n) => (x) => x + n
 curried: adder(5)(3)
 ```
 
@@ -794,7 +794,7 @@ YAML unless another is named. A ConfigMap, which holds whole files as
 strings, wants exactly that:
 
 ```yaml
-local config = {name: "web", ports: [80, 443]}
+let config = {name: "web", ports: [80, 443]}
 
 kind: "ConfigMap"
 data:
@@ -829,7 +829,7 @@ data:
 items accept a function, usually an anonymous one:
 
 ```yaml
-local services = [
+let services = [
   {name: "web", weight: 3, ports: [443, 80]},
   {name: "api", weight: 1, ports: [8080]},
   {name: "jobs", weight: 2, ports: [80]},
@@ -872,7 +872,7 @@ countdown:
 `keys`, `values`, `items`, `pick`, `omit` and `visible` work on mappings:
 
 ```yaml
-local labels = {app: "web", tier: "frontend", team: "platform"}
+let labels = {app: "web", tier: "frontend", team: "platform"}
 
 names: keys(labels)
 selector: pick(labels, ["app", "tier"])
@@ -898,7 +898,7 @@ pairs:
     - web
 ```
 
-A `local` of the same name as a built-in shadows it, so a template that
+A `let` of the same name as a built-in shadows it, so a template that
 already uses one of these names keeps working.
 
 ## 14. Destructuring
@@ -908,9 +908,9 @@ syntax. A binding can name the items of a sequence instead of the sequence,
 and `_` skips an item:
 
 ```yaml
-local pair = ["web", 8080]
-local name, port = pair
-local host, _ = ["registry.example.com", "latest"]
+let pair = ["web", 8080]
+let name, port = pair
+let host, _ = ["registry.example.com", "latest"]
 
 service: "\(name):\(port)"
 registry: host
@@ -923,8 +923,8 @@ service: web:8080
 registry: registry.example.com
 ```
 
-The outer brackets of a pattern may be left out, so `local name, port = pair`
-is the same as `local [name, port] = pair`. The sequence has to hold exactly
+The outer brackets of a pattern may be left out, so `let name, port = pair`
+is the same as `let [name, port] = pair`. The sequence has to hold exactly
 as many items as the pattern names.
 
 Patterns also work in a function's parameters, where the brackets are
@@ -932,8 +932,8 @@ required, and in a comprehension's loop variable, which is where `items`
 shines:
 
 ```yaml
-local address([host, port], scheme = "https") = "\(scheme)://\(host):\(port)"
-local limits = {cpu: 2, memory: 512}
+let address([host, port], scheme = "https") = "\(scheme)://\(host):\(port)"
+let limits = {cpu: 2, memory: 512}
 
 endpoint: address(["web.example.com", 443])
 doubled: {[k]: v * 2 for k, v in items(limits)}
@@ -958,7 +958,7 @@ deep as both sides hold mappings, so overriding one field of a nested mapping
 keeps its siblings:
 
 ```yaml
-local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
 
 container: defaults << {limits: {memory: 512}, port: 8080}
 untouched: defaults.limits
@@ -989,7 +989,7 @@ like YAML's merge key without the anchor. The merge overrides the entries
 above it, and the entries below it override the merge:
 
 ```yaml
-local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
 
 container:
   image: "alpine"
@@ -1015,7 +1015,7 @@ references to read, and `<<:?` merges nothing when the value is `null`, which
 suits optional overrides from the context:
 
 ```yaml
-local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
 
 sidecar:
   <<:: defaults
@@ -1043,7 +1043,7 @@ service:
   ## A note for whoever edits this template next.
   port: 8080
 
-local {
+let {
   # Where everything lands.
   region = "us-east-1"
 }
@@ -1072,7 +1072,7 @@ its own bindings and its own `$`; the context is shared by all of them. Given
 a context of `{app: shop}`:
 
 ```yaml
-local name = "web"
+let name = "web"
 
 kind: "Deployment"
 metadata:
@@ -1113,7 +1113,7 @@ value, which is how a module hands out a function without rendering it.
 Save this as `lib/labels.yak`:
 
 ```yaml
-local team = "platform"
+let team = "platform"
 
 standard:: (app) => {app: app, team: team}
 ```
@@ -1159,7 +1159,7 @@ the template
 ```yaml
 import { std.strings, std.json, std.regex, std.hash }
 
-local config = {name: strings.lower(strings.trim($$.name)), ports: [80, 443]}
+let config = {name: strings.lower(strings.trim($$.name)), ports: [80, 443]}
 
 name: config.name
 hosts: strings.split($$.hosts, ",")
@@ -1337,13 +1337,13 @@ The template, `deployment.yak`, uses most of what this tour covered:
 ## Render with:
 ##   yak render deployment.yak -c base.yaml -c prod.yaml
 
-local {
+let {
   name = "\($$.app)-\($$.component)"
   image = "\($$.image.repo):\($$.image.tag)"
   prod = $$.env == "prod"
 }
 
-local labels =
+let labels =
   app: $$.app
   component: $$.component
   env: $$.env
@@ -1378,7 +1378,7 @@ spec:
             ## it requested.
             limits: if prod then $$.resources << {memory: "1Gi"} else $$.resources
 ---
-local name = "\($$.app)-\($$.component)"
+let name = "\($$.app)-\($$.component)"
 
 apiVersion: "v1"
 kind: "Service"

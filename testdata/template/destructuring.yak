@@ -1,38 +1,38 @@
-local limits =
+let limits =
   cpu: 2
   memory:: 512
 
 # A pattern destructures a sequence into one name per item.
-local pair = ["web", 8080]
-local [name, port] = pair
+let pair = ["web", 8080]
+let [name, port] = pair
 service: "\(name):\(port)"
 
 # The outermost brackets may be left out, but a one-item pattern keeps them.
-local scheme, [user, _] = ["https", ["admin", "secret"]]
-local [only] = ["alone"]
+let scheme, [user, _] = ["https", ["admin", "secret"]]
+let [only] = ["alone"]
 login: "\(scheme)://\(user)@\(only)"
 
 # Patterns nest, and "_" stands for an item that binds nothing.
-local [[host, _], [_, tag]] = $$.images
+let [[host, _], [_, tag]] = $$.images
 image: "\(host)/app:\(tag)"
 
 # Several bindings of a block may destructure.
-local {
+let {
   bounds = [1, 10]
   [low, high] = bounds
 }
 range: high - low
 
 # The comments on a pattern travel to every name it binds.
-local [first, second] = ["a", "b"] # one of the pair
+let [first, second] = ["a", "b"] # one of the pair
 letters:
   - first
   - second
 
-local x = 1
-local y = 2
+let x = 1
+let y = 2
 before: [x, y]
-local [x, y] = [y, x]
+let [x, y] = [y, x]
 # A pattern is an ordinary binding, so a later one swaps two names by reading
 # the ones it replaces.
 after: [x, y]
@@ -48,8 +48,8 @@ large: [k for k, v in items(limits) if v > 100]
 endpoints: ["\(svc)=\(h):\(p)" for svc, [h, p] in $$.endpoints]
 
 # A parameter may be a pattern, in a named function or an anonymous one.
-local address([host, port], scheme = "https") = "\(scheme)://\(host):\(port)"
-local apply(fn, to) = fn(to)
+let address([host, port], scheme = "https") = "\(scheme)://\(host):\(port)"
+let apply(fn, to) = fn(to)
 primary: address(["api.internal", 443])
 plain: address(["db.internal", 5432], scheme = "tcp")
 entry: apply(([k, v]) => "\(k)=\(v)", ["cpu", 2])

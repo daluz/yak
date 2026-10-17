@@ -65,7 +65,7 @@ const (
 	Dots
 	Dollar
 	DoubleDollar
-	// Assign separates the name and the value of a "local" binding.
+	// Assign separates the name and the value of a "let" binding.
 	Assign
 	// Arrow separates the parameters and the body of an anonymous function.
 	Arrow
@@ -230,13 +230,13 @@ func (t Token) String() string {
 }
 
 // Keywords reserved by the language. They lex as identifiers; the parser
-// decides what they mean. "local", "import" and "schema" each begin a
+// decides what they mean. "let", "import" and "schema" each begin a
 // statement rather than a value.
 const (
 	KeywordTrue   = "true"
 	KeywordFalse  = "false"
 	KeywordNull   = "null"
-	KeywordLocal  = "local"
+	KeywordLet    = "let"
 	KeywordImport = "import"
 	KeywordSchema = "schema"
 )
@@ -258,7 +258,7 @@ const (
 // plain value identifier.
 func IsReserved(name string) bool {
 	switch name {
-	case KeywordTrue, KeywordFalse, KeywordNull, KeywordLocal, KeywordImport, KeywordSchema:
+	case KeywordTrue, KeywordFalse, KeywordNull, KeywordLet, KeywordImport, KeywordSchema:
 		return true
 	}
 	return false

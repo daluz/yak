@@ -1,5 +1,5 @@
-local env = $$.env
-local production = env == "prod"
+let env = $$.env
+let production = env == "prod"
 
 environment: env
 production: production

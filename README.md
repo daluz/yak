@@ -6,8 +6,8 @@ expression language added.
 
 ```yaml
 # app.yak
-local image = "alpine"
-local tag = "3.20"
+let image = "alpine"
+let tag = "3.20"
 
 apiVersion: "apps/v1"
 kind: "Deployment"
@@ -72,7 +72,7 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
   so `"{{ .Values.name }}"` passes through untouched. `\\(` writes a literal
   `\(`, and an `r` prefix turns interpolation off: `r"hello \(literal)"`.
 - **Only `true` and `false` are booleans.** No `yes`, `no`, `on`, or `off`.
-- **No anchors and no tags.** References and `local` bindings replace anchors;
+- **No anchors and no tags.** References and `let` bindings replace anchors;
   tags return with schemas.
 - **Relative references.** `.name` is a sibling, `..name` the parent's,
   `...name` the grandparent's, `$.name` the document root's, and `$$.name` the
@@ -83,9 +83,9 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
 - **Hidden fields.** `::` instead of `:` keeps a value available to
   references but out of the output; `:?` drops an entry only when its value is
   null.
-- **Local bindings.** `local name = "web"`, or a `local { ... }` block of
+- **Let bindings.** `let name = "web"`, or a `let { ... }` block of
   them. They are scoped and produce no output.
-- **Functions.** `local url(host, port = 8080) = "https://\(host):\(port)"`,
+- **Functions.** `let url(host, port = 8080) = "https://\(host):\(port)"`,
   called by position or by name: `url("web", port = 443)`. An anonymous one is
   `(x) => x * 2`.
 - **Built-ins.** `size`, `empty`, `nempty` (an empty value becomes `null` for
@@ -112,7 +112,7 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
   output: `std.random` is refused and `std.files` cannot leave the template's
   directory unless `--strict=false` is given.
 - **Comments survive.** They reach every output format that can hold them,
-  and the ones on a `local` travel to wherever the binding is read. A comment
+  and the ones on a `let` travel to wherever the binding is read. A comment
   starting with `## ` is a note about the template and is left out.
 
 [docs/TOUR.md](docs/TOUR.md) introduces the language step by step,

@@ -365,7 +365,7 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 	case token.Star:
 		// A "*" multiplies two operands, so one standing where a value
 		// belongs is an alias rather than an operator.
-		return nil, p.errorf(t.Pos, "anchors and aliases are not supported in yak; use a local variable instead")
+		return nil, p.errorf(t.Pos, "anchors and aliases are not supported in yak; use a let binding instead")
 
 	default:
 		return nil, p.errorf(t.Pos, "expected a value, found %s", t)
@@ -429,8 +429,8 @@ func (p *parser) parseIdent() (ast.Node, error) {
 		return &ast.Bool{Base: ast.At(t.Pos), Value: false}, nil
 	case token.KeywordNull:
 		return &ast.Null{Base: ast.At(t.Pos)}, nil
-	case token.KeywordLocal:
-		return nil, p.errorf(t.Pos, "a %q binding is a statement of its own, not a value", "local")
+	case token.KeywordLet:
+		return nil, p.errorf(t.Pos, "a %q binding is a statement of its own, not a value", "let")
 	case token.KeywordImport:
 		return nil, p.errorf(t.Pos, "an %q is a statement of its own, not a value", "import")
 	case token.KeywordIf:

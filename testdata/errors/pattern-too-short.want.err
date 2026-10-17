@@ -1,1 +1,1 @@
-pattern-too-short.yak:1:7: the pattern needs a sequence of 2 items, found 1 item
+pattern-too-short.yak:1:5: the pattern needs a sequence of 2 items, found 1 item

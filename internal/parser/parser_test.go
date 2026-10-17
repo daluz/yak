@@ -83,8 +83,8 @@ func dump(n ast.Node) string {
 		return "[" + dump(t.Item) + dumpLoop(t.Loop) + "]"
 	case *ast.MapComp:
 		return "{" + dumpEntry(t.Entry) + dumpLoop(t.Loop) + "}"
-	case *ast.Local:
-		return "local(" + strings.Join(dumpBinds(t.Binds), " ") + ";" + dump(t.Body) + ")"
+	case *ast.Let:
+		return "let(" + strings.Join(dumpBinds(t.Binds), " ") + ";" + dump(t.Body) + ")"
 	case *ast.Function:
 		params := make([]string, 0, len(t.Params))
 		for _, p := range t.Params {
@@ -275,33 +275,33 @@ func TestParseReferences(t *testing.T) {
 	}
 }
 
-func TestParseLocals(t *testing.T) {
+func TestParseLets(t *testing.T) {
 	tests := []struct {
 		name string
 		src  string
 		want string
 	}{
-		{"binding before a mapping", "local x = 1\na: x\n", `{x=1 "a":ident(x)}`},
-		{"binding between entries", "a: x\nlocal x = 1\nb: 2\n", `{x=1 "a":ident(x) "b":2}`},
-		{"several bindings", "local x = 1\nlocal y = 2\na: x\n", `{x=1 y=2 "a":ident(x)}`},
-		{"block form", "local {\n  x = 1\n  y = 2\n}\na: x\n", `{x=1 y=2 "a":ident(x)}`},
-		{"block form on one line", "local { x = 1, y = 2 }\na: x\n", `{x=1 y=2 "a":ident(x)}`},
-		{"block value", "local x =\n  a: 1\nb: x\n", `{x={"a":1} "b":ident(x)}`},
-		{"sequence value", "local x =\n  - 1\nb: x\n", `{x=[1] "b":ident(x)}`},
-		{"pattern", "local [a, b] = p\nc: a\n", `{[a b]=ident(p) "c":ident(a)}`},
-		{"nested pattern with a wildcard", "local [a, [_, b]] = p\nc: a\n", `{[a [_ b]]=ident(p) "c":ident(a)}`},
-		{"pattern in a block", "local {\n  p = [1, 2]\n  [a, b] = p\n}\nc: a\n", `{p=[1 2] [a b]=ident(p) "c":ident(a)}`},
-		{"pattern in a block on one line", "local { p = [1, 2], [a, b] = p }\nc: a\n", `{p=[1 2] [a b]=ident(p) "c":ident(a)}`},
-		{"pattern with a block value", "local [a, b] =\n  - 1\n  - 2\nc: a\n", `{[a b]=[1 2] "c":ident(a)}`},
-		{"pattern without brackets", "local a, b = p\nc: a\n", `{[a b]=ident(p) "c":ident(a)}`},
-		{"pattern without brackets around a nested one", "local _, [a, b] = p\nc: a\n", `{[_ [a b]]=ident(p) "c":ident(a)}`},
-		{"pattern without brackets after a bracketed one", "local [a, b], c = p\nd: a\n", `{[[a b] c]=ident(p) "d":ident(a)}`},
-		{"one-item pattern", "local [a] = p\nc: a\n", `{[a]=ident(p) "c":ident(a)}`},
-		{"pattern without brackets in a block", "local { x = 1, a, b = p, y = 2 }\nc: a\n", `{x=1 [a b]=ident(p) y=2 "c":ident(a)}`},
-		{"nested scope", "a:\n  local x = 1\n  b: x\n", `{"a":{x=1 "b":ident(x)}}`},
-		{"in a sequence item", "- local x = 1\n  a: x\n", `[{x=1 "a":ident(x)}]`},
-		{"before a sequence", "local x = 1\n- x\n", `local(x=1;[ident(x)])`},
-		{"before a scalar", "local x = 1\nx\n", `local(x=1;ident(x))`},
+		{"binding before a mapping", "let x = 1\na: x\n", `{x=1 "a":ident(x)}`},
+		{"binding between entries", "a: x\nlet x = 1\nb: 2\n", `{x=1 "a":ident(x) "b":2}`},
+		{"several bindings", "let x = 1\nlet y = 2\na: x\n", `{x=1 y=2 "a":ident(x)}`},
+		{"block form", "let {\n  x = 1\n  y = 2\n}\na: x\n", `{x=1 y=2 "a":ident(x)}`},
+		{"block form on one line", "let { x = 1, y = 2 }\na: x\n", `{x=1 y=2 "a":ident(x)}`},
+		{"block value", "let x =\n  a: 1\nb: x\n", `{x={"a":1} "b":ident(x)}`},
+		{"sequence value", "let x =\n  - 1\nb: x\n", `{x=[1] "b":ident(x)}`},
+		{"pattern", "let [a, b] = p\nc: a\n", `{[a b]=ident(p) "c":ident(a)}`},
+		{"nested pattern with a wildcard", "let [a, [_, b]] = p\nc: a\n", `{[a [_ b]]=ident(p) "c":ident(a)}`},
+		{"pattern in a block", "let {\n  p = [1, 2]\n  [a, b] = p\n}\nc: a\n", `{p=[1 2] [a b]=ident(p) "c":ident(a)}`},
+		{"pattern in a block on one line", "let { p = [1, 2], [a, b] = p }\nc: a\n", `{p=[1 2] [a b]=ident(p) "c":ident(a)}`},
+		{"pattern with a block value", "let [a, b] =\n  - 1\n  - 2\nc: a\n", `{[a b]=[1 2] "c":ident(a)}`},
+		{"pattern without brackets", "let a, b = p\nc: a\n", `{[a b]=ident(p) "c":ident(a)}`},
+		{"pattern without brackets around a nested one", "let _, [a, b] = p\nc: a\n", `{[_ [a b]]=ident(p) "c":ident(a)}`},
+		{"pattern without brackets after a bracketed one", "let [a, b], c = p\nd: a\n", `{[[a b] c]=ident(p) "d":ident(a)}`},
+		{"one-item pattern", "let [a] = p\nc: a\n", `{[a]=ident(p) "c":ident(a)}`},
+		{"pattern without brackets in a block", "let { x = 1, a, b = p, y = 2 }\nc: a\n", `{x=1 [a b]=ident(p) y=2 "c":ident(a)}`},
+		{"nested scope", "a:\n  let x = 1\n  b: x\n", `{"a":{x=1 "b":ident(x)}}`},
+		{"in a sequence item", "- let x = 1\n  a: x\n", `[{x=1 "a":ident(x)}]`},
+		{"before a sequence", "let x = 1\n- x\n", `let(x=1;[ident(x)])`},
+		{"before a scalar", "let x = 1\nx\n", `let(x=1;ident(x))`},
 	}
 
 	for _, tc := range tests {
@@ -319,29 +319,29 @@ func TestParseFunctions(t *testing.T) {
 		src  string
 		want string
 	}{
-		{"one parameter", "local f(a) = a\nb: 1\n", `{f=fn(a;ident(a)) "b":1}`},
-		{"several parameters", "local f(a, b) = a\nc: 1\n", `{f=fn(a,b;ident(a)) "c":1}`},
-		{"no parameters", "local f() = 1\nb: 1\n", `{f=fn(;1) "b":1}`},
-		{"a default", "local f(a, b = 123) = a\nc: 1\n", `{f=fn(a,b=123;ident(a)) "c":1}`},
-		{"a default expression", "local f(a = .x ?? 1) = a\nb: 1\n", `{f=fn(a=(self+0.x??1);ident(a)) "b":1}`},
-		{"trailing comma", "local f(a,) = a\nb: 1\n", `{f=fn(a;ident(a)) "b":1}`},
-		{"block body", "local f(a) =\n  b: a\nc: 1\n", `{f=fn(a;{"b":ident(a)}) "c":1}`},
-		{"in a local block", "local { f(a) = a, g = 1 }\nb: 1\n", `{f=fn(a;ident(a)) g=1 "b":1}`},
-		{"a pattern parameter", "local f([a, b], c) = a\nd: 1\n", `{f=fn([a b],c;ident(a)) "d":1}`},
-		{"a nested pattern parameter", "local f([a, [_, b]]) = a\nc: 1\n", `{f=fn([a [_ b]];ident(a)) "c":1}`},
-		{"a pattern parameter with a default", "local f([a, b] = [1, 2]) = a\nc: 1\n", `{f=fn([a b]=[1 2];ident(a)) "c":1}`},
+		{"one parameter", "let f(a) = a\nb: 1\n", `{f=fn(a;ident(a)) "b":1}`},
+		{"several parameters", "let f(a, b) = a\nc: 1\n", `{f=fn(a,b;ident(a)) "c":1}`},
+		{"no parameters", "let f() = 1\nb: 1\n", `{f=fn(;1) "b":1}`},
+		{"a default", "let f(a, b = 123) = a\nc: 1\n", `{f=fn(a,b=123;ident(a)) "c":1}`},
+		{"a default expression", "let f(a = .x ?? 1) = a\nb: 1\n", `{f=fn(a=(self+0.x??1);ident(a)) "b":1}`},
+		{"trailing comma", "let f(a,) = a\nb: 1\n", `{f=fn(a;ident(a)) "b":1}`},
+		{"block body", "let f(a) =\n  b: a\nc: 1\n", `{f=fn(a;{"b":ident(a)}) "c":1}`},
+		{"in a let block", "let { f(a) = a, g = 1 }\nb: 1\n", `{f=fn(a;ident(a)) g=1 "b":1}`},
+		{"a pattern parameter", "let f([a, b], c) = a\nd: 1\n", `{f=fn([a b],c;ident(a)) "d":1}`},
+		{"a nested pattern parameter", "let f([a, [_, b]]) = a\nc: 1\n", `{f=fn([a [_ b]];ident(a)) "c":1}`},
+		{"a pattern parameter with a default", "let f([a, b] = [1, 2]) = a\nc: 1\n", `{f=fn([a b]=[1 2];ident(a)) "c":1}`},
 		{"a pattern parameter of a lambda", "a: ([k, v]) => v\n", `{"a":fn([k v];ident(v))}`},
 
-		{"positional call", "local f(a) = a\nb: f(1)\n", `{f=fn(a;ident(a)) "b":ident(f)(1)}`},
-		{"empty call", "local f() = 1\nb: f()\n", `{f=fn(;1) "b":ident(f)()}`},
-		{"named call", "local f(a, b) = a\nc: f(b = 2, a = 1)\n", `{f=fn(a,b;ident(a)) "c":ident(f)(b=2,a=1)}`},
-		{"mixed call", "local f(a, b) = a\nc: f(1, b = 2)\n", `{f=fn(a,b;ident(a)) "c":ident(f)(1,b=2)}`},
-		{"call spanning lines", "local f(a) = a\nb: f(\n  1,\n)\n", `{f=fn(a;ident(a)) "b":ident(f)(1)}`},
+		{"positional call", "let f(a) = a\nb: f(1)\n", `{f=fn(a;ident(a)) "b":ident(f)(1)}`},
+		{"empty call", "let f() = 1\nb: f()\n", `{f=fn(;1) "b":ident(f)()}`},
+		{"named call", "let f(a, b) = a\nc: f(b = 2, a = 1)\n", `{f=fn(a,b;ident(a)) "c":ident(f)(b=2,a=1)}`},
+		{"mixed call", "let f(a, b) = a\nc: f(1, b = 2)\n", `{f=fn(a,b;ident(a)) "c":ident(f)(1,b=2)}`},
+		{"call spanning lines", "let f(a) = a\nb: f(\n  1,\n)\n", `{f=fn(a;ident(a)) "b":ident(f)(1)}`},
 		{"call on a field", "a: $.f(1)\n", `{"a":root.f(1)}`},
-		{"chained after a call", "local f(a) = a\nb: f(1).c[0]\n", `{f=fn(a;ident(a)) "b":ident(f)(1).c[0]}`},
-		{"call of a call", "local f(a) = a\nb: f(1)(2)\n", `{f=fn(a;ident(a)) "b":ident(f)(1)(2)}`},
-		{"call binds tighter than an operator", "local f(a) = a\nb: f(1) == 2\n", `{f=fn(a;ident(a)) "b":(ident(f)(1)==2)}`},
-		{"call in an interpolation", "local f(a) = a\nb: \"\\(f(1))\"\n", `{f=fn(a;ident(a)) "b":concat(ident(f)(1))}`},
+		{"chained after a call", "let f(a) = a\nb: f(1).c[0]\n", `{f=fn(a;ident(a)) "b":ident(f)(1).c[0]}`},
+		{"call of a call", "let f(a) = a\nb: f(1)(2)\n", `{f=fn(a;ident(a)) "b":ident(f)(1)(2)}`},
+		{"call binds tighter than an operator", "let f(a) = a\nb: f(1) == 2\n", `{f=fn(a;ident(a)) "b":(ident(f)(1)==2)}`},
+		{"call in an interpolation", "let f(a) = a\nb: \"\\(f(1))\"\n", `{f=fn(a;ident(a)) "b":concat(ident(f)(1))}`},
 	}
 
 	for _, tc := range tests {
@@ -535,8 +535,8 @@ func TestParseDocuments(t *testing.T) {
 		{"trailing end marker", "a: 1\n...\n", []string{`{"a":1}`}},
 		{"empty file", "", []string{"null"}},
 		{"comment only file", "# nothing\n", []string{"null"}},
-		{"bindings only document", "local x = 1\n", []string{"local(x=1;null)"}},
-		{"bindings only first document", "local x = 1\n---\na: 1\n", []string{"local(x=1;null)", `{"a":1}`}},
+		{"bindings only document", "let x = 1\n", []string{"let(x=1;null)"}},
+		{"bindings only first document", "let x = 1\n---\na: 1\n", []string{"let(x=1;null)", `{"a":1}`}},
 	}
 
 	for _, tc := range tests {
@@ -562,7 +562,7 @@ func TestParseDocuments(t *testing.T) {
 func dumpComments(n ast.Node) []string {
 	var out []string
 	switch t := n.(type) {
-	case *ast.Local:
+	case *ast.Let:
 		out = append(out, dumpBindings(t.Binds)...)
 		out = append(out, dumpComments(t.Body)...)
 	case *ast.Mapping:
@@ -585,7 +585,7 @@ func dumpComments(n ast.Node) []string {
 func dumpBindings(binds []*ast.Binding) []string {
 	var out []string
 	for _, b := range binds {
-		out = append(out, labelComments("local "+bindingName(b), b.Comments)...)
+		out = append(out, labelComments("let "+bindingName(b), b.Comments)...)
 		out = append(out, dumpComments(b.Value)...)
 	}
 	return out
@@ -622,13 +622,13 @@ func TestParseComments(t *testing.T) {
 		{"at the end of a document", "a: 1\n# c\n", `"a" foot # c`},
 		{"at the end of the first document", "a: 1\n# c\n---\nb: 2\n", `"a" foot # c`},
 
-		{"above a binding", "# c\nlocal x = 1\na: x\n", `local x head # c`},
-		{"beside a binding", "local x = 1 # c\na: x\n", `local x line # c`},
-		{"inside a binding's value", "local x =\n  # c\n  b: 1\na: x\n", `"b" head # c`},
-		{"inside a local block", "local {\n  # c\n  x = 1\n}\na: x\n", `local x head # c`},
-		{"above a local block", "# c\nlocal {\n  x = 1\n}\na: x\n", `local x head # c`},
-		{"beside a binding in a block", "local {\n  x = 1 # c\n  y = 2\n}\na: x\n", `local x line # c`},
-		{"above a binding in a block", "a:\n  # c\n  local x = 1\n  b: x\n", `local x head # c`},
+		{"above a binding", "# c\nlet x = 1\na: x\n", `let x head # c`},
+		{"beside a binding", "let x = 1 # c\na: x\n", `let x line # c`},
+		{"inside a binding's value", "let x =\n  # c\n  b: 1\na: x\n", `"b" head # c`},
+		{"inside a let block", "let {\n  # c\n  x = 1\n}\na: x\n", `let x head # c`},
+		{"above a let block", "# c\nlet {\n  x = 1\n}\na: x\n", `let x head # c`},
+		{"beside a binding in a block", "let {\n  x = 1 # c\n  y = 2\n}\na: x\n", `let x line # c`},
+		{"above a binding in a block", "a:\n  # c\n  let x = 1\n  b: x\n", `let x head # c`},
 
 		{"marked for the template", "## c\na: 1\n", ""},
 		{"marked beside an entry", "a: 1 ## c\n", ""},
@@ -661,7 +661,7 @@ func TestParseErrors(t *testing.T) {
 		want string
 	}{
 		{"unquoted multiword string", "a: hello world\n", "strings must be quoted"},
-		{"local as a value", "a: local\n", `a "local" binding is a statement of its own`},
+		{"let as a value", "a: let\n", `a "let" binding is a statement of its own`},
 		{"import as a value", "a: import\n", `an "import" is a statement of its own`},
 		{"import without a body", "a:\n  import m\n", `an "import" must be followed by a value`},
 		{"import without a path", "import\na: 1\n", "expected the path of a module"},
@@ -674,24 +674,24 @@ func TestParseErrors(t *testing.T) {
 		{"empty import block", "import {}\na: 1\n", `the "import" block must declare at least one binding`},
 		{"unseparated imports", "import { a = x b = y }\nc: 1\n", "between bindings"},
 		{"schema keyword", "a: schema\n", `"schema" is not implemented yet`},
-		{"reserved key", "local: 1\n", "reserved word"},
-		{"local without a body", "a:\n  local x = 1\n", "must be followed by a value"},
-		{"local without a name", "local = 1\na: 1\n", "expected the name of a binding"},
-		{"local without an assignment", "local x 1\na: 1\n", `expected "=" after the name of a binding`},
-		{"local naming a keyword", "local null = 1\na: 1\n", "cannot name a binding"},
-		{"parameter list without an assignment", "local f(a) 1\nb: 1\n", `expected "=" after the name of a binding`},
-		{"parameter naming a keyword", "local f(for) = 1\na: 1\n", `"for" is a keyword and cannot name a parameter`},
-		{"parameter that is not a name", "local f(1) = 1\na: 1\n", "expected the name of a parameter"},
-		{"duplicate parameter", "local f(a, a) = a\nb: 1\n", `parameter "a" is declared twice`},
-		{"unseparated parameters", "local f(a b) = a\nc: 1\n", `expected "," or ")" in a parameter list`},
-		{"unterminated parameter list", "local f(a = 1", "unterminated parameter list"},
-		{"unseparated arguments", "local f(a) = a\nb: f(1 2)\n", `expected "," or ")" in an argument list`},
-		{"unterminated argument list", "local f(a) = a\nb: f(1", "unterminated argument list"},
-		{"positional argument after a named one", "local f(a, b) = a\nc: f(a = 1, 2)\n", "cannot follow a named one"},
-		{"over-indented local", "local x = 1\n  local y = 2\na: x\n", "unexpected indentation"},
-		{"empty local block", "local {}\na: 1\n", "at least one binding"},
-		{"unterminated local block", "local {\n  x = 1\n", "unterminated"},
-		{"unseparated bindings", "local { x = 1 y = 2 }\na: x\n", "between bindings"},
+		{"reserved key", "let: 1\n", "reserved word"},
+		{"let without a body", "a:\n  let x = 1\n", "must be followed by a value"},
+		{"let without a name", "let = 1\na: 1\n", "expected the name of a binding"},
+		{"let without an assignment", "let x 1\na: 1\n", `expected "=" after the name of a binding`},
+		{"let naming a keyword", "let null = 1\na: 1\n", "cannot name a binding"},
+		{"parameter list without an assignment", "let f(a) 1\nb: 1\n", `expected "=" after the name of a binding`},
+		{"parameter naming a keyword", "let f(for) = 1\na: 1\n", `"for" is a keyword and cannot name a parameter`},
+		{"parameter that is not a name", "let f(1) = 1\na: 1\n", "expected the name of a parameter"},
+		{"duplicate parameter", "let f(a, a) = a\nb: 1\n", `parameter "a" is declared twice`},
+		{"unseparated parameters", "let f(a b) = a\nc: 1\n", `expected "," or ")" in a parameter list`},
+		{"unterminated parameter list", "let f(a = 1", "unterminated parameter list"},
+		{"unseparated arguments", "let f(a) = a\nb: f(1 2)\n", `expected "," or ")" in an argument list`},
+		{"unterminated argument list", "let f(a) = a\nb: f(1", "unterminated argument list"},
+		{"positional argument after a named one", "let f(a, b) = a\nc: f(a = 1, 2)\n", "cannot follow a named one"},
+		{"over-indented let", "let x = 1\n  let y = 2\na: x\n", "unexpected indentation"},
+		{"empty let block", "let {}\na: 1\n", "at least one binding"},
+		{"unterminated let block", "let {\n  x = 1\n", "unterminated"},
+		{"unseparated bindings", "let { x = 1 y = 2 }\na: x\n", "between bindings"},
 		{"lone question mark", "a: 1 ? 2\n", "explicit key indicators"},
 		{"coalesce on its own line", "a: .b\n?? 1\n", "expected a mapping key"},
 		{"numeric key", "1: a\n", "numeric keys must be quoted"},
@@ -709,11 +709,11 @@ func TestParseErrors(t *testing.T) {
 		{"bang is written not", "a: !true\n", `"!" is written "not"`},
 		{"symbolic or in an interpolation", `a: "\(b || c)"`, `"||" is written "or"`},
 		{"not as an operand", "a: 1 == not true\n", `a "not" cannot be used as an operand here`},
-		{"not as a binding name", "local not = 1\na: 1\n", `"not" is a keyword and cannot name a binding`},
+		{"not as a binding name", "let not = 1\na: 1\n", `"not" is a keyword and cannot name a binding`},
 		{"if without then", "a: if true 1\n", `expected "then"`},
 		{"if as an operand", "a: 1 == if true then 1 else 2\n", "wrap it in parentheses"},
 		{"a keyword as a value", "a: then\n", `"then" is a keyword`},
-		{"local named for", "local for = 1\na: 1\n", `"for" is a keyword and cannot name a binding`},
+		{"let named for", "let for = 1\na: 1\n", `"for" is a keyword and cannot name a binding`},
 		{"comprehension without in", "a: [x for x of $$.l]\n", `expected "in"`},
 		{"comprehension without a variable", "a: [x for 1 in $$.l]\n", "expected the name of the loop variable"},
 		{"comprehension naming a keyword", "a: [x for in in $$.l]\n", "cannot name a loop variable"},
@@ -724,18 +724,18 @@ func TestParseErrors(t *testing.T) {
 		{"pattern with a value", "a: [1 for [x, 2] in $$.l]\n", "expected the name of a loop variable"},
 		{"name bound twice in a loop", "a: [1 for x, [y, x] in $$.l]\n", `"x" is bound twice in one pattern`},
 		{"pattern naming a keyword", "a: [1 for [x, if] in $$.l]\n", `"if" is a keyword and cannot name a loop variable`},
-		{"name bound twice in a local", "local [a, a] = [1, 2]\nb: a\n", `"a" is bound twice in one pattern`},
-		{"local pattern of wildcards", "local [_, [_]] = [1, [2]]\nb: 1\n", "has to bind at least one name"},
-		{"local pattern with parameters", "local [a, b](x) = x\nc: a\n", `expected "=" after the name of a binding`},
-		{"values of a pattern without brackets", "local a, b = 1, 2\nc: a\n", `the values go in brackets`},
-		{"name bound twice without brackets", "local a, [b, a] = p\nc: a\n", `"a" is bound twice in one pattern`},
-		{"parameter pattern of wildcards", "local f([_, _]) = 1\na: 1\n", "the pattern of a parameter has to bind at least one name"},
-		{"name bound twice in a parameter pattern", "local f([a, a]) = a\nb: 1\n", `"a" is bound twice in one pattern`},
-		{"parameter pattern repeating a parameter", "local f(a, [b, a]) = a\nc: 1\n", `parameter "a" is declared twice`},
-		{"parameter repeating a pattern's name", "local f([a, b], b) = a\nc: 1\n", `parameter "b" is declared twice`},
+		{"name bound twice in a let", "let [a, a] = [1, 2]\nb: a\n", `"a" is bound twice in one pattern`},
+		{"let pattern of wildcards", "let [_, [_]] = [1, [2]]\nb: 1\n", "has to bind at least one name"},
+		{"let pattern with parameters", "let [a, b](x) = x\nc: a\n", `expected "=" after the name of a binding`},
+		{"values of a pattern without brackets", "let a, b = 1, 2\nc: a\n", `the values go in brackets`},
+		{"name bound twice without brackets", "let a, [b, a] = p\nc: a\n", `"a" is bound twice in one pattern`},
+		{"parameter pattern of wildcards", "let f([_, _]) = 1\na: 1\n", "the pattern of a parameter has to bind at least one name"},
+		{"name bound twice in a parameter pattern", "let f([a, a]) = a\nb: 1\n", `"a" is bound twice in one pattern`},
+		{"parameter pattern repeating a parameter", "let f(a, [b, a]) = a\nc: 1\n", `parameter "a" is declared twice`},
+		{"parameter repeating a pattern's name", "let f([a, b], b) = a\nc: 1\n", `parameter "b" is declared twice`},
 		{"lambda pattern repeating a parameter", "a: ([x, y], x) => x\n", `parameter "x" is declared twice`},
-		{"wildcard as a binding", "local _ = 1\na: 1\n", `"_" discards a value and cannot name a binding`},
-		{"wildcard as a parameter", "local f(_) = 1\na: 1\n", `"_" discards a value and cannot name a parameter`},
+		{"wildcard as a binding", "let _ = 1\na: 1\n", `"_" discards a value and cannot name a binding`},
+		{"wildcard as a parameter", "let f(_) = 1\na: 1\n", `"_" discards a value and cannot name a parameter`},
 		{"wildcard read as a value", "a: _\n", `"_" discards a value and cannot be read`},
 		{"unterminated comprehension", "a: [x for x in $$.l\n", `expected "]" to close a comprehension`},
 		{"unterminated mapping comprehension", "a: {[x]: 1 for x in $$.l\n", `expected "}" to close a comprehension`},
@@ -743,7 +743,7 @@ func TestParseErrors(t *testing.T) {
 		{"minus without a space after it", "a: 1 -2\n", "a subtraction needs whitespace"},
 		{"minus against a reference", "a: $.b -$.c\n", "a subtraction needs whitespace"},
 		{"minus without a space before it", "a: 1- 2\n", "a subtraction needs whitespace"},
-		{"minus in an argument list", "local f(a) = a\nb: f(1 -2)\n", "a subtraction needs whitespace"},
+		{"minus in an argument list", "let f(a) = a\nb: f(1 -2)\n", "a subtraction needs whitespace"},
 	}
 
 	for _, tc := range tests {

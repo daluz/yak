@@ -1,4 +1,4 @@
-local scale = $$.scale
+let scale = $$.scale
 
 # Two integers answer an integer.
 replicas: scale.base + scale.extra

@@ -222,7 +222,7 @@ func TestOptionalAndCoalesceTokens(t *testing.T) {
 		{"coalesce without spaces", "a: .b??1\n", []token.Kind{
 			token.Ident, token.Colon, token.Dots, token.Ident, token.Coalesce, token.Int, token.EOF,
 		}},
-		{"binding", "local x = 1\n", []token.Kind{
+		{"binding", "let x = 1\n", []token.Kind{
 			token.Ident, token.Ident, token.Assign, token.Int, token.EOF,
 		}},
 	}
@@ -267,7 +267,7 @@ func TestOperatorTokens(t *testing.T) {
 		{"equality", "a: 1 == 2\n", []token.Kind{
 			token.Ident, token.Colon, token.Int, token.Eq, token.Int, token.EOF,
 		}},
-		{"assignment is still one character", "local x = 1\n", []token.Kind{
+		{"assignment is still one character", "let x = 1\n", []token.Kind{
 			token.Ident, token.Ident, token.Assign, token.Int, token.EOF,
 		}},
 		{"arrow", "a: (x) => x\n", []token.Kind{

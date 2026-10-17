@@ -1,12 +1,12 @@
 import { std.gotemplate, std.yaml, std.strings }
 
-local servers = [
+let servers = [
   {host: "web-1", port: 8080, enabled: true},
   {host: "web-2", port: 8080, enabled: false},
   {host: "web-3", port: 8081, enabled: true},
 ]
 
-local upstream = |
+let upstream = |
   upstream {{ .name }} {
   {{- range .servers }}
     server {{ .host }}:{{ .port }};
@@ -22,7 +22,7 @@ nginx: gotemplate.render(upstream, {
 ## Mappings are ranged in key order, and hidden entries are left out.
 sorted: gotemplate.render("{{ range $k, $v := . }}{{ $k }}={{ $v }} {{ end }}", {b: 2, a: 1, c:: 3})
 
-local helpers = |-
+let helpers = |-
   labels:{{ .labels | nindent 2 }}
   quoted: {{ quote .name }} {{ quote .port }} {{ quote .none }}
   indented:

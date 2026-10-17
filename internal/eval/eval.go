@@ -27,7 +27,7 @@ type Session struct {
 	context Value
 	mods    Modules
 	// builtins are the members of the root module. They are found only after
-	// every binding in scope, so a local of the same name shadows one rather
+	// every binding in scope, so a let of the same name shadows one rather
 	// than colliding with it.
 	builtins map[string]*Builtin
 	// stack records the positions currently being evaluated so that a cycle
@@ -53,12 +53,12 @@ type Env struct {
 	// self holds the enclosing mappings, innermost first. Sequences do not
 	// add a level, so ".." always names the nearest enclosing mapping.
 	self []*Object
-	// scope is the innermost frame of local bindings, or nil at the top of
+	// scope is the innermost frame of let bindings, or nil at the top of
 	// a document.
 	scope *scope
 }
 
-// scope is one frame of local bindings. Frames link outwards, so an inner
+// scope is one frame of let bindings. Frames link outwards, so an inner
 // binding shadows an outer one of the same name.
 type scope struct {
 	outer *scope
@@ -283,8 +283,8 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 		return evalSeqComp(node, env)
 	case *ast.MapComp:
 		return evalMapComp(node, env)
-	case *ast.Local:
-		return evalLocal(node, env)
+	case *ast.Let:
+		return evalLet(node, env)
 	case *ast.Import:
 		return evalImport(node, env)
 	case *ast.Function:
@@ -591,9 +591,9 @@ func evalSelf(node *ast.Self, env *Env) (Value, error) {
 	return env.self[node.Up], nil
 }
 
-// evalLocal evaluates a body that is not a mapping. The body sits below every
+// evalLet evaluates a body that is not a mapping. The body sits below every
 // binding of the block, so it reads the last of each.
-func evalLocal(node *ast.Local, env *Env) (Value, error) {
+func evalLet(node *ast.Let, env *Env) (Value, error) {
 	return evalNode(node.Body, env.pushBindings(node.Binds).last())
 }
 
@@ -604,7 +604,7 @@ var yamlBooleans = map[string]string{
 	"y": "true", "n": "false",
 }
 
-// evalIdent reads a name back. Bindings come first, so a local named after a
+// evalIdent reads a name back. Bindings come first, so a let named after a
 // built-in shadows it.
 func evalIdent(node *ast.Ident, env *Env) (Value, error) {
 	if t, ok := env.lookup(node.Name); ok {
@@ -621,7 +621,7 @@ func evalIdent(node *ast.Ident, env *Env) (Value, error) {
 	if len(names) == 0 {
 		return nil, errorf(node.Pos(),
 			"unknown identifier %q; strings must be quoted, and no %q binding is in scope here",
-			node.Name, "local")
+			node.Name, "let")
 	}
 	return nil, errorf(node.Pos(),
 		"unknown identifier %q; strings must be quoted; bindings in scope: %s",

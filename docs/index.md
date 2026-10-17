@@ -6,8 +6,8 @@ expression language added.
 
 ```yaml
 # app.yak
-local image = "alpine"
-local tag = "3.20"
+let image = "alpine"
+let tag = "3.20"
 
 apiVersion: "apps/v1"
 kind: "Deployment"

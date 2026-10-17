@@ -127,7 +127,7 @@ in it, `r"..."` for text with a `'`, and a raw block scalar for both.
 
 ### Anchors and tags are gone
 
-`&anchor`, `*alias` and `!!tag` are rejected. References and `local` bindings
+`&anchor`, `*alias` and `!!tag` are rejected. References and `let` bindings
 replace anchors; tags will return with schemas. A lone `!` is an error that
 points to `not`. YAML's `<<` survives as [the merge key](#the-merge-key), and
 merges any mapping an expression can produce.
@@ -194,7 +194,7 @@ entry that is left out takes its comments with it.
 YAML's merge key does, without an anchor:
 
 ```yaml
-local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
 
 container:
   <<: defaults
@@ -326,7 +326,7 @@ Three keywords begin a statement instead of a mapping entry or sequence item:
 
 | Statement | Purpose |
 | --- | --- |
-| `local` | Names a value or a function. |
+| `let` | Names a value or a function. |
 | `import` | Reads another module into a namespace. |
 | `schema` | Declares types, defaults and validation. |
 
@@ -337,14 +337,14 @@ and as a key they need quotes, as in `"schema": 1`. `import` is described in
 [Modules](#modules); `schema` is planned in [ROADMAP.md](ROADMAP.md) and is a
 "not implemented yet" error today.
 
-## Local bindings
+## Let bindings
 
-`local` names a value, and writing the name where a value is expected reads it
+`let` names a value, and writing the name where a value is expected reads it
 back:
 
 ```yaml
-local name = "web"
-local port = 8080
+let name = "web"
+let port = 8080
 
 service: name
 url: "http://\(name):\(port)"
@@ -353,21 +353,21 @@ url: "http://\(name):\(port)"
 Bindings produce no output, and unlike hidden fields they need not live inside
 the mapping that uses them.
 
-Several bindings can share a `local { ... }` block, one per line or separated
+Several bindings can share a `let { ... }` block, one per line or separated
 by commas:
 
 ```yaml
-local {
+let {
   region = "us-east-1"
   zone = "\(region)a"
 }
-local { retries = 3, timeout = 30 }
+let { retries = 3, timeout = 30 }
 ```
 
 A binding's value may be an indented block:
 
 ```yaml
-local defaults =
+let defaults =
   image: "alpine"
   tag: "3.20"
 
@@ -381,7 +381,7 @@ and may be used above the line that declares it:
 
 ```yaml
 url: endpoint          # fine: bindings are resolved lazily too
-local endpoint = "https://example.com"
+let endpoint = "https://example.com"
 ```
 
 Bindings among the entries of a mapping belong to that mapping, so they can
@@ -389,7 +389,7 @@ read its fields with `.name`:
 
 ```yaml
 name: "shop"
-local label = "\(.name)-web"
+let label = "\(.name)-web"
 labels:
   app: label
 ```
@@ -397,9 +397,9 @@ labels:
 An inner binding shadows an outer one of the same name:
 
 ```yaml
-local tier = "shared"
+let tier = "shared"
 web:
-  local tier = "frontend"
+  let tier = "frontend"
   tier: tier           # "frontend"
 api:
   tier: tier           # "shared"
@@ -409,10 +409,10 @@ Binding a name again in the same block rebinds it from that line down, and the
 new value reads the binding it replaces:
 
 ```yaml
-local size = "small"
+let size = "small"
 dev:
   tier: size           # "small"
-local size = "\(size)-ish"
+let size = "\(size)-ish"
 prod:
   tier: size           # "small-ish"
 ```
@@ -420,7 +420,7 @@ prod:
 A reference reads the nearest binding of its name above it, or the first one
 when it is above all of them, so a name bound once can be read anywhere in its
 block. A nested block reads at the lines it is written on, which is why `dev`
-and `prod` differ. Bindings in one `local { ... }` block count in the order
+and `prod` differ. Bindings in one `let { ... }` block count in the order
 written.
 
 Every document has its own bindings; nothing carries across a `---`. A
@@ -428,7 +428,7 @@ document of nothing but bindings is null and left out of the output. Anywhere
 else, a binding must be followed by a value in the same block:
 
 ```yaml
-local unused = "nothing comes of this"
+let unused = "nothing comes of this"
 ---
 name: "web"
 ```
@@ -436,7 +436,7 @@ name: "web"
 Bindings resolve lazily, so they may refer to each other in any order, and one
 that is never used is never evaluated. A binding that needs itself is a
 circular reference. A rebinding reads the binding it replaces, so a first
-`local a = a` is circular and a second one is not.
+`let a = a` is circular and a second one is not.
 
 ### Destructuring
 
@@ -444,31 +444,31 @@ A binding may name the items of a sequence by writing a pattern where the name
 goes. The outermost brackets may be left out, so these two are the same:
 
 ```yaml
-local pair = ["web", 8080]
-local [name, port] = pair
-local name, port = pair
+let pair = ["web", 8080]
+let [name, port] = pair
+let name, port = pair
 
 service: "\(name):\(port)"
 ```
 
 Patterns nest, and `_` stands for an item that binds nothing. Only the
-outermost brackets are optional, and not for a single item: `local [a] = x`
-takes the one item of `x`, while `local a = x` takes `x` itself.
+outermost brackets are optional, and not for a single item: `let [a] = x`
+takes the one item of `x`, while `let a = x` takes `x` itself.
 
 ```yaml
-local host, _ = ["registry.example.com", "latest"]
-local [[_, tag]] = [["mirror", "1.4"]]
+let host, _ = ["registry.example.com", "latest"]
+let [[_, tag]] = [["mirror", "1.4"]]
 ```
 
-In a `local { ... }` block the commas of a pattern do not end the binding, but
+In a `let { ... }` block the commas of a pattern do not end the binding, but
 brackets read better when bindings share a line:
 
 ```yaml
-local { bounds = [1, 10], [low, high] = bounds }
+let { bounds = [1, 10], [low, high] = bounds }
 ```
 
-The value is a single sequence: `local a, b = 1, 2` is an error, written
-`local a, b = [1, 2]`.
+The value is a single sequence: `let a, b = 1, 2` is an error, written
+`let a, b = [1, 2]`.
 
 The sequence must hold exactly as many items as the pattern names, at every
 level, and anything other than a sequence where a pattern expects one is an
@@ -477,7 +477,7 @@ whole value, so a mismatch is reported the same way whichever name is read.
 Items stay lazy unless a nested pattern has to inspect one.
 
 Pattern names are otherwise ordinary bindings: they shadow, rebind and resolve
-as a single name does, so `local [a, b] = [b, a]` below earlier bindings of
+as a single name does, so `let [a, b] = [b, a]` below earlier bindings of
 `a` and `b` swaps them, and comments on the pattern travel to every name it
 binds. A name may appear only once in a pattern, and a pattern must bind at
 least one name. `_` is not a name: it cannot name a binding or a parameter,
@@ -489,7 +489,7 @@ A binding whose name is followed by a parameter list is a function. Calling it
 evaluates its value with the parameters bound to the arguments:
 
 ```yaml
-local url(host, port) = "https://\(host):\(port)"
+let url(host, port) = "https://\(host):\(port)"
 
 endpoint: url($$.host, 8080)
 ```
@@ -498,7 +498,7 @@ The parentheses of a call are written flush against what they call, as `.` and
 `[` are, and the body may be an indented block:
 
 ```yaml
-local endpoint(name) =
+let endpoint(name) =
   host: "\(name).example.com"
   port: 443
 
@@ -509,7 +509,7 @@ A parameter may have a default. Arguments are given by position, by name, or
 by position and then by name:
 
 ```yaml
-local url(host, port = 8080, scheme = "https") = "\(scheme)://\(host):\(port)"
+let url(host, port = 8080, scheme = "https") = "\(scheme)://\(host):\(port)"
 
 a: url("web.example.com")                   # https://web.example.com:8080
 b: url("web.example.com", 443)              # https://web.example.com:443
@@ -525,14 +525,14 @@ A default is evaluated at the call, in the scope of the parameters, so it may
 name an earlier parameter:
 
 ```yaml
-local span(from, to = from) = "\(from)..\(to)"
+let span(from, to = from) = "\(from)..\(to)"
 ```
 
 A parameter may be a [pattern](#destructuring), which destructures its
 argument. Commas already separate parameters, so its brackets are required:
 
 ```yaml
-local address([host, port], scheme = "https") = "\(scheme)://\(host):\(port)"
+let address([host, port], scheme = "https") = "\(scheme)://\(host):\(port)"
 
 a: address(["web.example.com", 443])
 ```
@@ -552,7 +552,7 @@ bindings in effect at the declaration.
 
 ```yaml
 name: "shop"
-local label(suffix) = "\(.name)-\(suffix)"
+let label(suffix) = "\(.name)-\(suffix)"
 labels:
   app: label("web")
 ```
@@ -567,8 +567,8 @@ A function is a value: it can be bound to another name, held in a hidden
 field, and passed to another function:
 
 ```yaml
-local apply(fn, to) = fn(to)
-local twice(s) = "\(s)\(s)"
+let apply(fn, to) = fn(to)
+let twice(s) = "\(s)\(s)"
 
 v: apply(twice, "ab")   # abab
 ```
@@ -583,7 +583,7 @@ Where a value belongs, a function is written with its parameters in
 parentheses and `=>` before the body:
 
 ```yaml
-local apply(fn, to) = fn(to)
+let apply(fn, to) = fn(to)
 
 v: apply((s) => "\(s)\(s)", "ab")   # abab
 ```
@@ -594,7 +594,7 @@ sees](#what-a-function-sees) holds too, so a returned function keeps the
 arguments of the call that made it:
 
 ```yaml
-local adder = (n) => (x) => x + n
+let adder = (n) => (x) => x + n
 v: adder(5)(3)                    # 8
 ```
 
@@ -632,7 +632,7 @@ import shared = mydirectory.mymodule
 ```
 
 Several imports can share an `import { ... }` block, as bindings share a
-`local` one:
+`let` one:
 
 ```yaml
 import {
@@ -687,7 +687,7 @@ name, and a built-in is a value that can be passed to another function. A
 binding shadows a built-in of the same name:
 
 ```yaml
-local size(v) = "mine"
+let size(v) = "mine"
 a: size([1, 2])   # "mine"
 ```
 
@@ -763,7 +763,7 @@ booleans, is an error naming both.
 both takes its value from `y` and keeps its position in `x`:
 
 ```yaml
-local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
 
 container: defaults << {limits: {memory: 512}, port: 8080}
 ```
@@ -789,7 +789,7 @@ Neither operand changes, and an entry still reads the mapping it was written
 in, so an override does not reach back into a sibling that referred to it:
 
 ```yaml
-local base = {name: "web", label: "\(.name)-1"}
+let base = {name: "web", label: "\(.name)-1"}
 
 v: (base << {name: "api"}).label   # "web-1", not "api-1"
 ```
@@ -954,7 +954,7 @@ one pattern without its brackets, so `[k, v]` and `k, v` below mean the same,
 and [`items`](STDLIB.md#mappings) turns a mapping into the pairs they walk:
 
 ```yaml
-local limits = {cpu: 2, memory: 512}
+let limits = {cpu: 2, memory: 512}
 doubled: {[k]: v * 2 for [k, v] in items(limits)}
 large: [k for k, v in items(limits) if v > 100]
 ```
@@ -1005,16 +1005,16 @@ in context files are not carried over.
 
 ### Comments on a binding
 
-A `local` renders nothing, so its comments, whether above it, beside it or
+A `let` renders nothing, so its comments, whether above it, beside it or
 inside its value, come out wherever the binding is read back:
 
 ```yaml
-local {
+let {
   # Where everything lands.
   region = "us-east-1"
 }
 
-local defaults =
+let defaults =
   # The image every service starts from.
   image: "alpine"
 
@@ -1048,7 +1048,7 @@ whoever edits the template next, and on a binding it describes the binding
 rather than its value:
 
 ```yaml
-local {
+let {
   ## Describes the binding, not what it renders.
   region = "us-east-1"
 }
@@ -1089,8 +1089,8 @@ node        := statement* (blockMapping | blockSequence | value)
 blockMapping:= (statement | key sep value)+       -- aligned on one column
 blockSequence := ("-" node)+                      -- aligned on one column
 sep         := ":" | "::" | ":?"
-statement   := local | import
-local       := "local" binding | "local" "{" binding+ "}"
+statement   := let | import
+let         := "let" binding | "let" "{" binding+ "}"
 binding     := identifier params? "=" value
              | (patterns | pattern ("," pattern)+) "=" value
 pattern     := identifier | "_" | patterns

@@ -152,7 +152,7 @@ func attachFoot(body ast.Node, foot []string) {
 		return
 	}
 	switch t := body.(type) {
-	case *ast.Local:
+	case *ast.Let:
 		attachFoot(t.Body, foot)
 	case *ast.Mapping:
 		for i := len(t.Entries) - 1; i >= 0; i-- {
@@ -172,7 +172,7 @@ func attachFoot(body ast.Node, foot []string) {
 // inside one, a document may hold nothing but bindings, and is then null.
 func (p *parser) parseDocumentBody() (ast.Node, error) {
 	if p.atStatement() {
-		return p.parseLocalScope(p.cur().Col(), true)
+		return p.parseLetScope(p.cur().Col(), true)
 	}
 	return p.parseBlockNode()
 }
@@ -186,7 +186,7 @@ func (p *parser) parseBlockNode() (ast.Node, error) {
 		return p.parseBlockSequence(t.Col())
 	}
 	if p.atStatement() {
-		return p.parseLocalScope(t.Col(), false)
+		return p.parseLetScope(t.Col(), false)
 	}
 	if p.looksLikeEntry() {
 		return p.parseBlockMapping(t.Col())
@@ -194,14 +194,14 @@ func (p *parser) parseBlockNode() (ast.Node, error) {
 	return p.parseExpr()
 }
 
-// parseLocalScope parses a block that opens with one or more local or import
+// parseLetScope parses a block that opens with one or more let or import
 // statements. Bindings in front of a mapping become that mapping's own, so
 // that they read the same as bindings written between its entries; anything
 // else is wrapped in a scope of its own.
 //
 // bare allows the bindings to stand on their own, with no value after them,
 // which is how a document made of nothing but bindings becomes null.
-func (p *parser) parseLocalScope(col int, bare bool) (ast.Node, error) {
+func (p *parser) parseLetScope(col int, bare bool) (ast.Node, error) {
 	pos := p.cur().Pos
 	what := p.cur().Lit
 	var binds []*ast.Binding
@@ -213,7 +213,7 @@ func (p *parser) parseLocalScope(col int, bare bool) (ast.Node, error) {
 		binds = append(binds, declared...)
 	}
 	if bare && p.atDocBoundary() {
-		return &ast.Local{Base: ast.At(pos), Binds: binds, Body: &ast.Null{Base: ast.At(pos)}}, nil
+		return &ast.Let{Base: ast.At(pos), Binds: binds, Body: &ast.Null{Base: ast.At(pos)}}, nil
 	}
 	if p.atDocBoundary() || p.cur().Col() < col {
 		if what == token.KeywordImport {
@@ -236,7 +236,7 @@ func (p *parser) parseLocalScope(col int, bare bool) (ast.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ast.Local{Base: ast.At(pos), Binds: binds, Body: body}, nil
+	return &ast.Let{Base: ast.At(pos), Binds: binds, Body: body}, nil
 }
 
 func (p *parser) parseBlockMapping(col int) (*ast.Mapping, error) {
@@ -343,17 +343,17 @@ func (p *parser) parseEntryValue(parentCol int, colon token.Token) (ast.Node, er
 	return &ast.Null{Base: ast.At(colon.Pos)}, nil
 }
 
-// atStatement reports whether a local or import statement starts at the
+// atStatement reports whether a let or import statement starts at the
 // current token. Both keywords are reserved, so they can never be anything
 // else here.
 func (p *parser) atStatement() bool {
 	if !p.at(token.Ident) {
 		return false
 	}
-	return p.cur().Lit == token.KeywordLocal || p.cur().Lit == token.KeywordImport
+	return p.cur().Lit == token.KeywordLet || p.cur().Lit == token.KeywordImport
 }
 
-// parseStatement parses one "local name = value" binding or one
+// parseStatement parses one "let name = value" binding or one
 // "import module", or a braced block of either.
 //
 // The comments written on a binding are claimed by the binding itself rather
@@ -363,7 +363,7 @@ func (p *parser) parseStatement(col int) ([]*ast.Binding, error) {
 	start := p.i
 	head := p.takeHead()
 	kw := p.next()
-	// A colon here means the line was meant to be an entry keyed "local".
+	// A colon here means the line was meant to be an entry keyed "let".
 	if p.cur().Kind.IsSeparator() {
 		return nil, p.errorf(kw.Pos, "%q is a reserved word and must be quoted to be used as a key", kw.Lit)
 	}
@@ -371,7 +371,7 @@ func (p *parser) parseStatement(col int) ([]*ast.Binding, error) {
 		return p.parseImport(start, head)
 	}
 	if p.at(token.LBrace) {
-		return p.parseBlock(token.KeywordLocal, head, p.parseBlockBinding)
+		return p.parseBlock(token.KeywordLet, head, p.parseBlockBinding)
 	}
 	bh, err := p.parseBindHead()
 	if err != nil {
@@ -391,7 +391,7 @@ func (p *parser) parseStatement(col int) ([]*ast.Binding, error) {
 	return []*ast.Binding{bind}, nil
 }
 
-// parseBlock parses the braced form of a "local" or "import" statement, named
+// parseBlock parses the braced form of a "let" or "import" statement, named
 // by kw. Bindings are written one per line, or separated by commas when
 // several share a line, and item parses each one. head holds the comments
 // written above the block, which belong to the first binding in it.
@@ -434,7 +434,7 @@ func (p *parser) parseBlock(kw string, head []string, item func() (*ast.Binding,
 	}
 }
 
-// parseBlockBinding parses one binding of a "local { ... }" block, whose value
+// parseBlockBinding parses one binding of a "let { ... }" block, whose value
 // is an expression rather than a block of its own.
 func (p *parser) parseBlockBinding() (*ast.Binding, error) {
 	bh, err := p.parseBindHead()
@@ -663,7 +663,7 @@ type bindHead struct {
 
 // parseBindHead parses the name of a binding through to its "=", which is
 // written the same way whether the binding stands on its own or inside a
-// "local" block.
+// "let" block.
 func (p *parser) parseBindHead() (bindHead, error) {
 	if p.at(token.LBracket) || (p.at(token.Ident) && p.peek().Kind == token.Comma) {
 		return p.parsePatternHead()

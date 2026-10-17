@@ -1,6 +1,6 @@
 import std.path
 
-local file = "deploy/config/nginx.conf.tmpl"
+let file = "deploy/config/nginx.conf.tmpl"
 
 dir: path.dir(file)
 base: path.base(file)

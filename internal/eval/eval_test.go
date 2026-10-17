@@ -148,7 +148,7 @@ func TestInterpolation(t *testing.T) {
 	}
 }
 
-func TestLocals(t *testing.T) {
+func TestLets(t *testing.T) {
 	tests := []struct {
 		name    string
 		src     string
@@ -157,123 +157,123 @@ func TestLocals(t *testing.T) {
 	}{
 		{
 			name: "binding used by an entry",
-			src:  "local name = \"web\"\nservice: name\n",
+			src:  "let name = \"web\"\nservice: name\n",
 			want: "service: web\n",
 		},
 		{
 			name: "bindings leave no output of their own",
-			src:  "local unused = \"x\"\na: 1\n",
+			src:  "let unused = \"x\"\na: 1\n",
 			want: "a: 1\n",
 		},
 		{
 			name: "a binding may hold a mapping",
-			src:  "local d =\n  image: \"alpine\"\nimage: d.image\n",
+			src:  "let d =\n  image: \"alpine\"\nimage: d.image\n",
 			want: "image: alpine\n",
 		},
 		{
 			name: "bindings see each other",
-			src:  "local a = \"x\"\nlocal b = \"\\(a)y\"\nv: b\n",
+			src:  "let a = \"x\"\nlet b = \"\\(a)y\"\nv: b\n",
 			want: "v: xy\n",
 		},
 		{
 			name: "a binding declared after its use",
-			src:  "v: name\nlocal name = \"web\"\n",
+			src:  "v: name\nlet name = \"web\"\n",
 			want: "v: web\n",
 		},
 		{
 			name: "block form",
-			src:  "local {\n  region = \"us-east-1\"\n  zone = \"\\(region)a\"\n}\nwhere: zone\n",
+			src:  "let {\n  region = \"us-east-1\"\n  zone = \"\\(region)a\"\n}\nwhere: zone\n",
 			want: "where: us-east-1a\n",
 		},
 		{
 			name: "block form on one line",
-			src:  "local { a = 1, b = 2 }\nv: [a, b]\n",
+			src:  "let { a = 1, b = 2 }\nv: [a, b]\n",
 			want: "v:\n  - 1\n  - 2\n",
 		},
 		{
 			name: "a binding can read the enclosing mapping",
-			src:  "local label = \"\\(.name)-web\"\nname: \"shop\"\nlabel: label\n",
+			src:  "let label = \"\\(.name)-web\"\nname: \"shop\"\nlabel: label\n",
 			want: "name: shop\nlabel: shop-web\n",
 		},
 		{
 			name: "an inner binding shadows an outer one",
-			src:  "local n = \"outer\"\nouter: n\nchild:\n  local n = \"inner\"\n  inner: n\n",
+			src:  "let n = \"outer\"\nouter: n\nchild:\n  let n = \"inner\"\n  inner: n\n",
 			want: "outer: outer\nchild:\n  inner: inner\n",
 		},
 		{
 			name: "a rebinding reads the binding it replaces",
-			src:  "local size = \"small\"\ndev: size\nlocal size = \"\\(size)-ish\"\nprod: size\n",
+			src:  "let size = \"small\"\ndev: size\nlet size = \"\\(size)-ish\"\nprod: size\n",
 			want: "dev: small\nprod: small-ish\n",
 		},
 		{
 			name: "a nested block reads a rebinding at its own lines",
-			src:  "local n = 1\nweb:\n  v: n\nlocal n = 2\napi:\n  v: n\n",
+			src:  "let n = 1\nweb:\n  v: n\nlet n = 2\napi:\n  v: n\n",
 			want: "web:\n  v: 1\napi:\n  v: 2\n",
 		},
 		{
 			name: "a read above every binding of a name finds the first",
-			src:  "v: n\nlocal n = 1\nlocal n = 2\nw: n\n",
+			src:  "v: n\nlet n = 1\nlet n = 2\nw: n\n",
 			want: "v: 1\nw: 2\n",
 		},
 		{
 			name: "a rebinding in a one-line block",
-			src:  "local { a = 1, a = a + 1 }\nv: a\n",
+			src:  "let { a = 1, a = a + 1 }\nv: a\n",
 			want: "v: 2\n",
 		},
 		{
 			name: "a rebound function calls the one it replaces",
-			src:  "local f(x) = x\nlocal f(x) = f(x) + 1\nv: f(1)\n",
+			src:  "let f(x) = x\nlet f(x) = f(x) + 1\nv: f(1)\n",
 			want: "v: 2\n",
 		},
 		{
 			name: "a body that is not a mapping reads the last binding",
-			src:  "local a = 1\nlocal a = 2\n- a\n",
+			src:  "let a = 1\nlet a = 2\n- a\n",
 			want: "- 2\n",
 		},
 		{
 			name: "a rebinding only covers the block it is written in",
-			src:  "local n = 1\nlocal n = 2\nchild:\n  v: n\n",
+			src:  "let n = 1\nlet n = 2\nchild:\n  v: n\n",
 			want: "child:\n  v: 2\n",
 		},
 		{
 			name: "a nested scope still sees the outer bindings",
-			src:  "local n = \"outer\"\nchild:\n  local m = \"inner\"\n  v: \"\\(n)-\\(m)\"\n",
+			src:  "let n = \"outer\"\nchild:\n  let m = \"inner\"\n  v: \"\\(n)-\\(m)\"\n",
 			want: "child:\n  v: outer-inner\n",
 		},
 		{
 			name: "bindings reach into sequences",
-			src:  "local n = \"web\"\nitems:\n  - name: n\n",
+			src:  "let n = \"web\"\nitems:\n  - name: n\n",
 			want: "items:\n  - name: web\n",
 		},
 		{
 			name: "a sequence item may bind",
-			src:  "items:\n  - local n = 2\n    count: n\n",
+			src:  "items:\n  - let n = 2\n    count: n\n",
 			want: "items:\n  - count: 2\n",
 		},
 		{
 			name: "bindings in a computed key",
-			src:  "local k = \"dyn\"\n[k]: 1\n",
+			src:  "let k = \"dyn\"\n[k]: 1\n",
 			want: "dyn: 1\n",
 		},
 		{
 			name:    "a binding over the context",
-			src:     "local app = $$.app\nname: app.name\n",
+			src:     "let app = $$.app\nname: app.name\n",
 			context: "app:\n  name: shop\n",
 			want:    "name: shop\n",
 		},
 		{
 			name: "a scope around a sequence document",
-			src:  "local n = 1\n- n\n- 2\n",
+			src:  "let n = 1\n- n\n- 2\n",
 			want: "- 1\n- 2\n",
 		},
 		{
 			name: "each document has its own bindings",
-			src:  "local n = 1\na: n\n---\nlocal n = 2\nb: n\n",
+			src:  "let n = 1\na: n\n---\nlet n = 2\nb: n\n",
 			want: "a: 1\n---\nb: 2\n",
 		},
 		{
 			name: "a binding may name a yaml boolean word",
-			src:  "local n = 5\nv: n\n",
+			src:  "let n = 5\nv: n\n",
 			want: "v: 5\n",
 		},
 	}
@@ -430,7 +430,7 @@ func TestLogicalOperatorsShortCircuit(t *testing.T) {
 // TestMergeLeavesItsOperandsAlone checks that "<<" builds a third mapping
 // rather than writing into either of the two it was given.
 func TestMergeLeavesItsOperandsAlone(t *testing.T) {
-	src := "local base = {a: 1}\nlocal over = {a: 2}\nmerged: (base << over).a\nbase: base.a\nover: over.a\n"
+	src := "let base = {a: 1}\nlet over = {a: 2}\nmerged: (base << over).a\nbase: base.a\nover: over.a\n"
 	want := "merged: 2\nbase: 1\nover: 2\n"
 	if got := mustRender(t, src, ""); got != want {
 		t.Errorf("rendered %q, want %q", got, want)
@@ -441,7 +441,7 @@ func TestMergeLeavesItsOperandsAlone(t *testing.T) {
 // still reads the mapping it was written in, so overriding "name" does not
 // reach back into a sibling that referred to it.
 func TestMergedFieldKeepsItsOwnScope(t *testing.T) {
-	src := "local base = {name: \"web\", label: \"\\(.name)-1\"}\nv: (base << {name: \"api\"}).label\n"
+	src := "let base = {name: \"web\", label: \"\\(.name)-1\"}\nv: (base << {name: \"api\"}).label\n"
 	want := "v: web-1\n"
 	if got := mustRender(t, src, ""); got != want {
 		t.Errorf("rendered %q, want %q", got, want)
@@ -451,7 +451,7 @@ func TestMergedFieldKeepsItsOwnScope(t *testing.T) {
 // TestMergedEntryLeavesTheMappingItNamedAlone checks that a "<<" written
 // among the entries of a mapping does not write into the mapping it merged.
 func TestMergedEntryLeavesTheMappingItNamedAlone(t *testing.T) {
-	src := "local base = {a: {p: 1}}\nout:\n  <<: base\n  a:\n    q: 2\nagain: base.a\n"
+	src := "let base = {a: {p: 1}}\nout:\n  <<: base\n  a:\n    q: 2\nagain: base.a\n"
 	want := "out:\n  a:\n    p: 1\n    q: 2\nagain:\n  p: 1\n"
 	if got := mustRender(t, src, ""); got != want {
 		t.Errorf("rendered %q, want %q", got, want)
@@ -566,13 +566,13 @@ func TestComprehensions(t *testing.T) {
 		},
 		{
 			name:    "comprehensions nest through a binding",
-			src:     "local rows = $$.rows\nv: [[c for c in r] for r in rows]\n",
+			src:     "let rows = $$.rows\nv: [[c for c in r] for r in rows]\n",
 			context: "rows:\n  - [1, 2]\n  - [3]\n",
 			want:    "v:\n  - - 1\n    - 2\n  - - 3\n",
 		},
 		{
 			name: "the loop variable shadows an outer binding",
-			src:  "local x = \"outer\"\nv: [x for x in [1]]\nw: x\n",
+			src:  "let x = \"outer\"\nv: [x for x in [1]]\nw: x\n",
 			want: "v:\n  - 1\nw: outer\n",
 		},
 		{
@@ -600,117 +600,117 @@ func TestFunctions(t *testing.T) {
 	}{
 		{
 			name: "positional arguments",
-			src:  "local f(a, b) = \"\\(a)-\\(b)\"\nv: f(1, 2)\n",
+			src:  "let f(a, b) = \"\\(a)-\\(b)\"\nv: f(1, 2)\n",
 			want: "v: 1-2\n",
 		},
 		{
 			name: "named arguments in any order",
-			src:  "local f(a, b) = \"\\(a)-\\(b)\"\nv: f(b = 2, a = 1)\n",
+			src:  "let f(a, b) = \"\\(a)-\\(b)\"\nv: f(b = 2, a = 1)\n",
 			want: "v: 1-2\n",
 		},
 		{
 			name: "a named argument after the positional ones",
-			src:  "local f(a, b) = \"\\(a)-\\(b)\"\nv: f(1, b = 2)\n",
+			src:  "let f(a, b) = \"\\(a)-\\(b)\"\nv: f(1, b = 2)\n",
 			want: "v: 1-2\n",
 		},
 		{
 			name: "a default fills in a missing argument",
-			src:  "local f(a, b = 2) = \"\\(a)-\\(b)\"\nv: f(1)\nw: f(1, 3)\n",
+			src:  "let f(a, b = 2) = \"\\(a)-\\(b)\"\nv: f(1)\nw: f(1, 3)\n",
 			want: "v: 1-2\nw: 1-3\n",
 		},
 		{
 			name: "a default may name an earlier parameter",
-			src:  "local f(a, b = a) = \"\\(a)-\\(b)\"\nv: f(1)\n",
+			src:  "let f(a, b = a) = \"\\(a)-\\(b)\"\nv: f(1)\n",
 			want: "v: 1-1\n",
 		},
 		{
 			name: "a function with no parameters",
-			src:  "local f() = 1\nv: f()\n",
+			src:  "let f() = 1\nv: f()\n",
 			want: "v: 1\n",
 		},
 		{
 			name: "the body may be a block",
-			src:  "local f(a) =\n  k: a\nv: f(1)\n",
+			src:  "let f(a) =\n  k: a\nv: f(1)\n",
 			want: "v:\n  k: 1\n",
 		},
 		{
 			name: "the body sees the scope it was written in",
-			src:  "local suffix = \"s\"\nlocal f(a) = \"\\(a)-\\(suffix)\"\nv:\n  local suffix = \"inner\"\n  w: f(1)\n",
+			src:  "let suffix = \"s\"\nlet f(a) = \"\\(a)-\\(suffix)\"\nv:\n  let suffix = \"inner\"\n  w: f(1)\n",
 			want: "v:\n  w: 1-s\n",
 		},
 		{
 			name: "a parameter shadows an outer binding",
-			src:  "local a = \"outer\"\nlocal f(a) = a\nv: f(\"inner\")\nw: a\n",
+			src:  "let a = \"outer\"\nlet f(a) = a\nv: f(\"inner\")\nw: a\n",
 			want: "v: inner\nw: outer\n",
 		},
 		{
 			name: "an argument is evaluated in the calling scope",
-			src:  "local f(a) = a\nv:\n  local x = 1\n  w: f(x)\n",
+			src:  "let f(a) = a\nv:\n  let x = 1\n  w: f(x)\n",
 			want: "v:\n  w: 1\n",
 		},
 		{
 			name: "an unused argument is never evaluated",
-			src:  "local f(a, b) = a\nv: f(1, .missing)\n",
+			src:  "let f(a, b) = a\nv: f(1, .missing)\n",
 			want: "v: 1\n",
 		},
 		{
 			name: "a function that is never called is never evaluated",
-			src:  "local f(a) = .missing\nv: 1\n",
+			src:  "let f(a) = .missing\nv: 1\n",
 			want: "v: 1\n",
 		},
 		{
 			name: "a pattern parameter destructures its argument",
-			src:  "local f([a, [_, b]], c) = a + b + c\nv: f([1, [0, 2]], 3)\n",
+			src:  "let f([a, [_, b]], c) = a + b + c\nv: f([1, [0, 2]], 3)\n",
 			want: "v: 6\n",
 		},
 		{
 			name: "a lambda destructures its argument",
-			src:  "local apply(fn, x) = fn(x)\nv: apply(([k, v]) => \"\\(k)=\\(v)\", [\"a\", 1])\n",
+			src:  "let apply(fn, x) = fn(x)\nv: apply(([k, v]) => \"\\(k)=\\(v)\", [\"a\", 1])\n",
 			want: "v: a=1\n",
 		},
 		{
 			name: "a pattern parameter falls back to its default",
-			src:  "local f(x, [a, b] = [x, 2]) = a + b\nv: f(1)\n",
+			src:  "let f(x, [a, b] = [x, 2]) = a + b\nv: f(1)\n",
 			want: "v: 3\n",
 		},
 		{
 			name: "a parameter after a pattern can be named",
-			src:  "local f([a, b], c = 0) = a + b + c\nv: f([1, 2], c = 3)\n",
+			src:  "let f([a, b], c = 0) = a + b + c\nv: f([1, 2], c = 3)\n",
 			want: "v: 6\n",
 		},
 		{
 			name: "a pattern parameter that is never read is never evaluated",
-			src:  "local f([a, b], c) = c\nv: f(.missing, 1)\n",
+			src:  "let f([a, b], c) = c\nv: f(.missing, 1)\n",
 			want: "v: 1\n",
 		},
 		{
 			name: "a pattern without brackets",
-			src:  "local a, [b, c] = [1, [2, 3]]\nv: a + b + c\n",
+			src:  "let a, [b, c] = [1, [2, 3]]\nv: a + b + c\n",
 			want: "v: 6\n",
 		},
 		{
 			name: "a pattern none of whose names is read is never evaluated",
-			src:  "local [a, b] = .missing\nv: 1\n",
+			src:  "let [a, b] = .missing\nv: 1\n",
 			want: "v: 1\n",
 		},
 		{
 			name: "a pattern leaves the items it does not read lazy",
-			src:  "local [a, b] = [1, .missing]\nv: a\n",
+			src:  "let [a, b] = [1, .missing]\nv: a\n",
 			want: "v: 1\n",
 		},
 		{
 			name: "a function is a value that may be passed on",
-			src:  "local apply(fn, to) = fn(to)\nlocal twice(s) = \"\\(s)\\(s)\"\nv: apply(twice, \"ab\")\n",
+			src:  "let apply(fn, to) = fn(to)\nlet twice(s) = \"\\(s)\\(s)\"\nv: apply(twice, \"ab\")\n",
 			want: "v: abab\n",
 		},
 		{
 			name: "a hidden field may hold a function",
-			src:  "f:: g\nlocal g(a) = \"g-\\(a)\"\nv: .f(1)\n",
+			src:  "f:: g\nlet g(a) = \"g-\\(a)\"\nv: .f(1)\n",
 			want: "v: g-1\n",
 		},
 		{
 			name:    "a call inside a comprehension",
-			src:     "local f(a) = \"n-\\(a)\"\nv: [f(x) for x in $$.list]\n",
+			src:     "let f(a) = \"n-\\(a)\"\nv: [f(x) for x in $$.list]\n",
 			context: "list: [1, 2]\n",
 			want:    "v:\n  - n-1\n  - n-2\n",
 		},
@@ -832,10 +832,10 @@ func TestEvalErrors(t *testing.T) {
 		{"duplicate key", "a: 1\na: 2\n", "", `duplicate key "a"`},
 		{"duplicate computed key", "a: 1\n[\"a\"]: 2\n", "", `duplicate key "a"`},
 		{"self referential mapping", "a: .\n", "", "contains itself"},
-		{"unknown identifier lists bindings", "local host = \"h\"\na: hosts\n", "", `bindings in scope: "host"`},
-		{"a binding that names itself", "local a = a\nv: a\n", "", "circular reference"},
-		{"binding cycle", "local a = b\nlocal b = a\nv: a\n", "", "circular reference"},
-		{"a binding out of scope", "a:\n  local x = 1\n  b: x\nc: x\n", "", `unknown identifier "x"`},
+		{"unknown identifier lists bindings", "let host = \"h\"\na: hosts\n", "", `bindings in scope: "host"`},
+		{"a binding that names itself", "let a = a\nv: a\n", "", "circular reference"},
+		{"binding cycle", "let a = b\nlet b = a\nv: a\n", "", "circular reference"},
+		{"a binding out of scope", "a:\n  let x = 1\n  b: x\nc: x\n", "", `unknown identifier "x"`},
 		{"coalesce does not hide a missing field", "a: $$.nope ?? 1\n", "", `no field "nope"`},
 		{"optional access does not hide a type error", "a: 1\nb: .a?.c\n", "", "cannot read field"},
 		{"optional index does not hide a type error", "a:\n  - 1\nb: $.a?[\"x\"]\n", "", "index must be an integer"},
@@ -860,23 +860,23 @@ func TestEvalErrors(t *testing.T) {
 		{"negating a string", `a: -"x"` + "\n", "", `the operand of "-" must be a number, found string`},
 		{"looping over a scalar", "a: [x for x in 1]\n", "", `"for" needs a sequence to walk over`},
 		{"a loop item checked though unread", "a: [1 for _, _ in [[1, 2], [3]]]\n", "", "found 1 item (the item at index 1 of the source)"},
-		{"a pattern that reads itself", "local [a, b] = [b, a]\nv: a\n", "", "circular reference"},
-		{"a mismatch read through another name", "local [a, b] = [1, 2, 3]\nv: a\n", "", "found 3 items"},
-		{"an argument that does not fit its pattern", "local f([a, b]) = a\nv: f([1])\n", "", "the pattern needs a sequence of 2 items, found 1 item"},
-		{"a missing pattern argument", "local f(x, [a, b]) = a\nv: f(1)\n", "", `needs an argument for parameter "[a, b]"`},
-		{"a pattern parameter cannot be named", "local f([a, b]) = a\nv: f(a = 1)\n", "", `has no parameter named "a"; parameters: "[a, b]"`},
+		{"a pattern that reads itself", "let [a, b] = [b, a]\nv: a\n", "", "circular reference"},
+		{"a mismatch read through another name", "let [a, b] = [1, 2, 3]\nv: a\n", "", "found 3 items"},
+		{"an argument that does not fit its pattern", "let f([a, b]) = a\nv: f([1])\n", "", "the pattern needs a sequence of 2 items, found 1 item"},
+		{"a missing pattern argument", "let f(x, [a, b]) = a\nv: f(1)\n", "", `needs an argument for parameter "[a, b]"`},
+		{"a pattern parameter cannot be named", "let f([a, b]) = a\nv: f(a = 1)\n", "", `has no parameter named "a"; parameters: "[a, b]"`},
 		{"a non-boolean filter", "a: [x for x in [1] if x]\n", "", `the filter of a "for" must be a boolean`},
 		{"a constant comprehension key", `a: {"k": x for x in [1, 2]}` + "\n", "", "two items of the comprehension produced"},
 		{"a non-string comprehension key", "a: {[x]: 1 for x in [1]}\n", "", "mapping keys must be strings"},
-		{"a missing argument", "local f(a, b) = a\nv: f(1)\n", "", `needs an argument for parameter "b"`},
-		{"too many arguments", "local f(a) = a\nv: f(1, 2)\n", "", `takes at most 1 argument, found 2`},
-		{"an unknown parameter name", "local f(a) = a\nv: f(b = 1)\n", "", `has no parameter named "b"`},
-		{"lists the parameters", "local f(a) = a\nv: f(b = 1)\n", "", `parameters: "a"`},
-		{"a parameter given twice", "local f(a) = a\nv: f(1, a = 2)\n", "", `is given twice`},
-		{"calling something else", "local f = 1\nv: f(1)\n", "", "cannot call a value of type integer"},
-		{"rendering a function", "local f(a) = a\nv: f\n", "", "cannot render a value of type function"},
-		{"interpolating a function", "local f(a) = a\nv: \"\\(f)\"\n", "", "cannot interpolate a function"},
-		{"endless recursion", "local f(a) = f(a)\nv: f(1)\n", "", "may not terminate"},
+		{"a missing argument", "let f(a, b) = a\nv: f(1)\n", "", `needs an argument for parameter "b"`},
+		{"too many arguments", "let f(a) = a\nv: f(1, 2)\n", "", `takes at most 1 argument, found 2`},
+		{"an unknown parameter name", "let f(a) = a\nv: f(b = 1)\n", "", `has no parameter named "b"`},
+		{"lists the parameters", "let f(a) = a\nv: f(b = 1)\n", "", `parameters: "a"`},
+		{"a parameter given twice", "let f(a) = a\nv: f(1, a = 2)\n", "", `is given twice`},
+		{"calling something else", "let f = 1\nv: f(1)\n", "", "cannot call a value of type integer"},
+		{"rendering a function", "let f(a) = a\nv: f\n", "", "cannot render a value of type function"},
+		{"interpolating a function", "let f(a) = a\nv: \"\\(f)\"\n", "", "cannot interpolate a function"},
+		{"endless recursion", "let f(a) = f(a)\nv: f(1)\n", "", "may not terminate"},
 	}
 
 	for _, tc := range tests {

@@ -1,5 +1,5 @@
-local defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
-local labelled = {inner: {name: "web", label: "\(.name)-1"}}
+let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+let labelled = {inner: {name: "web", label: "\(.name)-1"}}
 
 # "<<" merges two mappings at every depth, and the one on the right decides.
 # "limits" is merged rather than replaced, and "port" is appended.

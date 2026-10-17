@@ -250,7 +250,7 @@ fraction: random.rand() < 1
 only: random.choice(["a"])
 picked: random.choice([1, 2, 3]) in [1, 2, 3]
 shuffled: random.shuffle([7])
-local id = random.uuid()
+let id = random.uuid()
 uuid: size(id) == 36 and strings.startsWith(strings.split(id, "-")[2], "4")
 `
 	got, err := renderFile(t, t.TempDir(), "t.yak", src, true)

@@ -8,18 +8,18 @@ service:
   ## A note for whoever edits this file, left out of the output.
   port: 8080
 
-local {
+let {
   # A comment on a binding travels to wherever the binding is read.
   region = "us-east-1"
   zone = "\(region)a"   # so does one written beside it
 }
 
-local defaults =
+let defaults =
   # One written inside a binding's value travels with the value.
   tier: "shared"
 
 ## A note on a binding is left out, like a note written anywhere else.
-local owner = "platform"
+let owner = "platform"
 
 placement:
   # What the entry says itself comes first.
