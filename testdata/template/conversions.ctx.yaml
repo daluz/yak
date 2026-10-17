@@ -1,0 +1,5 @@
+replicas: "3"
+ratio: "0.75"
+debug: "true"
+port: 8080
+ports: ["80", "443"]

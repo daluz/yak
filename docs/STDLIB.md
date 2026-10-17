@@ -62,8 +62,31 @@ left out: `render(null)` is `"null\n"`. Hidden and `:?` entries are left out,
 and a function in `value`, or a value the format cannot hold such as a
 sequence in TOML, is an error.
 
-The operations on [sequences](#sequences) and [mappings](#mappings) are
-built-ins as well.
+The [conversions](#conversions) and the operations on
+[sequences](#sequences) and [mappings](#mappings) are built-ins as well.
+
+### Conversions
+
+```yaml
+replicas: int($$.replicas)     # "3" from the context becomes 3
+port: str($$.port)             # 8080 becomes "8080"
+```
+
+| Call | Answer |
+| --- | --- |
+| `int(value)` | An integer, a float with no fractional part, or a string holding an integer, as an integer. |
+| `float(value)` | A number, or a string holding a finite decimal number, as a float. |
+| `bool(value)` | A boolean, or the string `"true"` or `"false"`, as a boolean. |
+| `str(value)` | A string, number or boolean as the string that interpolating it writes. |
+| `type(value)` | The name of the value's type: `"null"`, `"boolean"`, `"integer"`, `"float"`, `"string"`, `"sequence"`, `"mapping"` or `"function"`. |
+
+The conversions refuse rather than guess. `int(3.9)` is an error, since
+choosing a direction to round in is what [`std.math`](#stdmath) is for, and so
+is `int("3.5")`. `float` refuses `"inf"`, `"nan"` and hexadecimal forms such as `"0x1p3"`,
+and `bool` refuses
+YAML 1.1's `yes`, `no`, `on` and `off`. `null`, a collection or a function is
+an error naming its type for every conversion; `render` writes a collection
+as text. `type` accepts anything, and its names are the ones diagnostics use.
 
 ### Sequences
 

@@ -1,0 +1,1 @@
+int-fraction.yak:1:15: "int" cannot convert 3.9 to an integer without losing its fraction; round it with std.math

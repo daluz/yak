@@ -824,6 +824,34 @@ data:
     }
 ```
 
+### Conversions
+
+`int`, `float`, `bool` and `str` move a value between the scalar types, which
+a context written from environment variables, where everything is a string,
+often needs. `type` names the type of a value. Given a context of
+`{replicas: "3", debug: "false", port: 8080}`:
+
+```yaml
+replicas: int($$.replicas)
+debug: bool($$.debug)
+port: str($$.port)
+ratio: float(1)
+kind: type($$.replicas)
+```
+
+renders as:
+
+```yaml
+replicas: 3
+debug: false
+port: "8080"
+ratio: 1.0
+kind: string
+```
+
+The conversions are strict: `int(3.9)`, `int("3.5")` and `bool("yes")` are
+errors rather than guesses, and rounding a float is left to `std.math`.
+
 ### Sequences
 
 `sort`, `reverse`, `unique`, `flatten`, `take`, `drop`, `range`, `sum`,

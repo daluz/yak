@@ -1,0 +1,40 @@
+replicas: 3
+ratio: 0.75
+debug: true
+port: "8080"
+ints:
+  kept: 7
+  whole-float: 3
+  negative: -12
+  signed: 5
+floats:
+  kept: 2.5
+  widened: 3.0
+  exponent: 1000.0
+  integer-string: 42.0
+bools:
+  kept: false
+  "true": true
+  "false": false
+strs:
+  kept: text
+  integer: "42"
+  float: "2.5"
+  whole-float: "3"
+  flag: "true"
+  same: true
+types:
+  "null": "null"
+  boolean: boolean
+  integer: integer
+  float: float
+  string: string
+  sequence: sequence
+  mapping: mapping
+  function: function
+  lambda: function
+ports:
+  - 80
+  - 443
+shadowed:
+  value: not the built-in

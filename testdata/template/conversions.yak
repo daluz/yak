@@ -1,0 +1,52 @@
+## The conversions move a value between the scalar types, as a context
+## written from environment variables often needs.
+replicas: int($$.replicas)
+ratio: float($$.ratio)
+debug: bool($$.debug)
+port: str($$.port)
+
+ints:
+  kept: int(7)
+  whole-float: int(3.0)
+  negative: int("-12")
+  signed: int("+5")
+
+floats:
+  kept: float(2.5)
+  widened: float(3)
+  exponent: float("1e3")
+  integer-string: float("42")
+
+bools:
+  kept: bool(false)
+  "true": bool("true")
+  "false": bool("false")
+
+strs:
+  kept: str("text")
+  integer: str(42)
+  float: str(2.5)
+  whole-float: str(3.0)
+  flag: str(true)
+  ## str writes a value as interpolating it does.
+  same: str(1.5) == "\(1.5)"
+
+types:
+  "null": type(null)
+  boolean: type(true)
+  integer: type(1)
+  float: type(1.5)
+  string: type("a")
+  sequence: type([])
+  mapping: type({})
+  function: type(size)
+  lambda: type((x) => x)
+
+## A conversion is a value, so it can be passed to a function.
+let convert(fn, values) = [fn(v) for v in values]
+ports: convert(int, $$.ports)
+
+## A binding of the same name shadows a conversion.
+shadowed:
+  let str = "not the built-in"
+  value: str
