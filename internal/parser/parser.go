@@ -798,13 +798,13 @@ func (p *parser) keyEnd(i int) int {
 	switch p.toks[i].Kind {
 	case token.Ident, token.String, token.Int, token.Float, token.Merge:
 		return i + 1
-	case token.LBracket:
+	case token.LParen:
 		depth := 0
 		for j := i; j < len(p.toks); j++ {
 			switch p.toks[j].Kind {
-			case token.LBracket:
+			case token.LParen:
 				depth++
-			case token.RBracket:
+			case token.RParen:
 				depth--
 				if depth == 0 {
 					return j + 1
@@ -818,7 +818,7 @@ func (p *parser) keyEnd(i int) int {
 }
 
 // parseKey parses a mapping key: a bare identifier, a quoted string, or a
-// computed key in brackets.
+// computed key in parentheses.
 func (p *parser) parseKey() (ast.Node, bool, error) {
 	t := p.cur()
 	switch t.Kind {
@@ -835,14 +835,14 @@ func (p *parser) parseKey() (ast.Node, bool, error) {
 			return nil, false, err
 		}
 		return s, false, nil
-	case token.LBracket:
+	case token.LParen:
 		p.next()
 		key, err := p.parseExpr()
 		if err != nil {
 			return nil, false, err
 		}
-		if !p.at(token.RBracket) {
-			return nil, false, p.errorf(p.cur().Pos, "expected %q to close a computed key, found %s", "]", p.cur())
+		if !p.at(token.RParen) {
+			return nil, false, p.errorf(p.cur().Pos, "expected %q to close a computed key, found %s", ")", p.cur())
 		}
 		p.next()
 		return key, true, nil

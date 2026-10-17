@@ -26,7 +26,7 @@ context:
   short-form: $$.environment
   nested: $$.region.zone
   by-string-index: $$["region"]["zone"]
-[$$.environment]: "the key came from the context"
+($$.environment): "the key came from the context"
 in-sequence:
   - who: ..name
   - who: $.nested.name

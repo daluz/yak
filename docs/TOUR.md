@@ -204,14 +204,15 @@ service:
   zones: ["a", "b"]
 ```
 
-A key is a bare name, a quoted string, or an expression in brackets, which is
-how a key is computed:
+A key is a bare name, a quoted string, which interpolates like any other, or
+an expression in parentheses that gives a string:
 
 ```yaml
 plain-key: 1
 "a key with spaces": 2
-["port-\(80 + 1)"]: 3
-for: 4
+"port-\(80 + 1)": 3
+("api" + "-v2"): 4
+for: 5
 ```
 
 renders as:
@@ -220,7 +221,8 @@ renders as:
 plain-key: 1
 a key with spaces: 2
 port-81: 3
-for: 4
+api-v2: 4
+for: 5
 ```
 
 Words such as `for` and `if` mean something in expressions, but still work as
@@ -717,7 +719,7 @@ the template
 
 ```yaml
 names: ["port-\(p.name)" for p in $$.ports]
-by-name: {[p.name]: p.number for p in $$.ports}
+by-name: {(p.name): p.number for p in $$.ports}
 privileged: [p.name for p in $$.ports if p.number < 1024]
 urls: {"\(p.name)": "http://\($$.host):\(p.number)" for p in $$.ports}
 ```
@@ -936,7 +938,7 @@ let address([host, port], scheme = "https") = "\(scheme)://\(host):\(port)"
 let limits = {cpu: 2, memory: 512}
 
 endpoint: address(["web.example.com", 443])
-doubled: {[k]: v * 2 for k, v in items(limits)}
+doubled: {(k): v * 2 for k, v in items(limits)}
 large: [k for [k, v] in items(limits) if v > 100]
 ```
 

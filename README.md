@@ -103,7 +103,7 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
 - **Conditionals.** `if $$.env == "prod" then 5 else 1`. Without `else`, a
   false condition yields `null`, which `:?` drops.
 - **Comprehensions.** `[p.name for p in $$.ports if p.tls]` builds a
-  sequence, and `{[p.name]: p.number for p in $$.ports}` a mapping.
+  sequence, and `{(p.name): p.number for p in $$.ports}` a mapping.
 - **Modules.** `import lib.labels` reads `lib/labels.yak`, and `std` modules
   such as `std.strings`, `std.json`, `std.regex`, `std.files` and
   `std.gotemplate` cover the rest:

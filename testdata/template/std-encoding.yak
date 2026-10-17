@@ -32,4 +32,4 @@ base64:
 ## A Secret's data is base64 of each value.
 let credentials = {username: "admin", password: "hunter2"}
 secret:
-  data: {[k]: base64.encode(credentials[k]) for k in keys(credentials)}
+  data: {(k): base64.encode(credentials[k]) for k in keys(credentials)}

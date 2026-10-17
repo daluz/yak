@@ -169,10 +169,10 @@ type Comments struct {
 type Entry struct {
 	Comments
 	// Key is a *String for literal keys (bare identifiers are normalized into
-	// strings) or an arbitrary expression for computed keys written as [expr].
+	// strings) or an arbitrary expression for computed keys written as (expr).
 	// A merge entry has no key.
 	Key Node
-	// Computed records that the key was written in bracket form.
+	// Computed records that the key was written in parentheses.
 	Computed bool
 	// Merge records that the entry was written "<<" instead of with a key,
 	// which merges the mapping it names into the one being built rather

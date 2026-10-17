@@ -38,7 +38,7 @@ let [x, y] = [y, x]
 after: [x, y]
 
 # items turns a mapping into [key, value] pairs, hidden entries included.
-doubled: {[k]: v * 2 for [k, v] in items(limits)}
+doubled: {(k): v * 2 for [k, v] in items(limits)}
 
 # Without brackets, the names after "for" are one pattern.
 keys: [k for k, _ in items(limits)]

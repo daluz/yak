@@ -136,7 +136,7 @@ func TestInterpolation(t *testing.T) {
 		{"null", "n: null\ns: \"n=\\(.n)\"\n", "", "n: null\ns: n=null\n"},
 		{"context", `s: "\($$.a)-\($$.b)"` + "\n", "a: one\nb: two\n", "s: one-two\n"},
 		{"in block scalar", "name: \"web\"\ntext: |\n  hello \\(.name)\n", "", "name: web\ntext: |\n  hello web\n"},
-		{"in computed key", "k: \"dyn\"\n[\"\\(.k)-key\"]: 1\n", "", "k: dyn\ndyn-key: 1\n"},
+		{"in computed key", "k: \"dyn\"\n(\"\\(.k)-key\"): 1\n", "", "k: dyn\ndyn-key: 1\n"},
 	}
 
 	for _, tc := range tests {
@@ -252,7 +252,7 @@ func TestLets(t *testing.T) {
 		},
 		{
 			name: "bindings in a computed key",
-			src:  "let k = \"dyn\"\n[k]: 1\n",
+			src:  "let k = \"dyn\"\n(k): 1\n",
 			want: "dyn: 1\n",
 		},
 		{
@@ -548,7 +548,7 @@ func TestComprehensions(t *testing.T) {
 		},
 		{
 			name:    "mapping keyed by a computed key",
-			src:     "v: {[x]: 1 for x in $$.list}\n",
+			src:     "v: {(x): 1 for x in $$.list}\n",
 			context: `list: ["a", "b"]` + "\n",
 			want:    "v:\n  a: 1\n  b: 1\n",
 		},
@@ -560,7 +560,7 @@ func TestComprehensions(t *testing.T) {
 		},
 		{
 			name:    "a hidden entry produces nothing",
-			src:     "v: {[x]:: 1 for x in $$.list}\nw: $.v.a\n",
+			src:     "v: {(x):: 1 for x in $$.list}\nw: $.v.a\n",
 			context: `list: ["a"]` + "\n",
 			want:    "v: {}\nw: 1\n",
 		},
@@ -742,7 +742,7 @@ func TestHiddenMappingHidesSubtree(t *testing.T) {
 }
 
 func TestComputedKeys(t *testing.T) {
-	got := mustRender(t, "[$$.key]: \"v\"\n", "key: dynamic\n")
+	got := mustRender(t, "($$.key): \"v\"\n", "key: dynamic\n")
 	want := "dynamic: v\n"
 	if got != want {
 		t.Errorf("rendered %q, want %q", got, want)
@@ -750,7 +750,7 @@ func TestComputedKeys(t *testing.T) {
 }
 
 func TestComputedKeyCanReadLiteralSibling(t *testing.T) {
-	got := mustRender(t, "prefix: \"app\"\n[.prefix]: 1\n", "")
+	got := mustRender(t, "prefix: \"app\"\n(.prefix): 1\n", "")
 	want := "prefix: app\napp: 1\n"
 	if got != want {
 		t.Errorf("rendered %q, want %q", got, want)
@@ -830,7 +830,7 @@ func TestEvalErrors(t *testing.T) {
 		{"yaml yes", "a: yes\n", "", `"yes" is not a boolean in yak`},
 		{"yaml off", "a: off\n", "", `"off" is not a boolean in yak`},
 		{"duplicate key", "a: 1\na: 2\n", "", `duplicate key "a"`},
-		{"duplicate computed key", "a: 1\n[\"a\"]: 2\n", "", `duplicate key "a"`},
+		{"duplicate computed key", "a: 1\n(\"a\"): 2\n", "", `duplicate key "a"`},
 		{"self referential mapping", "a: .\n", "", "contains itself"},
 		{"unknown identifier lists bindings", "let host = \"h\"\na: hosts\n", "", `bindings in scope: "host"`},
 		{"a binding that names itself", "let a = a\nv: a\n", "", "circular reference"},
@@ -867,7 +867,7 @@ func TestEvalErrors(t *testing.T) {
 		{"a pattern parameter cannot be named", "let f([a, b]) = a\nv: f(a = 1)\n", "", `has no parameter named "a"; parameters: "[a, b]"`},
 		{"a non-boolean filter", "a: [x for x in [1] if x]\n", "", `the filter of a "for" must be a boolean`},
 		{"a constant comprehension key", `a: {"k": x for x in [1, 2]}` + "\n", "", "two items of the comprehension produced"},
-		{"a non-string comprehension key", "a: {[x]: 1 for x in [1]}\n", "", "mapping keys must be strings"},
+		{"a non-string comprehension key", "a: {(x): 1 for x in [1]}\n", "", "mapping keys must be strings"},
 		{"a missing argument", "let f(a, b) = a\nv: f(1)\n", "", `needs an argument for parameter "b"`},
 		{"too many arguments", "let f(a) = a\nv: f(1, 2)\n", "", `takes at most 1 argument, found 2`},
 		{"an unknown parameter name", "let f(a) = a\nv: f(b = 1)\n", "", `has no parameter named "b"`},

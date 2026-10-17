@@ -129,7 +129,7 @@ func dumpEntry(e *ast.Entry) string {
 		key = dump(e.Key)
 	}
 	if e.Computed {
-		key = "[" + key + "]"
+		key = "(" + key + ")"
 	}
 	return key + sep + dump(e.Value)
 }
@@ -208,7 +208,7 @@ func TestParseBlockStructures(t *testing.T) {
 		{"a quoted merge is an ordinary key", `"<<": 1`, `{"<<":1}`},
 		{"quoted key", `"a b": 1`, `{"a b":1}`},
 		{"kebab key", "a-b: 1\n", `{"a-b":1}`},
-		{"computed key", "[$$.k]: 1\n", `{[context.k]:1}`},
+		{"computed key", "($$.k): 1\n", `{(context.k):1}`},
 		{"sequence under key", "a:\n  - 1\n  - 2\n", `{"a":[1 2]}`},
 		{"sequence at key indent", "a:\n- 1\n- 2\n", `{"a":[1 2]}`},
 		{"mapping in sequence", "- a: 1\n  b: 2\n", `[{"a":1 "b":2}]`},
@@ -475,10 +475,10 @@ func TestParseComprehensions(t *testing.T) {
 		{"sequence", "a: [x for x in $$.list]\n", `{"a":[ident(x) for x in context.list]}`},
 		{"sequence with a filter", "a: [x for x in $$.list if x > 1]\n", `{"a":[ident(x) for x in context.list if (ident(x)>1)]}`},
 		{"sequence over a literal", "a: [x for x in [1, 2]]\n", `{"a":[ident(x) for x in [1 2]]}`},
-		{"mapping with a computed key", "a: {[x]: 1 for x in $$.list}\n", `{"a":{[ident(x)]:1 for x in context.list}}`},
+		{"mapping with a computed key", "a: {(x): 1 for x in $$.list}\n", `{"a":{(ident(x)):1 for x in context.list}}`},
 		{"mapping with an interpolated key", `a: {"k\(x)": x for x in $$.list}`, `{"a":{concat("k",ident(x)):ident(x) for x in context.list}}`},
-		{"mapping with a filter", "a: {[x]: 1 for x in $$.list if true}\n", `{"a":{[ident(x)]:1 for x in context.list if true}}`},
-		{"mapping of hidden entries", "a: {[x]:: 1 for x in $$.list}\n", `{"a":{[ident(x)]::1 for x in context.list}}`},
+		{"mapping with a filter", "a: {(x): 1 for x in $$.list if true}\n", `{"a":{(ident(x)):1 for x in context.list if true}}`},
+		{"mapping of hidden entries", "a: {(x):: 1 for x in $$.list}\n", `{"a":{(ident(x))::1 for x in context.list}}`},
 		{"a conditional item", "a: [if x then 1 else 2 for x in $$.list]\n", `{"a":[if(ident(x);1;2) for x in context.list]}`},
 		{"a conditional source", "a: [x for x in if true then [1] else [2]]\n", `{"a":[ident(x) for x in if(true;[1];[2])]}`},
 		{"wrapped over lines", "a: [\n  x\n  for x in $$.list\n]\n", `{"a":[ident(x) for x in context.list]}`},
@@ -488,7 +488,7 @@ func TestParseComprehensions(t *testing.T) {
 		{"a nested pattern", "a: [x for k, [x, y] in $$.list]\n", `{"a":[ident(x) for [k [x y]] in context.list]}`},
 		{"wildcards", "a: [v for _, v, _ in $$.list]\n", `{"a":[ident(v) for [_ v _] in context.list]}`},
 		{"a lone wildcard", "a: [1 for _ in $$.list]\n", `{"a":[1 for _ in context.list]}`},
-		{"a pattern in a mapping", "a: {[k]: v for k, v in $$.list}\n", `{"a":{[ident(k)]:ident(v) for [k v] in context.list}}`},
+		{"a pattern in a mapping", "a: {(k): v for k, v in $$.list}\n", `{"a":{(ident(k)):ident(v) for [k v] in context.list}}`},
 	}
 
 	for _, tc := range tests {
@@ -738,7 +738,7 @@ func TestParseErrors(t *testing.T) {
 		{"wildcard as a parameter", "let f(_) = 1\na: 1\n", `"_" discards a value and cannot name a parameter`},
 		{"wildcard read as a value", "a: _\n", `"_" discards a value and cannot be read`},
 		{"unterminated comprehension", "a: [x for x in $$.l\n", `expected "]" to close a comprehension`},
-		{"unterminated mapping comprehension", "a: {[x]: 1 for x in $$.l\n", `expected "}" to close a comprehension`},
+		{"unterminated mapping comprehension", "a: {(x): 1 for x in $$.l\n", `expected "}" to close a comprehension`},
 		{"alias", "a: *x\n", "anchors and aliases are not supported"},
 		{"minus without a space after it", "a: 1 -2\n", "a subtraction needs whitespace"},
 		{"minus against a reference", "a: $.b -$.c\n", "a subtraction needs whitespace"},

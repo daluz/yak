@@ -139,11 +139,11 @@ A key is one of:
 ```yaml
 plain-key: 1              # any identifier: letters, digits, _, and interior -
 "a key with spaces": 2    # any quoted string, interpolation included
-["computed-\($$.env)"]: 3  # an expression in brackets
+($$.env + "-only"): 3     # an expression in parentheses
 ```
 
-Numbers and reserved words must be quoted to be used as keys. Duplicate keys
-are an error. `if`, `then`, `else`, `for`, `in`, `and`, `or` and `not` are
+Numbers and reserved words must be quoted to be used as keys. An expression in
+parentheses must evaluate to a string. Duplicate keys are an error. `if`, `then`, `else`, `for`, `in`, `and`, `or` and `not` are
 keywords only where a value is expected, so `for: 3` is an ordinary entry, but
 they cannot name a binding or a loop variable.
 
@@ -924,7 +924,7 @@ item:
 
 ```yaml
 names: ["port-\(p.name)" for p in $$.ports]
-byName: {[p.name]: p.number for p in $$.ports}
+byName: {(p.name): p.number for p in $$.ports}
 ```
 
 With a context of `{ports: [{name: http, number: 80}]}` that renders as:
@@ -955,7 +955,7 @@ and [`items`](STDLIB.md#mappings) turns a mapping into the pairs they walk:
 
 ```yaml
 let limits = {cpu: 2, memory: 512}
-doubled: {[k]: v * 2 for [k, v] in items(limits)}
+doubled: {(k): v * 2 for [k, v] in items(limits)}
 large: [k for k, v in items(limits) if v > 100]
 ```
 
@@ -1113,7 +1113,7 @@ flowSeq     := "[" ((value loop) | (value ("," value)*)? ","?) "]"
 flowMap     := "{" ((entry loop) | (entry ("," entry)*)?) "}"
 entry       := (key | "<<") sep value
 loop        := "for" pattern ("," pattern)* "in" value ("if" value)?
-key         := identifier | string | "[" value "]"
+key         := identifier | string | "(" value ")"
 literal     := string | int | float | "true" | "false" | "null"
 reference   := (dots | builtin | identifier) postfix*
 postfix     := "?"? ("." identifier | "[" value "]") | args
