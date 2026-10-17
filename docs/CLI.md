@@ -16,20 +16,24 @@ Or build from a checkout with `go build ./cmd/yak`.
 
 | Command | Purpose |
 | --- | --- |
-| `yak render FILE` | Render one template. |
+| `yak render PATH` | Render one template, every template in a directory, or a git package. |
+| `yak package add SOURCE` | Add a dependency. Also `yak add`. |
+| `yak package remove NAME` | Remove a dependency. Also `yak remove`. |
+| `yak package sync` | Vendor the remote dependencies and write `yak.lock`. Also `yak sync`. |
 | `yak completion SHELL` | Write a shell completion script. |
 | `yak help [command]` | Describe a command. |
 
 `--version`, or `-v`, prints the version, the same string a template reads as
-`$yak.version`; an unstamped build reports `dev`. `build`, `validate`, `fmt`
-and `mod` are planned; see [ROADMAP.md](ROADMAP.md).
+`$yak.version`; an unstamped build reports `dev`. `yak pkg` is another name
+for `yak package`. `validate`, `fmt`, `package build` and `package push` are
+planned; see [ROADMAP.md](ROADMAP.md).
 
 ## `yak render`
 
 ```console
-$ yak render FILE.yak [-c context.yaml|context.json]... [-f FORMAT]
-                        [-o FILE | -O] [--output-dir DIR]
-                        [--keep-null-documents] [--strict=false]
+$ yak render FILE.yak|DIR|GIT-REF [-c context.yaml|context.json]... [-f FORMAT]
+                                    [-o FILE | -O] [--output-dir DIR]
+                                    [--keep-null-documents] [--strict=false]
 ```
 
 | Flag | Meaning |
@@ -44,9 +48,103 @@ $ yak render FILE.yak [-c context.yaml|context.json]... [-f FORMAT]
 
 `-o` and `-O` cannot be given together.
 
-The one argument is the template to render. `-` reads it from standard input;
-it is then called `<stdin>` by diagnostics and `$yak.filepath`, and
-`std.files` reads relative to the current directory.
+The one argument is the template to render, a directory of them, or a
+[git package](#rendering-a-git-package). `-`
+reads a template from standard input; it is then called `<stdin>` by
+diagnostics and `$yak.filepath`, and `std.files` reads relative to the
+current directory. A `.yakl` file is a [library](SPEC.md#modules), which can
+be imported but not rendered, so naming one is an error.
+
+### Rendering a directory
+
+Given a directory, `render` renders every `.yak` template beneath it as it
+would render each one alone, with the same context files, format and flags.
+Libraries are left out, and so is every file or directory whose name begins
+with `.`, and the `vendor/` directory at the root of a package, which holds
+other packages' templates. The directory need not be a package.
+
+A directory writes one file per template, so it needs `-O` or
+`--output-dir`, and refuses `-o`. Each file is named as `-O` names it. With
+`-O` alone it goes beside its template; with `--output-dir` it goes to the
+same place in a tree beneath that directory, so `deploy/app.toml.yak` writes
+`build/deploy/app.toml`:
+
+```console
+$ yak render . --output-dir build -c production.yaml
+$ yak render deploy -O
+```
+
+Two templates that would write the same file, such as `app.yak` and
+`app.yaml.yak`, are an error. Nothing is written unless every template
+renders.
+
+### Rendering a git package
+
+Given a [git reference](SPEC.md#remote-packages), `render` clones the
+repository into a temporary directory, checks out the ref, vendors the
+package's own dependencies as its `yak.lock` pins them, and renders the
+package as a directory. It needs `--output-dir`:
+
+```console
+$ yak render git+https://github.com/acme/deploy.git//web@v2 --output-dir build
+```
+
+## `yak package`
+
+`yak package`, or `yak pkg`, manages the package the current directory is in:
+the one whose `yak.pkg` is there or in the nearest directory above it. Its
+`add`, `remove` and `sync` subcommands are also top-level commands, so
+`yak add` is `yak package add`.
+
+### `yak add`
+
+```console
+$ yak add SOURCE [--name NAME]
+```
+
+Adds a dependency to `yak.pkg`, keeping the rest of the file, comments
+included, as it was. `SOURCE` is a local path, to a package or to a module,
+or a [git reference](SPEC.md#remote-packages). The dependency is named after
+the package, as its own `yak.pkg` names it, or after the module's file, unless
+`--name` gives the import path it goes under. A local path is written
+relative to `yak.pkg`. A git package is vendored and pinned in `yak.lock` at
+once.
+
+```console
+$ yak add git+https://github.com/acme/lib.git@v1.2.0   # named as its yak.pkg names it
+$ yak add ../shared --name common
+```
+
+### `yak remove`
+
+```console
+$ yak remove NAME
+```
+
+Removes the dependency `NAME` from `yak.pkg`. A git package leaves `vendor/`
+and `yak.lock` too, unless another package still depends on it.
+
+### `yak sync`
+
+```console
+$ yak sync [--update [NAME]...]
+```
+
+Vendors every git package the package depends on, directly or through
+another, into `vendor/` beneath its root, and rewrites `yak.lock`. A package
+`yak.lock` pins is checked out at the pinned commit, and one already vendored
+with the pinned content is not fetched at all, so `sync` needs no network
+when nothing changed. A dependency that `yak.lock` does not pin yet, or whose
+ref changed in `yak.pkg`, is fetched at the commit its ref names now. What
+`sync` vendors must match the hash `yak.lock` records.
+
+`--update` resolves refs again, for the dependencies it names or, naming
+none, for every one: after `yak sync --update lib`, a `lib` that follows a
+branch moves to the branch's latest commit.
+
+`sync` runs `git`, so git must be installed, and fetches with the
+credentials git already has. Anything in `vendor/` that no dependency needs
+is removed, and `vendor/` holds a `.gitignore` so that it is never committed.
 
 ### Strict mode
 

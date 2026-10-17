@@ -1136,11 +1136,10 @@ A document holding nothing but bindings renders nothing at all.
 
 ### Your own modules
 
-Every `.yak` file is a module that another can `import`. The path is dotted
-and resolves from the importing file's directory, and the module is bound
-under the last segment of its path. Hidden entries are part of a module's
-value, which is how a module hands out a function without rendering it.
-Save this as `lib/labels.yak`:
+Every `.yak` file is a module that another can `import`, and so is every
+`.yakl` file: a library, which is only ever imported, so rendering one is an
+error. Hidden entries are part of a module's value, which is how a module
+hands out a function without rendering it. Save this as `lib/labels.yakl`:
 
 ```yaml
 let team = "platform"
@@ -1148,7 +1147,16 @@ let team = "platform"
 standard:: (app) => {app: app, team: team}
 ```
 
-and import it from a template beside the `lib` directory:
+A directory with a `yak.pkg` at its root is a package. Give the project one:
+
+```yaml
+package:
+  name: web
+```
+
+The import path is dotted and resolves from the package root, so every file
+in the package names the library the same way, and the module is bound under
+the last segment of its path. Import it from a template in the package:
 
 ```yaml
 import lib.labels
@@ -1167,9 +1175,24 @@ metadata:
 ```
 
 `import shared = lib.labels` picks a different name, and an
-`import { ... }` block takes several imports at once. A `yak.mod` file can
-map import paths onto other directories; [SPEC.md](SPEC.md#resolution)
-describes it.
+`import { ... }` block takes several imports at once. The `dependencies` of a
+`yak.pkg` map import paths onto other packages; [SPEC.md](SPEC.md#packages)
+describes them. A package can come from a git repository:
+
+```console
+$ yak add git+https://github.com/acme/lib.git@v1.2.0
+```
+
+adds it under the name its own `yak.pkg` gives it, vendors it into `vendor/`
+and pins its commit in `yak.lock`. After a fresh checkout, `yak sync` vendors
+the same commit again.
+
+`yak render` given the package directory renders every template in it, and
+leaves the libraries out:
+
+```console
+$ yak render . --output-dir build
+```
 
 ### The standard library
 

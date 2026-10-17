@@ -1,9 +1,10 @@
 // Package module finds and loads the module an "import" names: a built-in
 // module of the standard library, or a file module read from a template file.
 //
-// A file module's path resolves relative to the directory of the importing
-// file, unless the nearest yak.mod above that directory maps the path, or a
-// prefix of it, onto somewhere else.
+// A package is a directory holding a yak.pkg. A file module's path resolves
+// from the root of the package the importing file is in, or from the
+// directory of the importing file when it is in none, unless the package's
+// yak.pkg maps the path, or a prefix of it, onto one of its dependencies.
 package module
 
 import (
@@ -21,24 +22,28 @@ import (
 
 const (
 	// Std is the first segment of every standard library module. It never
-	// names a file, and a yak.mod cannot map it.
+	// names a file, and a yak.pkg cannot map it.
 	Std = "std"
-	// ModFile is the name of the file that maps module paths.
-	ModFile = "yak.mod"
-	// Ext is the extension of a module's file.
+	// PkgFile is the name of the file that makes a directory a package.
+	PkgFile = "yak.pkg"
+	// Ext is the extension of a template, a module that can be rendered.
 	Ext = ".yak"
+	// ExtLibrary is the extension of a library, a module that can only be
+	// imported.
+	ExtLibrary = ".yakl"
 )
 
 // Resolve returns the file that path names when it is imported by the file
 // at from.
 func Resolve(from string, path []string) (string, error) {
 	dir, segs := filepath.Dir(from), path
-	mod, err := find(dir)
+	pkg, err := find(dir)
 	if err != nil {
 		return "", err
 	}
-	if mod != nil {
-		target, rest, err := mod.resolve(path)
+	if pkg != nil {
+		dir = pkg.Root()
+		target, rest, err := pkg.resolve(path)
 		switch {
 		case err != nil:
 			return "", err
@@ -52,35 +57,59 @@ func Resolve(from string, path []string) (string, error) {
 }
 
 // lookup finds the module that segs names under dir: the directories of
-// every segment but the last, and the file that the last one names. name is
-// the whole path as the import wrote it.
+// every segment but the last, and the template or library that the last one
+// names. name is the whole path as the import wrote it.
 func lookup(dir string, segs []string, name string) (string, error) {
 	base := filepath.Join(append([]string{dir}, segs...)...)
-	file := base + Ext
-	if _, err := os.Stat(file); err == nil {
-		return file, nil
+	var found []string
+	for _, ext := range []string{Ext, ExtLibrary} {
+		if _, err := os.Stat(base + ext); err == nil {
+			found = append(found, base+ext)
+		}
+	}
+	switch len(found) {
+	case 1:
+		return found[0], nil
+	case 2:
+		return "", fmt.Errorf("%q names both %s and %s; keep only one of them", name, found[0], found[1])
 	}
 	if info, err := os.Stat(base); err == nil && info.IsDir() {
-		return "", fmt.Errorf("%q is a package; import one of the modules in it", name)
+		return "", fmt.Errorf("%q is a directory; import one of the modules in it", name)
 	}
-	return "", fmt.Errorf("no module %q: %s does not exist", name, file)
+	return "", fmt.Errorf("no module %q: neither %s nor %s exists", name, base+Ext, base+ExtLibrary)
 }
 
-// modFile is a parsed yak.mod.
-type modFile struct {
-	path string
-	// modules maps a dotted module path onto the location it was written as.
-	modules map[string]string
+// isModule reports whether path names a module's file rather than a
+// directory.
+func isModule(path string) bool {
+	return strings.HasSuffix(path, Ext) || strings.HasSuffix(path, ExtLibrary)
 }
 
-// find reads the nearest yak.mod in dir or above it, and answers nil when
-// there is none.
-func find(dir string) (*modFile, error) {
+// Package is a parsed yak.pkg.
+type Package struct {
+	// Path is the yak.pkg file, whose directory is the package root.
+	Path string
+	Name string
+	// Dependencies maps a dotted module path onto the location it was
+	// written as.
+	Dependencies map[string]string
+}
+
+// Root is the directory of the package.
+func (p *Package) Root() string { return filepath.Dir(p.Path) }
+
+// FindPackage reads the nearest yak.pkg in dir or above it, and answers nil
+// when there is none.
+func FindPackage(dir string) (*Package, error) {
+	return find(dir)
+}
+
+func find(dir string) (*Package, error) {
 	for {
-		path := filepath.Join(dir, ModFile)
+		path := filepath.Join(dir, PkgFile)
 		src, err := os.ReadFile(path)
 		if err == nil {
-			return parse(path, src)
+			return ParsePackage(path, src)
 		}
 		if !errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("reading %s: %w", path, err)
@@ -101,19 +130,31 @@ func find(dir string) (*modFile, error) {
 	}
 }
 
-func parse(path string, src []byte) (*modFile, error) {
+// ParsePackage parses src as the yak.pkg at path.
+func ParsePackage(path string, src []byte) (*Package, error) {
 	var doc struct {
-		Modules map[string]string `yaml:"modules"`
+		Package struct {
+			Name        string `yaml:"name"`
+			Version     string `yaml:"version"`
+			Description string `yaml:"description"`
+		} `yaml:"package"`
+		Dependencies map[string]string `yaml:"dependencies"`
 	}
 	dec := yaml.NewDecoder(bytes.NewReader(src))
 	dec.KnownFields(true)
 	if err := dec.Decode(&doc); err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	for key, target := range doc.Modules {
+	if doc.Package.Name == "" {
+		return nil, fmt.Errorf("%s: the package has no name; give it one as package.name", path)
+	}
+	if !IsName(doc.Package.Name) {
+		return nil, fmt.Errorf("%s: %q cannot name a package; a package name is an identifier", path, doc.Package.Name)
+	}
+	for key, target := range doc.Dependencies {
 		segs := strings.Split(key, ".")
 		for _, s := range segs {
-			if !isSegment(s) {
+			if !IsName(s) {
 				return nil, fmt.Errorf("%s: %q is not a module path", path, key)
 			}
 		}
@@ -124,12 +165,12 @@ func parse(path string, src []byte) (*modFile, error) {
 			return nil, fmt.Errorf("%s: %q maps to nothing", path, key)
 		}
 	}
-	return &modFile{path: path, modules: doc.Modules}, nil
+	return &Package{Path: path, Name: doc.Package.Name, Dependencies: doc.Dependencies}, nil
 }
 
-// isSegment reports whether s can be written as one segment of an import
-// path, which is an identifier.
-func isSegment(s string) bool {
+// IsName reports whether s can be written as one segment of an import path,
+// which is an identifier.
+func IsName(s string) bool {
 	if s == "" {
 		return false
 	}
@@ -142,14 +183,15 @@ func isSegment(s string) bool {
 	return true
 }
 
-// resolve applies the longest entry whose key is a prefix of path. It answers
-// the location the entry maps to and the segments of path left below it, or
-// an empty location when no entry covers the path. A location that is a
-// module has nothing left below it; one that is a package always does.
-func (m *modFile) resolve(path []string) (string, []string, error) {
+// resolve applies the longest dependency whose key is a prefix of path. It
+// answers the location the dependency maps to and the segments of path left
+// below it, or an empty location when no dependency covers the path. A
+// location that is a module has nothing left below it; one that is a package
+// always does.
+func (m *Package) resolve(path []string) (string, []string, error) {
 	var key []string
 	var target string
-	for k, t := range m.modules {
+	for k, t := range m.Dependencies {
 		segs := strings.Split(k, ".")
 		if len(segs) > len(path) || len(segs) <= len(key) {
 			continue
@@ -162,26 +204,37 @@ func (m *modFile) resolve(path []string) (string, []string, error) {
 		return "", nil, nil
 	}
 	name := strings.Join(key, ".")
-	if strings.Contains(target, "://") {
-		return "", nil, fmt.Errorf("%s maps %q to %s; remote modules are not implemented yet", m.path, name, target)
-	}
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(filepath.Dir(m.path), target)
+	if IsRemote(target) {
+		src, err := ParseSource(target)
+		if err != nil {
+			return "", nil, fmt.Errorf("%s maps %q to %w", m.Path, name, err)
+		}
+		dir, ok := vendored(m.Root(), src.Key)
+		if !ok {
+			return "", nil, fmt.Errorf("%s maps %q to %s, which is not vendored; run yak sync", m.Path, name, target)
+		}
+		target = filepath.Join(dir, filepath.FromSlash(src.Dir))
+	} else if !filepath.IsAbs(target) {
+		target = filepath.Join(m.Root(), target)
 	}
 	rest := path[len(key):]
-	if strings.HasSuffix(target, Ext) {
+	if isModule(target) {
 		if len(rest) > 0 {
 			return "", nil, fmt.Errorf("%s maps %q to the module %s, so %q is not inside a package",
-				m.path, name, target, strings.Join(path, "."))
+				m.Path, name, target, strings.Join(path, "."))
 		}
 		if _, err := os.Stat(target); err != nil {
-			return "", nil, fmt.Errorf("%s maps %q to %s, which does not exist", m.path, name, target)
+			return "", nil, fmt.Errorf("%s maps %q to %s, which does not exist", m.Path, name, target)
 		}
 		return target, nil, nil
 	}
+	if _, err := os.Stat(filepath.Join(target, PkgFile)); err != nil {
+		return "", nil, fmt.Errorf("%s maps %q to %s, which is not a package: it holds no %s",
+			m.Path, name, target, PkgFile)
+	}
 	if len(rest) == 0 {
 		return "", nil, fmt.Errorf("%s maps %q to the package %s; import one of the modules in it",
-			m.path, name, target)
+			m.Path, name, target)
 	}
 	return target, rest, nil
 }

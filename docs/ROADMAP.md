@@ -11,7 +11,9 @@ mode, the
 `?.` operators, arithmetic, comparison and boolean operators, the `<<` merge
 in both of its forms,
 `if`/`then`/`else`, sequence and mapping comprehensions, `import` of local
-modules with `yak.mod` mappings, and the YAML, KYAML,
+modules and `.yakl` libraries, packages defined by `yak.pkg` with local and
+git dependencies, the `package` command with `add`, `remove` and `sync`,
+`yak.lock`, rendering a directory or a git package, and the YAML, KYAML,
 JSON, TOML and line-delimited output formats. What follows is the planned
 order of the remaining work.
 
@@ -37,21 +39,22 @@ The rest of the library is namespaced rather than bare, so that adding a
 function cannot take a name a template is already using. Each module is a
 built-in module registered under a dotted path beginning with `std`, which
 `import std.name` binds as a mapping of its built-ins; the `std` segment is
-one that no file or `yak.mod` can take. Each module has a file of its own,
+one that no file or `yak.pkg` can take. Each module has a file of its own,
 and names that take more than one word are camelCase. A built-in that takes a function calls it with `eval.Call`.
 
 What remains is formatting.
 
-## 2. Remote packages
+## 2. OCI packages
 
-`import` resolves local modules, and `yak.mod` maps paths onto local
-packages and modules ([SPEC.md](SPEC.md#modules)). A `yak.mod` target written
-as a URL — `https`, `git` or an OCI registry — is accepted, but an import it
-covers is a "not implemented yet" error from `module.Resolve`.
+Git packages are in ([SPEC.md](SPEC.md#remote-packages)): `internal/deps`
+vendors them by running `git`, pins them in `yak.lock`, and
+`module.Resolve` reads them from `vendor/`. An `oci://` dependency is
+accepted, but `module.ParseSource` answers "not implemented yet" for it.
 
-What remains is fetching them into a cache and handing `lookup` the cached
-directory, and the `yak.lock` that pins what was fetched. Packaging and
-pushing a package come after that, with the `mod` command.
+What remains is OCI, through oras-go: `yak package build` writes the package
+as a local OCI image layout, `yak package push` uploads it, and `sync` and
+`render` fetch `oci://` references, pinning a digest in `yak.lock` where a
+git package pins a commit.
 
 ## 3. `schema`
 
@@ -71,10 +74,8 @@ message that says so.
 
 `render` is the only command so far; [CLI.md](CLI.md) documents it.
 
-- `build` renders a multi-file project rather than a single template.
 - `check` checks inputs and outputs against a schema.
 - `fmt` formats yak files following best practices.
-- `mod` controls yak.mod and yak.lock files.
 
 They slot into `internal/cli` beside `render`, and both can reuse
 `internal/engine`.

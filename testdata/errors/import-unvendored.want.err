@@ -1,0 +1,1 @@
+import-unvendored.yak:1:8: yak.pkg maps "missing" to git+https://example.com/acme/missing.git@v1, which is not vendored; run yak sync

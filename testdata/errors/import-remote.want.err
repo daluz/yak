@@ -1,1 +1,0 @@
-import-remote.yak:1:8: yak.mod maps "remote" to https://example.com/remote; remote modules are not implemented yet

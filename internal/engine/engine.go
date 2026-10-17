@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/daluz/yak/internal/ctxfile"
 	"github.com/daluz/yak/internal/eval"
@@ -15,8 +16,8 @@ import (
 	_ "github.com/daluz/yak/internal/stdlib"
 )
 
-// ExtTemplate is the extension recognised by the tool, which is the one a
-// module is written with.
+// ExtTemplate is the extension of a template, which is the one a module that
+// can be rendered is written with.
 const ExtTemplate = module.Ext
 
 // TemplateRequest describes a single template rendering.
@@ -35,6 +36,9 @@ type TemplateRequest struct {
 
 // Template renders one template file to the request's writer.
 func Template(req TemplateRequest) error {
+	if strings.HasSuffix(req.Path, module.ExtLibrary) {
+		return fmt.Errorf("%s is a library, which can be imported but not rendered", req.Path)
+	}
 	name, src, err := readSource(req.Path)
 	if err != nil {
 		return err

@@ -1,0 +1,5 @@
+package:
+  name: template
+dependencies:
+  shared: third_party/shared
+  base: third_party/base.yak

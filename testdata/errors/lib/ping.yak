@@ -1,2 +1,2 @@
-import pong
+import lib.pong
 value: pong.value

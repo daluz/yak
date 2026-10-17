@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,6 +26,9 @@ func run(t *testing.T, args ...string) (string, error) {
 func write(t *testing.T, dir, name, contents string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -464,6 +468,212 @@ func TestRenderOutputDirNeedsAnOutputFile(t *testing.T) {
 	_, err := run(t, "render", tmpl, "--output-dir", dir)
 	if err == nil || !strings.Contains(err.Error(), "--output-dir needs") {
 		t.Errorf("error = %v, want a complaint about the missing output file", err)
+	}
+}
+
+// project writes a package holding two templates, a library they import,
+// and a hidden template that a directory leaves out.
+func project(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	write(t, dir, "yak.pkg", "package:\n  name: web\n")
+	write(t, dir, "lib/names.yakl", "app:: \"web\"\n")
+	write(t, dir, "app.yak", "import lib.names\nname: names.app\n")
+	write(t, dir, "deploy/svc.toml.yak", "import lib.names\nservice: names.app\n")
+	write(t, dir, ".hidden/skip.yak", "skipped: true\n")
+	return dir
+}
+
+func TestRenderDirectoryIntoOutputDir(t *testing.T) {
+	dir := project(t)
+	out := filepath.Join(t.TempDir(), "build")
+
+	if _, err := run(t, "render", dir, "--output-dir", out); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	for name, want := range map[string]string{
+		"app.yaml":        "name: web\n",
+		"deploy/svc.toml": "service = \"web\"\n",
+	} {
+		got, err := os.ReadFile(filepath.Join(out, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+	for _, name := range []string{"lib", ".hidden"} {
+		if _, err := os.Stat(filepath.Join(out, name)); err == nil {
+			t.Errorf("%s was written, want it left out", name)
+		}
+	}
+}
+
+func TestRenderDirectoryBesideTemplates(t *testing.T) {
+	dir := project(t)
+
+	if _, err := run(t, "render", dir, "-O", "-f", "json"); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	for _, name := range []string{"app.json", "deploy/svc.json"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("want %s to have been written: %v", name, err)
+		}
+	}
+}
+
+func TestRenderDirectoryNeedsAnOutputDirectory(t *testing.T) {
+	dir := project(t)
+
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{nil, "give --output-dir or --automatic-output"},
+		{[]string{"-o", filepath.Join(dir, "out.yaml")}, "--output names one file"},
+	} {
+		_, err := run(t, append([]string{"render", dir}, tc.args...)...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("render %v: error = %v, want it to contain %q", tc.args, err, tc.want)
+		}
+	}
+}
+
+func TestRenderDirectoryRefusesTwoTemplatesWritingOneFile(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "app.yak", "a: 1\n")
+	write(t, dir, "app.yaml.yak", "a: 2\n")
+
+	_, err := run(t, "render", dir, "-O")
+	if err == nil || !strings.Contains(err.Error(), "would both write") {
+		t.Errorf("error = %v, want a complaint about the shared output file", err)
+	}
+}
+
+func TestRenderDirectoryWritesNothingOnFailure(t *testing.T) {
+	dir := project(t)
+	write(t, dir, "zz-broken.yak", "a: .missing\n")
+	out := filepath.Join(t.TempDir(), "build")
+
+	if _, err := run(t, "render", dir, "--output-dir", out); err == nil {
+		t.Fatal("expected an error")
+	}
+	if _, err := os.Stat(out); err == nil {
+		t.Error("the output directory was written, want nothing written")
+	}
+}
+
+func TestRenderDirectoryWithoutTemplates(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "lib.yakl", "a: 1\n")
+
+	_, err := run(t, "render", dir, "-O")
+	if err == nil || !strings.Contains(err.Error(), "no .yak templates") {
+		t.Errorf("error = %v, want a complaint about the missing templates", err)
+	}
+}
+
+func TestRenderRefusesALibrary(t *testing.T) {
+	dir := project(t)
+
+	_, err := run(t, "render", filepath.Join(dir, "lib", "names.yakl"))
+	if err == nil || !strings.Contains(err.Error(), "is a library, which can be imported but not rendered") {
+		t.Errorf("error = %v, want a library to be refused", err)
+	}
+}
+
+func TestRenderDirectorySkipsTheVendorDirectory(t *testing.T) {
+	dir := project(t)
+	write(t, dir, "vendor/example.com/acme/lib/demo.yak", "demo: true\n")
+	write(t, dir, "deploy/vendor/kept.yak", "kept: true\n")
+	out := filepath.Join(t.TempDir(), "build")
+
+	if _, err := run(t, "render", dir, "--output-dir", out); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "vendor")); err == nil {
+		t.Error("the package's vendor directory was rendered")
+	}
+	if _, err := os.Stat(filepath.Join(out, "deploy", "vendor", "kept.yaml")); err != nil {
+		t.Errorf("a vendor directory outside the package root was skipped: %v", err)
+	}
+}
+
+func TestPackageAddAndRemove(t *testing.T) {
+	dir := project(t)
+	write(t, dir, "../shared/yak.pkg", "package:\n  name: shared\n")
+	write(t, dir, "../base.yak", "region: \"eu\"\n")
+	t.Chdir(filepath.Join(dir, "deploy"))
+
+	for _, args := range [][]string{
+		{"add", "../../shared"},
+		{"pkg", "add", "../../base.yak", "--name", "settings"},
+	} {
+		if _, err := run(t, args...); err != nil {
+			t.Fatalf("yak %s: %v", strings.Join(args, " "), err)
+		}
+	}
+	want := "package:\n  name: web\ndependencies:\n  shared: ../shared\n  settings: ../base.yak\n"
+	if got, _ := os.ReadFile(filepath.Join(dir, "yak.pkg")); string(got) != want {
+		t.Errorf("yak.pkg = %q, want %q", got, want)
+	}
+	for _, args := range [][]string{{"remove", "shared"}, {"package", "remove", "settings"}} {
+		if _, err := run(t, args...); err != nil {
+			t.Fatalf("yak %s: %v", strings.Join(args, " "), err)
+		}
+	}
+	want = "package:\n  name: web\ndependencies: {}\n"
+	if got, _ := os.ReadFile(filepath.Join(dir, "yak.pkg")); string(got) != want {
+		t.Errorf("yak.pkg = %q, want %q", got, want)
+	}
+}
+
+func TestPackageCommandsNeedAPackage(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, args := range [][]string{{"sync"}, {"add", "x"}, {"pkg", "remove", "x"}} {
+		if _, err := run(t, args...); err == nil || !strings.Contains(err.Error(), "no yak.pkg in") {
+			t.Errorf("yak %s: error = %v, want a complaint about the missing yak.pkg", strings.Join(args, " "), err)
+		}
+	}
+}
+
+func TestSyncNamesDependenciesOnlyWithUpdate(t *testing.T) {
+	t.Chdir(project(t))
+	if _, err := run(t, "sync", "lib"); err == nil || !strings.Contains(err.Error(), "only with --update") {
+		t.Errorf("error = %v, want a complaint about the name", err)
+	}
+}
+
+func TestRenderGitPackage(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	repo := project(t)
+	for _, args := range [][]string{
+		{"init", "--quiet"},
+		{"add", "-A"},
+		{"commit", "--quiet", "-m", "web"},
+		{"tag", "v1"},
+	} {
+		cmd := exec.Command("git", append([]string{"-c", "user.name=yak", "-c", "user.email=yak@example.com",
+			"-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}, args...)...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	ref := "git+file://" + filepath.ToSlash(repo) + "@v1"
+	out := filepath.Join(t.TempDir(), "build")
+
+	if _, err := run(t, "render", ref, "-O"); err == nil || !strings.Contains(err.Error(), "give --output-dir") {
+		t.Errorf("render -O: error = %v, want --output-dir asked for", err)
+	}
+	if _, err := run(t, "render", ref, "--output-dir", out); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(out, "deploy", "svc.toml")); string(got) != "service = \"web\"\n" {
+		t.Errorf("deploy/svc.toml = %q, want the template rendered", got)
 	}
 }
 

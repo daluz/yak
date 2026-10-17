@@ -1,2 +1,2 @@
-import ping
+import lib.ping
 value: ping.value

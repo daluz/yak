@@ -1,0 +1,5 @@
+package:
+  name: errors
+dependencies:
+  remote: oci://example.com/remote:1.0
+  missing: git+https://example.com/acme/missing.git@v1

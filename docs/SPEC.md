@@ -605,15 +605,19 @@ where an anonymous one was written.
 
 ## Modules
 
-Every `.yak` file is a module, and a directory of them is a package. A dotted
-path walks a directory chain and ends at a file, so
+Every `.yak` and `.yakl` file is a module. A `.yak` file is a template, which
+can be rendered as well as imported; a `.yakl` file is a library, which can
+only be imported, and is the place for functions and defaults that are never
+output of their own. A dotted path walks a directory chain and ends at a
+file, so
 
 ```yaml
 import mydirectory.mymodule
 ```
 
-loads `./mydirectory/mymodule.yak` and binds it under the last segment of the
-path. Importing a package, such as `mydirectory`, is an error. The binding
+loads `mydirectory/mymodule.yak`, or `mydirectory/mymodule.yakl`, and binds it
+under the last segment of the path. A path that names both files is an
+error, and so is one that names a directory, such as `mydirectory`. The binding
 holds the module's value, its one document evaluated as it would be rendered,
 and is read with field access. Hidden fields are part of that value, which is
 how a module hands out a function or a default without rendering it:
@@ -652,32 +656,90 @@ own file. A module is loaded once per document however often it is imported,
 and modules may import each other in a cycle as long as no value depends on
 itself.
 
-### Resolution
+### Packages
 
-A path resolves from the directory of the importing file and cannot climb out
-of it: `mydir.module1` is `./mydir/module1.yak` beside the importing file.
-
-The nearest `yak.mod` in that directory or above maps module paths onto other
-locations:
+A package is a directory with a `yak.pkg` file at its root, which names the
+package and lists what it depends on:
 
 ```yaml
-modules:
+package:
+  name: web                    # required; an identifier
+  version: 1.4.0               # optional
+  description: The web tier    # optional
+dependencies:
   shared: ../shared            # a package: shared.x.y is ../shared/x/y.yak
-  base: vendor/base.yak        # a module: base is vendor/base.yak
-  acme: https://example.com/acme
+  base: third_party/base.yak   # a module: base is third_party/base.yak
+  acme: git+https://github.com/acme/lib.git@v1.2.0
 ```
 
-A key is a dotted path that covers every import beginning with it, segment by
-segment; when several keys do, the longest wins. A target ending in `.yak` is
-a module and matches only its own key. Any other local target is a package
-directory, in which the rest of the import path is looked up. Local targets
-are relative to their `yak.mod`. A path no key covers resolves from the
-importing file's directory.
+A file belongs to the package of the nearest `yak.pkg` in its directory or
+above. A file in no package is a module all the same.
 
-A target written as a URL names a remote package fetched over `https`, `git`
-or from an OCI registry. Remote packages are **not implemented yet**: an import
-one covers is an error, and the rest of the `yak.mod` still works. A
-`yak.lock` pinning remote sources will come with them.
+### Resolution
+
+Inside a package, a path resolves from the package root, whichever directory
+the importing file is in: `mydir.module1` is `mydir/module1.yak` beneath the
+directory holding `yak.pkg`. Outside any package it resolves from the
+importing file's directory. Either way a path cannot climb out of where it
+starts.
+
+A key of `dependencies` is a dotted path that covers every import beginning
+with it, segment by segment; when several keys do, the longest wins. A target
+ending in `.yak` or `.yakl` is a module and matches only its own key. Any other
+local target must be a package, a directory with a `yak.pkg` of its own, in
+which the rest of the import path is looked up; the modules of that package
+resolve their own imports from its root. Local targets are relative to their
+`yak.pkg`. A path no key covers resolves from the package root.
+
+### Remote packages
+
+A target written as a URL names a remote package. A git package is written
+
+```text
+git+SCHEME://HOST/REPOSITORY[//DIR][@REF]
+```
+
+where `SCHEME` is `https`, `ssh` or `file`, `DIR` is the directory of the
+repository holding the package (its root when left out), and `REF` is a
+branch, tag or commit (the default branch when left out):
+
+```yaml
+dependencies:
+  acme: git+https://github.com/acme/lib.git@v1.2.0
+  web: git+ssh://git@gitlab.com/acme/mono.git//packages/web@main
+```
+
+A template never fetches anything. `yak sync` (see [CLI.md](CLI.md#yak-sync))
+vendors every remote package into `vendor/` beneath the package root, keyed
+by its repository's host and path, so `acme` above lands in
+`vendor/github.com/acme/lib/`, and an import it covers resolves there. One
+that has not been vendored is an error that says to run `yak sync`.
+
+Vendoring is flat. The root package vendors the remote packages its
+dependencies depend on too, each once, and a vendored package finds its own
+dependencies in that same `vendor/`. A repository is checked out at one ref
+only, so two packages that want it at different refs are an error.
+
+`yak.lock`, beside `yak.pkg`, pins every vendored repository to a commit and
+a hash of its content, so a checkout of the package with its `yak.lock`
+vendors the same files every time:
+
+```yaml
+# Written by yak sync. Do not edit it by hand.
+packages:
+  github.com/acme/lib:
+    source: https://github.com/acme/lib.git
+    ref: v1.2.0
+    commit: 4b825dc642cb6eb9a060e54bf8d69288fbee4904
+    hash: sha256:8f43…
+```
+
+`yak.lock` is meant to be committed. `vendor/` is not: `yak sync` writes a
+`.gitignore` into it, and rebuilds it from `yak.lock`.
+
+An `oci://registry/repository:tag` target names a package in an OCI
+registry. OCI packages are **not implemented yet**: an import one covers is
+an error, and the rest of the `yak.pkg` still works.
 
 ## Standard library
 
@@ -692,7 +754,7 @@ a: size([1, 2])   # "mine"
 ```
 
 Everything else lives in modules whose paths begin with `std`. They never
-resolve to a file and no `yak.mod` can map them, so a library module is always
+resolve to a file and no `yak.pkg` can map them, so a library module is always
 found under its own name and a new one cannot take a path a project uses.
 Importing one binds a mapping of its functions under the last segment of its
 path, which a rename changes as for any import:

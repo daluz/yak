@@ -1,4 +1,4 @@
-import tiers
+import lib.tiers
 
 let make(app) =
   app: app

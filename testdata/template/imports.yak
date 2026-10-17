@@ -1,4 +1,5 @@
-## lib.* resolves beside this file; shared and base go through yak.mod.
+## lib.* resolves from the package root, and lib.labels is a library;
+## shared and base are dependencies in yak.pkg.
 import lib.defaults
 import labels = lib.labels
 import {

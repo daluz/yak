@@ -1,1 +1,1 @@
-import-missing.yak:1:8: no module "lib.absent": lib/absent.yak does not exist
+import-missing.yak:1:8: no module "lib.absent": neither lib/absent.yak nor lib/absent.yakl exists

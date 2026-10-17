@@ -20,7 +20,13 @@ func NewRootCommand() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(newRenderCommand())
+	root.AddCommand(
+		newRenderCommand(),
+		newPackageCommand(),
+		shortcut(newAddCommand()),
+		shortcut(newRemoveCommand()),
+		shortcut(newSyncCommand()),
+	)
 	return root
 }
 
