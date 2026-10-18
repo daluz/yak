@@ -677,6 +677,42 @@ func TestRenderGitPackage(t *testing.T) {
 	}
 }
 
+func TestInitThenBuild(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "web")
+	if _, err := run(t, "init", dir); err != nil {
+		t.Fatalf("yak init: %v", err)
+	}
+	if _, err := run(t, "package", "init", dir); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("yak package init again: error = %v, want a refusal", err)
+	}
+	t.Chdir(dir)
+	if _, err := run(t, "pkg", "build"); err != nil {
+		t.Fatalf("yak pkg build: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".yak", "oci", "index.json")); err != nil {
+		t.Errorf("the build wrote no OCI layout: %v", err)
+	}
+	out := filepath.Join(t.TempDir(), "build")
+	if _, err := run(t, "render", ".", "--output-dir", out); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(out, "app.yaml")); string(got) != "app: web\n" {
+		t.Errorf("app.yaml = %q, want the scaffolded template rendered", got)
+	}
+}
+
+func TestRegistryCommandsTakePlainHTTP(t *testing.T) {
+	for _, args := range [][]string{{"render"}, {"add"}, {"sync"}, {"remove"}, {"package", "push"}} {
+		cmd, _, err := cli.NewRootCommand().Find(args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cmd.Flags().Lookup("plain-http") == nil {
+			t.Errorf("yak %s has no --plain-http", strings.Join(args, " "))
+		}
+	}
+}
+
 func TestBuildAndValidateAreNotRegisteredYet(t *testing.T) {
 	for _, name := range []string{"build", "validate"} {
 		if _, err := run(t, name); err == nil {

@@ -109,7 +109,7 @@ func TestSyncVendorsAndPins(t *testing.T) {
 	if want := filepath.Join(pkg.Root(), "vendor", filepath.FromSlash(key(lib)), "labels.yakl"); got != want {
 		t.Errorf("Resolve(lib.labels) = %s, want %s", got, want)
 	}
-	lock := read(t, filepath.Join(pkg.Root(), deps.LockFile))
+	lock := read(t, filepath.Join(pkg.Root(), module.LockFile))
 	for _, want := range []string{key(lib) + ":", "ref: v1", "commit: " + v1, "hash: sha256:"} {
 		if !strings.Contains(lock, want) {
 			t.Errorf("yak.lock does not hold %q:\n%s", want, lock)
@@ -128,7 +128,7 @@ func TestSyncHonoursTheLock(t *testing.T) {
 	first := git(t, lib, "rev-parse", "HEAD")
 	pkg := project(t, "package:\n  name: app\ndependencies:\n  lib: "+source(lib, "@main")+"\n")
 	vendored := filepath.Join(pkg.Root(), "vendor", filepath.FromSlash(key(lib)), "x.yak")
-	lockPath := filepath.Join(pkg.Root(), deps.LockFile)
+	lockPath := filepath.Join(pkg.Root(), module.LockFile)
 
 	if err := deps.Sync(pkg, deps.Options{}); err != nil {
 		t.Fatal(err)
@@ -164,11 +164,11 @@ func TestSyncRefusesALockThatDoesNotMatch(t *testing.T) {
 	if err := deps.Sync(pkg, deps.Options{}); err != nil {
 		t.Fatal(err)
 	}
-	lockPath := filepath.Join(pkg.Root(), deps.LockFile)
+	lockPath := filepath.Join(pkg.Root(), module.LockFile)
 	lock := read(t, lockPath)
 	i := strings.Index(lock, "hash: ")
 	j := i + strings.Index(lock[i:], "\n")
-	write(t, pkg.Root(), map[string]string{deps.LockFile: lock[:i] + "hash: sha256:00" + lock[j:]})
+	write(t, pkg.Root(), map[string]string{module.LockFile: lock[:i] + "hash: sha256:00" + lock[j:]})
 
 	err := deps.Sync(pkg, deps.Options{})
 	if err == nil || !strings.Contains(err.Error(), "does not hold what yak.lock pinned") {
@@ -238,7 +238,7 @@ func TestAddAndRemove(t *testing.T) {
 	if got := read(t, pkg.Path); got != want {
 		t.Errorf("yak.pkg after add:\n%s\nwant:\n%s", got, want)
 	}
-	if _, err := os.Stat(filepath.Join(pkg.Root(), deps.LockFile)); err != nil {
+	if _, err := os.Stat(filepath.Join(pkg.Root(), module.LockFile)); err != nil {
 		t.Errorf("adding a git package did not write yak.lock: %v", err)
 	}
 
@@ -251,7 +251,7 @@ func TestAddAndRemove(t *testing.T) {
 	if err := deps.Remove(pkg, "lib", deps.Options{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{deps.LockFile, module.VendorDir} {
+	for _, name := range []string{module.LockFile, module.VendorDir} {
 		if _, err := os.Stat(filepath.Join(pkg.Root(), name)); err == nil {
 			t.Errorf("%s is still there after the last git package was removed", name)
 		}

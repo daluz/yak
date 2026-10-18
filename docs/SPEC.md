@@ -713,7 +713,12 @@ A template never fetches anything. `yak sync` (see [CLI.md](CLI.md#yak-sync))
 vendors every remote package into `vendor/` beneath the package root, keyed
 by its repository's host and path, so `acme` above lands in
 `vendor/github.com/acme/lib/`, and an import it covers resolves there. One
-that has not been vendored is an error that says to run `yak sync`.
+that has not been vendored is an error that says to run `yak sync`, and so
+is one that `vendor/` holds at another commit or digest than `yak.lock` pins,
+or that `yak.lock` pins at another ref than `yak.pkg` asks for: `vendor/`
+keeps a `yak.lock` of its own, recording what `yak sync` put there, which
+every import is checked against. Files edited by hand inside `vendor/` are not
+noticed until the next `yak sync`, which puts them back.
 
 Vendoring is flat. The root package vendors the remote packages its
 dependencies depend on too, each once, and a vendored package finds its own
@@ -737,9 +742,21 @@ packages:
 `yak.lock` is meant to be committed. `vendor/` is not: `yak sync` writes a
 `.gitignore` into it, and rebuilds it from `yak.lock`.
 
-An `oci://registry/repository:tag` target names a package in an OCI
-registry. OCI packages are **not implemented yet**: an import one covers is
-an error, and the rest of the `yak.pkg` still works.
+An OCI package is written
+
+```text
+oci://REGISTRY/REPOSITORY:TAG
+oci://REGISTRY/REPOSITORY@sha256:DIGEST
+```
+
+and is vendored under the registry's host and the repository, as a git
+package is under the repository's host and path; `yak.lock` pins the digest
+of its manifest where it pins a git package's commit. It is an OCI artifact
+that `yak package build` writes: a manifest of artifact type
+`application/vnd.yak.package.v1` with one layer, of media type
+`application/vnd.yak.package.layer.v1.tar+gzip`, holding the package's files
+but for hidden ones and its `vendor/`. Its `yak.lock` travels with it, so a
+package that depends on it vendors the same dependencies it was built with.
 
 ## Standard library
 

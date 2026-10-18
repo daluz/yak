@@ -8,7 +8,8 @@ the CLI entry point is `cmd/yak`, and everything else lives under `internal/`
 A module is what an `import` names: a built-in module written in Go under
 `stdlib`, or a file module read from a `.yak` template or a `.yakl` library.
 A directory with a `yak.pkg` is a package; `deps` edits its dependencies,
-vendors its git packages and writes its `yak.lock`. `module` decides which one
+vendors its git and OCI packages, writes its `yak.lock`, and builds and
+pushes it as an OCI artifact. `module` decides which one
 a path names and loads it; `eval` knows neither, and reaches modules only
 through the `eval.Modules` that `engine` hands it.
 

@@ -11,9 +11,10 @@ mode, the
 `?.` operators, arithmetic, comparison and boolean operators, the `<<` merge
 in both of its forms,
 `if`/`then`/`else`, sequence and mapping comprehensions, `import` of local
-modules and `.yakl` libraries, packages defined by `yak.pkg` with local and
-git dependencies, the `package` command with `add`, `remove` and `sync`,
-`yak.lock`, rendering a directory or a git package, and the YAML, KYAML,
+modules and `.yakl` libraries, packages defined by `yak.pkg` with local,
+git and OCI dependencies, the `package` command with `init`, `add`, `remove`,
+`sync`, `build` and `push`, `yak.lock`, rendering a directory or a remote
+package, and the YAML, KYAML,
 JSON, TOML and line-delimited output formats. What follows is the planned
 order of the remaining work.
 
@@ -44,19 +45,7 @@ and names that take more than one word are camelCase. A built-in that takes a fu
 
 What remains is formatting.
 
-## 2. OCI packages
-
-Git packages are in ([SPEC.md](SPEC.md#remote-packages)): `internal/deps`
-vendors them by running `git`, pins them in `yak.lock`, and
-`module.Resolve` reads them from `vendor/`. An `oci://` dependency is
-accepted, but `module.ParseSource` answers "not implemented yet" for it.
-
-What remains is OCI, through oras-go: `yak package build` writes the package
-as a local OCI image layout, `yak package push` uploads it, and `sync` and
-`render` fetch `oci://` references, pinning a digest in `yak.lock` where a
-git package pins a commit.
-
-## 3. `schema`
+## 2. `schema`
 
 Validation and type definitions, including default values.
 
@@ -70,9 +59,9 @@ schema {
 Schemas will also bring back tags, which the lexer currently rejects with a
 message that says so.
 
-## 4. Remaining commands
+## 3. Remaining commands
 
-`render` is the only command so far; [CLI.md](CLI.md) documents it.
+`render` and `package` are in; [CLI.md](CLI.md) documents them.
 
 - `check` checks inputs and outputs against a schema.
 - `fmt` formats yak files following best practices.

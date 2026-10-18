@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/daluz/yak/internal/module"
 )
 
 // copyTree copies the repository checked out at from to to, leaving out its
@@ -67,12 +69,16 @@ func hashDir(dir string) (string, error) {
 
 // prune removes from the vendor directory every repository but those keep
 // names, and the vendor directory itself when keep names none. It leaves a
-// .gitignore in the directory, so that it is never committed.
-func prune(vendor string, keep map[string]lockEntry) error {
+// .gitignore in the directory, so that it is never committed, and a lock
+// file recording what the directory holds.
+func prune(vendor string, keep map[string]module.LockEntry) error {
 	if len(keep) == 0 {
 		return os.RemoveAll(vendor)
 	}
 	if err := os.WriteFile(filepath.Join(vendor, ".gitignore"), []byte("*\n"), 0o644); err != nil {
+		return err
+	}
+	if err := writeLock(filepath.Join(vendor, module.LockFile), keep); err != nil {
 		return err
 	}
 	return filepath.WalkDir(vendor, func(path string, d fs.DirEntry, err error) error {
@@ -84,7 +90,7 @@ func prune(vendor string, keep map[string]lockEntry) error {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		if rel == ".gitignore" {
+		if rel == ".gitignore" || rel == module.LockFile {
 			return nil
 		}
 		if _, ok := keep[rel]; ok {

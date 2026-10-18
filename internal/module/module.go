@@ -88,8 +88,9 @@ func isModule(path string) bool {
 // Package is a parsed yak.pkg.
 type Package struct {
 	// Path is the yak.pkg file, whose directory is the package root.
-	Path string
-	Name string
+	Path    string
+	Name    string
+	Version string
 	// Dependencies maps a dotted module path onto the location it was
 	// written as.
 	Dependencies map[string]string
@@ -165,7 +166,7 @@ func ParsePackage(path string, src []byte) (*Package, error) {
 			return nil, fmt.Errorf("%s: %q maps to nothing", path, key)
 		}
 	}
-	return &Package{Path: path, Name: doc.Package.Name, Dependencies: doc.Dependencies}, nil
+	return &Package{Path: path, Name: doc.Package.Name, Version: doc.Package.Version, Dependencies: doc.Dependencies}, nil
 }
 
 // IsName reports whether s can be written as one segment of an import path,
@@ -209,9 +210,12 @@ func (m *Package) resolve(path []string) (string, []string, error) {
 		if err != nil {
 			return "", nil, fmt.Errorf("%s maps %q to %w", m.Path, name, err)
 		}
-		dir, ok := vendored(m.Root(), src.Key)
+		vendor, dir, ok := vendored(m.Root(), src.Key)
 		if !ok {
 			return "", nil, fmt.Errorf("%s maps %q to %s, which is not vendored; run yak sync", m.Path, name, target)
+		}
+		if err := checkVendored(vendor, src, target); err != nil {
+			return "", nil, fmt.Errorf("%s maps %q to %s, but %w", m.Path, name, target, err)
 		}
 		target = filepath.Join(dir, filepath.FromSlash(src.Dir))
 	} else if !filepath.IsAbs(target) {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -27,12 +26,14 @@ func newRenderCommand() *cobra.Command {
 		format    string
 		keepNull  bool
 		strict    bool
+		plainHTTP bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "render PATH",
-		Short: "Render a template, or every template in a directory",
-		Long: "Render one .yak template, or every .yak template beneath a directory.\n" +
+		Short: "Render a template, a directory or a remote package",
+		Long: "Render one .yak template, or every .yak template beneath a directory or\n" +
+			"in a remote package, given as git+https://... or oci://...\n" +
 			"A .yakl library can be imported but not rendered, so rendering a\n" +
 			"directory skips libraries, and rendering one directly is an error.\n\n" +
 			"Context files may be YAML or JSON. They are merged in the order given,\n" +
@@ -59,7 +60,8 @@ func newRenderCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			req := renderRequest{contexts: contexts, format: format, keepNull: keepNull, nonStrict: !strict}
 			if module.IsRemote(args[0]) {
-				return renderRemote(args[0], req, output, automatic, outputDir, cmd.ErrOrStderr())
+				fetch := deps.Options{Log: cmd.ErrOrStderr(), PlainHTTP: plainHTTP}
+				return renderRemote(args[0], req, output, automatic, outputDir, fetch)
 			}
 			if info, err := os.Stat(args[0]); err == nil && info.IsDir() {
 				return renderDir(args[0], req, output, automatic, outputDir)
@@ -96,6 +98,7 @@ func newRenderCommand() *cobra.Command {
 		"output format: "+render.FormatList()+" (default yaml, or the extension of --output or of the template)")
 	cmd.Flags().BoolVar(&keepNull, "keep-null-documents", false,
 		"write the documents that evaluated to null instead of leaving them out")
+	plainHTTPFlag(cmd, &plainHTTP)
 	cmd.Flags().BoolVar(&strict, "strict", true,
 		"render deterministically; --strict=false admits std.random and reading files anywhere")
 	cmd.MarkFlagsMutuallyExclusive("output", "automatic-output")
@@ -257,7 +260,7 @@ func renderDir(dir string, req renderRequest, output string, automatic bool, out
 
 // renderRemote fetches the remote package ref names, with what it depends
 // on, and renders it into outputDir.
-func renderRemote(ref string, req renderRequest, output string, automatic bool, outputDir string, log io.Writer) error {
+func renderRemote(ref string, req renderRequest, output string, automatic bool, outputDir string, fetch deps.Options) error {
 	if output != "" || automatic || outputDir == "" {
 		return fmt.Errorf("the remote package %s writes one file per template; give --output-dir, without --output or --automatic-output", ref)
 	}
@@ -270,7 +273,7 @@ func renderRemote(ref string, req renderRequest, output string, automatic bool, 
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	dir, err := deps.Fetch(src, tmp, deps.Options{Log: log})
+	dir, err := deps.Fetch(src, tmp, fetch)
 	if err != nil {
 		return err
 	}

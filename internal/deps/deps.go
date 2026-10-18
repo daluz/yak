@@ -32,6 +32,8 @@ type Options struct {
 	UpdateAll bool
 	// Log receives a line for every repository fetched.
 	Log io.Writer
+	// PlainHTTP talks to OCI registries over HTTP rather than HTTPS.
+	PlainHTTP bool
 }
 
 // Sync vendors every remote package that pkg depends on, directly or
@@ -126,11 +128,15 @@ func Remove(pkg *module.Package, name string, opts Options) error {
 	return os.WriteFile(pkg.Path, content, 0o644)
 }
 
-// Fetch checks out the remote package src names beneath dir and syncs it,
-// and answers the directory that holds it.
+// Fetch writes the remote package src names beneath dir and syncs it, and
+// answers the directory that holds it.
 func Fetch(src module.Source, dir string, opts Options) (string, error) {
 	clone := filepath.Join(dir, "repository")
-	if _, err := checkout(src, src.Ref, clone); err != nil {
+	if src.OCI {
+		if _, err := pull(src, src.Ref, opts.PlainHTTP, clone); err != nil {
+			return "", err
+		}
+	} else if _, err := checkout(src, src.Ref, clone); err != nil {
 		return "", err
 	}
 	root := filepath.Join(clone, filepath.FromSlash(src.Dir))
@@ -151,29 +157,31 @@ type dependency struct {
 
 type syncer struct {
 	root   string
-	locked map[string]lockEntry
+	locked map[string]module.LockEntry
 	// update holds the keys of the repositories whose refs are resolved
 	// again; all resolves every one again.
 	update map[string]bool
 	all    bool
 	// done holds the repositories vendored so far, by key.
-	done map[string]lockEntry
-	log  io.Writer
-	tmp  string
+	done      map[string]module.LockEntry
+	log       io.Writer
+	tmp       string
+	plainHTTP bool
 }
 
 func newSyncer(pkg *module.Package, opts Options) (*syncer, error) {
-	locked, err := readLock(filepath.Join(pkg.Root(), LockFile))
+	locked, err := module.ReadLock(filepath.Join(pkg.Root(), module.LockFile))
 	if err != nil {
 		return nil, err
 	}
 	s := &syncer{
-		root:   pkg.Root(),
-		locked: locked,
-		update: map[string]bool{},
-		all:    opts.UpdateAll,
-		done:   map[string]lockEntry{},
-		log:    opts.Log,
+		root:      pkg.Root(),
+		locked:    locked,
+		update:    map[string]bool{},
+		all:       opts.UpdateAll,
+		done:      map[string]module.LockEntry{},
+		log:       opts.Log,
+		plainHTTP: opts.PlainHTTP,
 	}
 	if s.log == nil {
 		s.log = io.Discard
@@ -242,13 +250,13 @@ func (s *syncer) sync(pkg *module.Package) error {
 	if err := prune(filepath.Join(s.root, module.VendorDir), s.done); err != nil {
 		return err
 	}
-	return writeLock(filepath.Join(s.root, LockFile), s.done)
+	return writeLock(filepath.Join(s.root, module.LockFile), s.done)
 }
 
 // vendor makes the vendor directory hold the repository d names: at the
 // commit yak.lock pins, unless its ref changed or is being updated, and
 // otherwise at the commit its ref names now.
-func (s *syncer) vendor(d dependency) (lockEntry, error) {
+func (s *syncer) vendor(d dependency) (module.LockEntry, error) {
 	src := d.src
 	if e, ok := s.done[src.Key]; ok {
 		if e.Ref != src.Ref {
@@ -259,7 +267,7 @@ func (s *syncer) vendor(d dependency) (lockEntry, error) {
 	}
 	for key := range s.done {
 		if strings.HasPrefix(key, src.Key+"/") || strings.HasPrefix(src.Key, key+"/") {
-			return lockEntry{}, fmt.Errorf("cannot vendor both %s and %s, as one would be inside the other", key, src.Key)
+			return module.LockEntry{}, fmt.Errorf("cannot vendor both %s and %s, as one would be inside the other", key, src.Key)
 		}
 	}
 	dest := s.vendorPath(src.Key)
@@ -271,33 +279,57 @@ func (s *syncer) vendor(d dependency) (lockEntry, error) {
 			return e, nil
 		}
 	}
+	if err := os.RemoveAll(dest); err != nil {
+		return module.LockEntry{}, err
+	}
+	got := module.LockEntry{Source: src.Repo, Ref: src.Ref}
+	var err error
+	if src.OCI {
+		ref := src.Ref
+		if pinned {
+			ref = e.Digest
+		}
+		got.Digest, err = pull(src, ref, s.plainHTTP, dest)
+	} else {
+		got.Commit, err = s.clone(src, e.Commit, pinned, dest)
+	}
+	if err != nil {
+		return module.LockEntry{}, err
+	}
+	if got.Hash, err = hashDir(dest); err != nil {
+		return module.LockEntry{}, err
+	}
+	if pinned && got.Hash != e.Hash {
+		return module.LockEntry{}, fmt.Errorf("%s at %s%s does not hold what %s pinned; run yak sync --update to accept it",
+			src.Key, got.Commit, got.Digest, module.LockFile)
+	}
+	s.done[src.Key] = got
+	fmt.Fprintf(s.log, "vendored %s at %s (%s)\n", src.Key, refName(src.Ref), short(got.Commit+got.Digest))
+	return got, nil
+}
+
+// clone checks src out at the commit pinned when it is, or else at its ref,
+// copies it to dest, and answers the commit.
+func (s *syncer) clone(src module.Source, commit string, pinned bool, dest string) (string, error) {
 	rev := src.Ref
 	if pinned {
-		rev = e.Commit
+		rev = commit
 	}
 	clone := filepath.Join(s.tmp, filepath.FromSlash(src.Key))
 	commit, err := checkout(src, rev, clone)
 	if err != nil {
-		return lockEntry{}, err
-	}
-	if err := os.RemoveAll(dest); err != nil {
-		return lockEntry{}, err
+		return "", err
 	}
 	if err := copyTree(clone, dest); err != nil {
-		return lockEntry{}, fmt.Errorf("vendoring %s: %w", src.Key, err)
+		return "", fmt.Errorf("vendoring %s: %w", src.Key, err)
 	}
-	h, err := hashDir(dest)
-	if err != nil {
-		return lockEntry{}, err
-	}
-	if pinned && h != e.Hash {
-		return lockEntry{}, fmt.Errorf("%s at %s does not hold what %s pinned; run yak sync --update to accept it",
-			src.Key, commit, LockFile)
-	}
-	e = lockEntry{Source: src.Repo, Ref: src.Ref, Commit: commit, Hash: h}
-	s.done[src.Key] = e
-	fmt.Fprintf(s.log, "vendored %s at %s (%s)\n", src.Key, refName(src.Ref), commit[:min(12, len(commit))])
-	return e, nil
+	return commit, nil
+}
+
+// short abbreviates a commit or a digest.
+func short(id string) string {
+	_, id, _ = strings.Cut(id, ":")
+	return id[:min(12, len(id))]
 }
 
 func refName(ref string) string {

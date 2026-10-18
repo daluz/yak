@@ -1147,11 +1147,14 @@ let team = "platform"
 standard:: (app) => {app: app, team: team}
 ```
 
-A directory with a `yak.pkg` at its root is a package. Give the project one:
+A directory with a `yak.pkg` at its root is a package. `yak init` makes the
+current directory one, with a `yak.pkg` like this:
 
 ```yaml
 package:
   name: web
+  version: 0.1.0
+dependencies: {}
 ```
 
 The import path is dotted and resolves from the package root, so every file
@@ -1177,15 +1180,19 @@ metadata:
 `import shared = lib.labels` picks a different name, and an
 `import { ... }` block takes several imports at once. The `dependencies` of a
 `yak.pkg` map import paths onto other packages; [SPEC.md](SPEC.md#packages)
-describes them. A package can come from a git repository:
+describes them. A package can come from a git repository or an OCI
+registry:
 
 ```console
 $ yak add git+https://github.com/acme/lib.git@v1.2.0
+$ yak add oci://ghcr.io/acme/labels:2.0.0
 ```
 
-adds it under the name its own `yak.pkg` gives it, vendors it into `vendor/`
-and pins its commit in `yak.lock`. After a fresh checkout, `yak sync` vendors
-the same commit again.
+adds each under the name its own `yak.pkg` gives it, vendors it into
+`vendor/` and pins its commit or digest in `yak.lock`. After a fresh checkout,
+`yak sync` vendors the same ones again. `yak package build` and
+`yak package push oci://ghcr.io/acme/web` publish a package for others to
+add.
 
 `yak render` given the package directory renders every template in it, and
 leaves the libraries out:

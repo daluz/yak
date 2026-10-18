@@ -16,24 +16,28 @@ Or build from a checkout with `go build ./cmd/yak`.
 
 | Command | Purpose |
 | --- | --- |
-| `yak render PATH` | Render one template, every template in a directory, or a git package. |
+| `yak render PATH` | Render one template, every template in a directory, or a remote package. |
+| `yak package init [DIR]` | Make a directory a package. Also `yak init`. |
 | `yak package add SOURCE` | Add a dependency. Also `yak add`. |
 | `yak package remove NAME` | Remove a dependency. Also `yak remove`. |
 | `yak package sync` | Vendor the remote dependencies and write `yak.lock`. Also `yak sync`. |
+| `yak package build` | Build the package as an OCI artifact. |
+| `yak package push REF` | Push the build to an OCI registry. |
 | `yak completion SHELL` | Write a shell completion script. |
 | `yak help [command]` | Describe a command. |
 
 `--version`, or `-v`, prints the version, the same string a template reads as
 `$yak.version`; an unstamped build reports `dev`. `yak pkg` is another name
-for `yak package`. `validate`, `fmt`, `package build` and `package push` are
-planned; see [ROADMAP.md](ROADMAP.md).
+for `yak package`. `validate` and `fmt` are planned; see
+[ROADMAP.md](ROADMAP.md).
 
 ## `yak render`
 
 ```console
-$ yak render FILE.yak|DIR|GIT-REF [-c context.yaml|context.json]... [-f FORMAT]
-                                    [-o FILE | -O] [--output-dir DIR]
-                                    [--keep-null-documents] [--strict=false]
+$ yak render FILE.yak|DIR|REMOTE [-c context.yaml|context.json]... [-f FORMAT]
+                                   [-o FILE | -O] [--output-dir DIR]
+                                   [--keep-null-documents] [--strict=false]
+                                   [--plain-http]
 ```
 
 | Flag | Meaning |
@@ -45,11 +49,12 @@ $ yak render FILE.yak|DIR|GIT-REF [-c context.yaml|context.json]... [-f FORMAT]
 | `--output-dir DIR` | Put the output file in this directory. |
 | `--keep-null-documents` | Write the documents that evaluated to `null`. |
 | `--strict=false` | Turn [strict mode](#strict-mode) off. |
+| `--plain-http` | Fetch an `oci://` package over HTTP rather than HTTPS. |
 
 `-o` and `-O` cannot be given together.
 
 The one argument is the template to render, a directory of them, or a
-[git package](#rendering-a-git-package). `-`
+[remote package](#rendering-a-remote-package). `-`
 reads a template from standard input; it is then called `<stdin>` by
 diagnostics and `$yak.filepath`, and `std.files` reads relative to the
 current directory. A `.yakl` file is a [library](SPEC.md#modules), which can
@@ -78,23 +83,60 @@ Two templates that would write the same file, such as `app.yak` and
 `app.yaml.yak`, are an error. Nothing is written unless every template
 renders.
 
-### Rendering a git package
+### Rendering a remote package
 
-Given a [git reference](SPEC.md#remote-packages), `render` clones the
-repository into a temporary directory, checks out the ref, vendors the
-package's own dependencies as its `yak.lock` pins them, and renders the
-package as a directory. It needs `--output-dir`:
+Given a [git or OCI reference](SPEC.md#remote-packages), `render` fetches
+the package into a temporary directory, vendors its own dependencies as its
+`yak.lock` pins them, and renders it as a directory. It needs
+`--output-dir`:
 
 ```console
 $ yak render git+https://github.com/acme/deploy.git//web@v2 --output-dir build
+$ yak render oci://ghcr.io/acme/web:1.4.0 --output-dir build
 ```
 
 ## `yak package`
 
 `yak package`, or `yak pkg`, manages the package the current directory is in:
 the one whose `yak.pkg` is there or in the nearest directory above it. Its
-`add`, `remove` and `sync` subcommands are also top-level commands, so
-`yak add` is `yak package add`.
+`init`, `add`, `remove` and `sync` subcommands are also top-level commands,
+so `yak add` is `yak package add`.
+
+The commands that reach an OCI registry, `render`, `add`, `remove`, `sync` and
+`push`, take `--plain-http` to talk to a registry over HTTP, such as one on
+`localhost`, and log in with the credentials that `podman login` or
+`docker login` saved. They look for a registry's credentials in these files,
+in order, and use the first that has them:
+
+| File | Written by |
+| --- | --- |
+| `$REGISTRY_AUTH_FILE` | `podman login`, `buildah login` and `skopeo login` when it is set |
+| `$XDG_RUNTIME_DIR/containers/auth.json` | `podman login` on Linux |
+| `$XDG_CONFIG_HOME/containers/auth.json`, or `~/.config/containers/auth.json` | `podman login` on macOS and Windows |
+| `$DOCKER_CONFIG/config.json`, or `~/.docker/config.json` | `docker login` |
+
+A file that does not exist is skipped. A file may name a credential helper,
+under `credHelpers` or `credsStore`, as both tools allow. `REGISTRY_AUTH_FILE`
+is the way to point yak, and Podman, at an auth file somewhere else:
+
+```console
+$ export REGISTRY_AUTH_FILE=$HOME/secrets/registry.json
+$ podman login ghcr.io
+$ yak package push oci://ghcr.io/acme/web
+```
+
+### `yak init`
+
+```console
+$ yak init [DIR] [--name NAME]
+```
+
+Makes `DIR`, or the current directory, a package. It writes a `yak.pkg` named
+after the directory, or `NAME`, at version `0.1.0`; an `app.yak` to start
+from, unless there is one; and a `.gitignore` that leaves out `vendor/` and
+`.yak/`, adding those lines to one that is already there. It refuses a
+directory that already holds a `yak.pkg`, and a directory name that is not
+an identifier unless `--name` is given.
 
 ### `yak add`
 
@@ -104,11 +146,11 @@ $ yak add SOURCE [--name NAME]
 
 Adds a dependency to `yak.pkg`, keeping the rest of the file, comments
 included, as it was. `SOURCE` is a local path, to a package or to a module,
-or a [git reference](SPEC.md#remote-packages). The dependency is named after
+or a [git or OCI reference](SPEC.md#remote-packages). The dependency is named after
 the package, as its own `yak.pkg` names it, or after the module's file, unless
 `--name` gives the import path it goes under. A local path is written
-relative to `yak.pkg`. A git package is vendored and pinned in `yak.lock` at
-once.
+relative to `yak.pkg`. A remote package is vendored and pinned in `yak.lock`
+at once.
 
 ```console
 $ yak add git+https://github.com/acme/lib.git@v1.2.0   # named as its yak.pkg names it
@@ -121,7 +163,7 @@ $ yak add ../shared --name common
 $ yak remove NAME
 ```
 
-Removes the dependency `NAME` from `yak.pkg`. A git package leaves `vendor/`
+Removes the dependency `NAME` from `yak.pkg`. A remote package leaves `vendor/`
 and `yak.lock` too, unless another package still depends on it.
 
 ### `yak sync`
@@ -130,9 +172,9 @@ and `yak.lock` too, unless another package still depends on it.
 $ yak sync [--update [NAME]...]
 ```
 
-Vendors every git package the package depends on, directly or through
+Vendors every remote package the package depends on, directly or through
 another, into `vendor/` beneath its root, and rewrites `yak.lock`. A package
-`yak.lock` pins is checked out at the pinned commit, and one already vendored
+`yak.lock` pins is fetched at the pinned commit or digest, and one already vendored
 with the pinned content is not fetched at all, so `sync` needs no network
 when nothing changed. A dependency that `yak.lock` does not pin yet, or whose
 ref changed in `yak.pkg`, is fetched at the commit its ref names now. What
@@ -142,9 +184,38 @@ ref changed in `yak.pkg`, is fetched at the commit its ref names now. What
 none, for every one: after `yak sync --update lib`, a `lib` that follows a
 branch moves to the branch's latest commit.
 
-`sync` runs `git`, so git must be installed, and fetches with the
-credentials git already has. Anything in `vendor/` that no dependency needs
-is removed, and `vendor/` holds a `.gitignore` so that it is never committed.
+`sync` runs `git` for a git package, so git must be installed, and fetches
+with the credentials git already has. Anything in `vendor/` that no
+dependency needs is removed, and `vendor/` holds a `.gitignore` so that it is
+never committed, and a `yak.lock` recording what it holds, which rendering
+checks against the package's own.
+
+### `yak package build`
+
+```console
+$ yak package build [--tag TAG] [-o PATH]
+```
+
+Packs the package into an [OCI artifact](SPEC.md#remote-packages) tagged with
+`package.version`, or `TAG`, in the OCI image layout `.yak/oci/` beneath the
+package root, where `push` finds it. The artifact holds every file of the
+package but hidden ones and `vendor/`, `yak.lock` included. `-o` writes the
+layout somewhere else instead: a directory, or a tar archive when `PATH` ends
+in `.tar`, which tools such as `oras` read.
+
+### `yak package push`
+
+```console
+$ yak package push oci://REGISTRY/REPOSITORY[:TAG]
+```
+
+Uploads the build in `.yak/oci/` tagged `TAG`, which is `package.version`
+when the reference gives none, to that tag of the repository:
+
+```console
+$ yak package build
+$ yak package push oci://ghcr.io/acme/web    # pushes ghcr.io/acme/web:1.4.0
+```
 
 ### Strict mode
 

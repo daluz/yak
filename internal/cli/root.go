@@ -23,6 +23,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(
 		newRenderCommand(),
 		newPackageCommand(),
+		shortcut(newInitCommand()),
 		shortcut(newAddCommand()),
 		shortcut(newRemoveCommand()),
 		shortcut(newSyncCommand()),

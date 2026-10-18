@@ -1,1 +1,1 @@
-import-oci.yak:1:8: yak.pkg maps "remote" to oci://example.com/remote:1.0: OCI packages are not implemented yet
+import-oci.yak:1:8: yak.pkg maps "remote" to oci://example.com/remote:1.0, which is not vendored; run yak sync
