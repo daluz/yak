@@ -762,7 +762,8 @@ matrix:
 
 A handful of functions need no import. `size` measures a sequence, a mapping
 or a string, `empty` asks whether a value is `null` or has nothing in it, and
-`nempty` turns an empty value into `null`, which pairs with `:?`. Given a
+`nempty` turns an empty value into `null`, which pairs with `:?`. `prune`
+removes the empty values from inside a collection, however deep. Given a
 context of
 `{labels: {}, annotations: {team: platform}}`:
 
@@ -773,6 +774,7 @@ letters: size("café")
 nothing: empty("")
 labels:? nempty($$?.labels)
 annotations:? nempty($$?.annotations)
+metadata: prune({labels: $$.labels, owner: "", team: [$$.annotations.team, null]})
 ```
 
 renders as:
@@ -786,10 +788,14 @@ letters: 4
 nothing: true
 annotations:
   team: platform
+metadata:
+  team:
+    - platform
 ```
 
 `size` counts characters rather than bytes, and the empty `labels` from the
-context was dropped instead of rendering as `{}`.
+context was dropped instead of rendering as `{}`, both at the top and inside
+`metadata`.
 
 `render` turns a value into the text an output format would write for it,
 YAML unless another is named. A ConfigMap, which holds whole files as
@@ -854,8 +860,8 @@ errors rather than guesses, and rounding a float is left to `std.math`.
 
 ### Sequences
 
-`sort`, `reverse`, `unique`, `flatten`, `take`, `drop`, `range`, `sum`,
-`min`, `max`, `any` and `all` work on sequences. The ones that compare or test
+`sort`, `reverse`, `unique`, `flatten`, `slice`, `range`, `sum`, `min`,
+`max`, `some` and `every` work on sequences. The ones that compare or test
 items accept a function, usually an anonymous one:
 
 ```yaml
@@ -869,8 +875,9 @@ ports: sort(unique(flatten([s.ports for s in services])))
 by-weight: [s.name for s in sort(services, (s) => s.weight)]
 heaviest: max(services, (s) => s.weight).name
 total: sum([s.weight for s in services])
-privileged: any(flatten([s.ports for s in services]), (p) => p < 1024)
-first-two: take(range(10), 2)
+privileged: some(flatten([s.ports for s in services]), (p) => p < 1024)
+first-two: slice(range(10), 0, 2)
+last-two: slice(range(10), -2)
 countdown: range(5, 0, -2)
 ```
 
@@ -891,6 +898,9 @@ privileged: true
 first-two:
   - 0
   - 1
+last-two:
+  - 8
+  - 9
 countdown:
   - 5
   - 3

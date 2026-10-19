@@ -15,12 +15,14 @@ sorted:
 reversed: reverse($.names)
 unique: unique($.ports)
 flattened: flatten([[1, 2], [], [3]])
-taken:
-  some: take($.names, 2)
-  more: take($.names, 10)
-dropped:
-  some: drop($.names, 1)
-  more: drop($.names, 10)
+sliced:
+  middle: slice($.names, 1, 2)
+  rest: slice($.names, 1)
+  last: slice($.names, -2)
+  trimmed: slice($.names, 0, -1)
+  past: slice($.names, -10, 10)
+  crossed: slice($.names, 2, 1)
+  named: slice(stop = 2, values = $.names, start = 0)
 ranges:
   stop: range(3)
   counted: range(0, 3)
@@ -40,12 +42,12 @@ extremes:
   lightest: min($.services, (s) => s.weight).name
   heaviest: max($.services, (s) => s.weight).name
 quantified:
-  anyPrivileged: any($.ports, (p) => p < 1024)
-  allPrivileged: all($.ports, (p) => p < 1024)
-  anyTrue: any([false, true])
-  allTrue: all([true, false])
-  anyOfNone: any([], (p) => true)
-  allOfNone: all([], (p) => false)
+  somePrivileged: some($.ports, (p) => p < 1024)
+  everyPrivileged: every($.ports, (p) => p < 1024)
+  someTrue: some([false, true])
+  everyTrue: every([true, false])
+  someOfNone: some([], (p) => true)
+  everyOfNone: every([], (p) => false)
 
 ## A named function works as a key as well as an anonymous one.
 let negated(n) = -n

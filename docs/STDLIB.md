@@ -6,6 +6,25 @@ lives in a module whose path begins with `std` and is reached through an
 [import](SPEC.md#standard-library), so growing the library cannot take a bare
 name a template uses.
 
+## Contents
+
+- [Built-ins](#built-ins)
+  - [Conversions](#conversions)
+  - [Sequences](#sequences)
+  - [Mappings](#mappings)
+- [Modules](#modules)
+  - [`std.base64`](#stdbase64)
+  - [`std.files`](#stdfiles)
+  - [`std.gotemplate`](#stdgotemplate)
+  - [`std.hash`](#stdhash)
+  - [`std.json`](#stdjson)
+  - [`std.math`](#stdmath)
+  - [`std.path`](#stdpath)
+  - [`std.random`](#stdrandom)
+  - [`std.regex`](#stdregex)
+  - [`std.strings`](#stdstrings)
+  - [`std.yaml`](#stdyaml)
+
 ## Built-ins
 
 Built-ins behave like functions declared in the template: arguments go by
@@ -20,6 +39,7 @@ same as leaving the argument out. A binding of the same name
 | `size(value)` | How much is in a sequence, a mapping, or a string. |
 | `empty(value)` | Whether the value is `null`, `{}`, `[]` or `""`. |
 | `nempty(value)` | `null` when `empty(value)`, and the value itself otherwise. |
+| `prune(value)` | `value` without the items and entries that are empty, at any depth. |
 | `render(value, format = null)` | `value` as a string in the output format `format`, or in YAML when there is none. |
 
 `size` counts items, entries, or characters:
@@ -44,6 +64,12 @@ labels:? nempty($$?.labels)
 
 With a context of `{labels: {}}` that entry is left out, while `{labels: {app:
 web}}` renders it.
+
+`prune` accepts anything and empties a collection from the inside out: a
+sequence or mapping is pruned first and then left out if nothing remains in
+it, so `prune({a: {b: null}, c: [""], d: 0})` is `{d: 0}`. The value itself
+is never left out: `prune({a: null})` is `{}` and `prune(null)` is `null`.
+Hidden and `:?` entries are pruned like the others and stay hidden.
 
 `render` answers the text that rendering `value` to a file in `format` would
 write, so a manifest such as a ConfigMap can hold a whole document as a
@@ -93,7 +119,7 @@ as text. `type` accepts anything, and its names are the ones diagnostics use.
 ```yaml
 ports: sort(unique($$.ports))
 byWeight: sort($$.services, (s) => s.weight)
-privileged: any($$.ports, (p) => p < 1024)
+privileged: some($$.ports, (p) => p < 1024)
 ```
 
 | Call | Answer |
@@ -102,14 +128,13 @@ privileged: any($$.ports, (p) => p < 1024)
 | `reverse(values)` | The items in reverse order. |
 | `unique(values)` | The items without the ones equal to an item before them. |
 | `flatten(values)` | The items of a sequence of sequences, in one sequence. |
-| `take(values, count)` | The first `count` items, or all of them when there are fewer. |
-| `drop(values, count)` | The items after the first `count`, or `[]` when there are fewer. |
+| `slice(values, start, stop = null)` | The items from position `start` up to but not including `stop`, or to the end when there is no `stop`. |
 | `range(start, stop = null, step = 1)` | The integers from `start` up to but not including `stop`, counting by `step`. |
 | `sum(values)` | The numbers added up; `0` for `[]`. |
 | `min(values, key = null)` | The item that sorts first, by its `key` when there is one. |
 | `max(values, key = null)` | The item that sorts last, by its `key` when there is one. |
-| `any(values, predicate = null)` | Whether `predicate` answers `true` for some item, or some item is `true`. |
-| `all(values, predicate = null)` | Whether `predicate` answers `true` for every item, or every item is `true`. |
+| `some(values, predicate = null)` | Whether `predicate` answers `true` for some item, or some item is `true`. |
+| `every(values, predicate = null)` | Whether `predicate` answers `true` for every item, or every item is `true`. |
 
 `sort`, `min` and `max` order the items, or what `key` answers for them, as
 `<` does, so those must be all numbers or all strings. Sorting is stable, and
@@ -118,6 +143,12 @@ and `max` of `[]` are an error. `unique` compares items with `==`, so they
 must be scalars. `sum` answers an integer unless a float is among the
 numbers, as `+` does.
 
+A negative position in `slice` counts from the end, as an
+[index](SPEC.md#references) does, so `slice(values, 0, 2)` is the first two
+items, `slice(values, -2)` the last two, and `slice(values, 0, -1)` all but
+the last. A position past either end stops there rather than failing, and a
+`stop` at or before `start` gives `[]`.
+
 `range` counts as Python's does: with one argument it is the stop and the
 count starts at 0, so `range(3)` is `[0, 1, 2]` and `range(1, 4)` is
 `[1, 2, 3]`. A negative `step` counts down, so `range(5, 0, -2)` is
@@ -125,9 +156,9 @@ count starts at 0, so `range(3)` is `[0, 1, 2]` and `range(1, 4)` is
 is an error.
 
 `key` and `predicate` are functions of one parameter. A `predicate` must
-answer a boolean; without one, the items must be booleans. `any` and `all`
-stop at the first item that decides the answer; `any([])` is `false` and
-`all([])` is `true`. Whether a sequence holds an item is what
+answer a boolean; without one, the items must be booleans. `some` and `every`
+stop at the first item that decides the answer; `some([])` is `false` and
+`every([])` is `true`. Whether a sequence holds an item is what
 [`in`](SPEC.md#operators) asks.
 
 ### Mappings

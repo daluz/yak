@@ -18,15 +18,14 @@ func init() {
 		builtin("reverse", valuesParam, reverse),
 		builtin("unique", valuesParam, unique),
 		builtin("flatten", valuesParam, flatten),
-		builtin("take", params("values", "count"), take),
-		builtin("drop", params("values", "count"), drop),
+		builtin("slice", append(params("values", "start"), optional("stop", &ast.Null{})), slice),
 		builtin("range", append(params("start"),
 			optional("stop", &ast.Null{}), optional("step", &ast.Int{Value: 1})), rangeSeq),
 		builtin("sum", valuesParam, sum),
 		builtin("min", keyed, extreme(-1)),
 		builtin("max", keyed, extreme(1)),
-		builtin("any", predicated, quantifier(true)),
-		builtin("all", predicated, quantifier(false)),
+		builtin("some", predicated, quantifier(true)),
+		builtin("every", predicated, quantifier(false)),
 	}})
 }
 
@@ -152,34 +151,39 @@ func flatten(c call) (eval.Value, error) {
 	return eval.NewArray(items), nil
 }
 
-// take keeps at most count items from the start of a sequence.
-func take(c call) (eval.Value, error) {
-	a, n, err := seqAndCount(c)
-	if err != nil {
-		return nil, err
-	}
-	return eval.NewArray(a.Items()[:min(n, a.Len())]), nil
-}
-
-// drop leaves out at most count items from the start of a sequence.
-func drop(c call) (eval.Value, error) {
-	a, n, err := seqAndCount(c)
-	if err != nil {
-		return nil, err
-	}
-	return eval.NewArray(a.Items()[min(n, a.Len()):]), nil
-}
-
-func seqAndCount(c call) (*eval.Array, int, error) {
+// slice keeps the items from start up to but not including stop, or to the
+// end when stop is null. A negative position counts from the end, as an index
+// does, and a position past either end stops there, so a stop before the
+// start gives an empty sequence.
+func slice(c call) (eval.Value, error) {
 	a, _, err := c.seq(0)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	n, err := c.count(1)
+	start, err := c.integer(1)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	return a, n, nil
+	stop := eval.Int(a.Len())
+	if v, err := c.value(2); err != nil {
+		return nil, err
+	} else if _, none := v.(eval.Null); !none {
+		if stop, err = c.integer(2); err != nil {
+			return nil, err
+		}
+	}
+	lo, hi := position(start, a.Len()), position(stop, a.Len())
+	return eval.NewArray(a.Items()[lo:max(lo, hi)]), nil
+}
+
+// position places n in a sequence of the given length, counting a negative n
+// from the end and stopping at either end.
+func position(n eval.Int, length int) int {
+	i := int(n)
+	if i < 0 {
+		i += length
+	}
+	return min(max(i, 0), length)
 }
 
 // rangeSeq counts as Python's range does: from start up to stop by step,
@@ -272,10 +276,10 @@ func extreme(want int) func(call) (eval.Value, error) {
 	}
 }
 
-// quantifier makes any or all, which ask the predicate about each item, or
+// quantifier makes some or every, which ask the predicate about each item, or
 // read each item as the answer when there is no predicate. Both stop at the
-// first item that decides the answer, which is stop for any and the opposite
-// of it for all, so the items after it are never handed to the predicate.
+// first item that decides the answer, which is stop for some and the opposite
+// of it for every, so the items after it are never handed to the predicate.
 func quantifier(stop bool) func(call) (eval.Value, error) {
 	return func(c call) (eval.Value, error) {
 		_, values, err := c.seq(0)

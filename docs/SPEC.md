@@ -8,6 +8,52 @@ is documented in [CLI.md](CLI.md).
 yak is a restricted dialect of YAML: what YAML does ambiguously is removed or
 made explicit, and a small expression language is added on top.
 
+## Contents
+
+- [Files](#files)
+- [Strict mode](#strict-mode)
+- [What changed from YAML](#what-changed-from-yaml)
+  - [Strings must be quoted](#strings-must-be-quoted)
+  - [Every string interpolates](#every-string-interpolates)
+  - [Only `true` and `false` are booleans](#only-true-and-false-are-booleans)
+  - [Anchors and tags are gone](#anchors-and-tags-are-gone)
+  - [Keys](#keys)
+  - [Hidden fields](#hidden-fields)
+  - [Optional fields](#optional-fields)
+  - [The merge key](#the-merge-key)
+- [References](#references)
+  - [Builtin variables](#builtin-variables)
+  - [Evaluation order](#evaluation-order)
+- [Statements](#statements)
+- [Let bindings](#let-bindings)
+  - [Scope](#scope)
+  - [Destructuring](#destructuring)
+- [Functions](#functions)
+  - [What a function sees](#what-a-function-sees)
+  - [Functions as values](#functions-as-values)
+  - [Anonymous functions](#anonymous-functions)
+- [Modules and Packages](#modules-and-packages)
+  - [Modules](#modules)
+  - [Packages](#packages)
+  - [Resolution](#resolution)
+  - [Remote packages](#remote-packages)
+- [Standard library](#standard-library)
+- [Missing values](#missing-values)
+- [Operators](#operators)
+  - [Arithmetic](#arithmetic)
+  - [Merging](#merging)
+  - [Comparisons](#comparisons)
+  - [Boolean operators](#boolean-operators)
+  - [Precedence](#precedence)
+- [Conditionals](#conditionals)
+- [Comprehensions](#comprehensions)
+- [Context](#context)
+- [Comments](#comments)
+  - [Comments on a binding](#comments-on-a-binding)
+  - [Notes about the template](#notes-about-the-template)
+- [Output](#output)
+- [Grammar sketch](#grammar-sketch)
+
 ## Files
 
 yak files use the `.yak` extension and hold one or more documents separated by
@@ -22,7 +68,7 @@ Rendering is strict unless the tool is told otherwise
 files always render the same output, so the result is safe to review as a
 diff and to re-render in a GitOps loop.
 
-Strict mode does two things. [Importing](#modules) a module whose answers can
+Strict mode does two things. [Importing](#modules-and-packages) a module whose answers can
 change between renderings, such as [`std.random`](STDLIB.md#stdrandom), is an
 error, raised when the import is first read. And
 [`std.files`](STDLIB.md#stdfiles) reads only beneath the directory of the file
@@ -334,7 +380,7 @@ A statement is not an expression. It stands on its own in its block, renders
 nothing, and what it declares is visible to that block and everything nested
 inside it. The keywords are reserved: written as a value they are an error,
 and as a key they need quotes, as in `"schema": 1`. `import` is described in
-[Modules](#modules); `schema` is planned in [ROADMAP.md](ROADMAP.md) and is a
+[Modules and Packages](#modules-and-packages); `schema` is planned in [ROADMAP.md](ROADMAP.md) and is a
 "not implemented yet" error today.
 
 ## Let bindings
@@ -603,7 +649,14 @@ single expression; a function that needs a block body is written as a named
 binding. A diagnostic about a call names the function by its binding, or by
 where an anonymous one was written.
 
-## Modules
+## Modules and Packages
+
+A template can be split across files. A module is a file that another file
+imports to read its values, and a package is a directory of modules with a
+`yak.pkg` that names it and lists its dependencies, which may be local
+directories, other files, or packages fetched from git or an OCI registry.
+
+### Modules
 
 Every `.yak` and `.yakl` file is a module. A `.yak` file is a template, which
 can be rendered as well as imported; a `.yakl` file is a library, which can

@@ -1,1 +1,1 @@
-any: any([1, 2], (n) => n)
+some: some([1, 2], (n) => n)

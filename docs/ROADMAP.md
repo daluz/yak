@@ -2,8 +2,8 @@
 
 Done so far: the restricted YAML parser, string interpolation, relative
 references, hidden fields, context files, the `render` command, `let`
-bindings, functions named and anonymous, the `size`, `empty`, `nempty` and
-`render` built-ins and those on sequences and mappings, the `std.strings`,
+bindings, functions named and anonymous, the `size`, `empty`, `nempty`,
+`prune` and `render` built-ins and those on sequences and mappings, the `std.strings`,
 `std.json`, `std.yaml`, `std.base64`, `std.hash`, `std.regex`, `std.math`,
 `std.path`, `std.files`, `std.gotemplate` and `std.random` modules, strict
 mode, the
@@ -31,7 +31,7 @@ function does, and `evalIdent` finds one only after every binding in scope, so
 a `let` shadows it. Built-ins are grouped into built-in modules under
 `internal/stdlib`, each of which hands a `module.BuiltinModule` to
 `module.Register` from its `init`. The root module, in `root.go`, has no path,
-so its members are bare names; `size`, `empty`, `nempty` and `render` live
+so its members are bare names; `size`, `empty`, `nempty`, `prune` and `render` live
 there, and
 `seqs.go` and `maps.go` register the operations on sequences and mappings into
 it as well.

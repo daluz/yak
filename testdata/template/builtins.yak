@@ -31,6 +31,16 @@ service:
   selector:? nempty($$.selector)
   region:? nempty($$?.region)
 
+## prune leaves out empty values at any depth, and the collections that only
+## held empty values with them. 0 and false stay, and so does a hidden entry
+## that is not empty.
+pruned:
+  nested: prune({a: 1, b: null, c: {d: "", e: [[], {}]}, f: [0, null, "", false, [null]], g: $$.labels})
+  sequence: prune([null, [{}], "x"])
+  emptied: prune({a: {b: null}})
+  scalar: prune("")
+  hidden: size(prune({a:: 1, b:: null, c:? {d: null}}))
+
 ## A built-in is a value, so it can be passed to a function.
 let apply(fn, to) = fn(to)
 applied: apply(size, $.ports)

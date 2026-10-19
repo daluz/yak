@@ -21,6 +21,17 @@ service:
   selector:
     app: web
     tier: frontend
+pruned:
+  nested:
+    a: 1
+    f:
+      - 0
+      - false
+  sequence:
+    - x
+  emptied: {}
+  scalar: ""
+  hidden: 1
 applied: 3
 shadowed:
   value: not the built-in

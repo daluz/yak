@@ -17,6 +17,7 @@ func init() {
 		builtin("size", valueParam, size),
 		builtin("empty", valueParam, empty),
 		builtin("nempty", valueParam, nempty),
+		builtin("prune", valueParam, prune),
 		builtin("render", append(params("value"), optional("format", &ast.Null{})), renderValue),
 	}})
 }
@@ -58,6 +59,56 @@ func nempty(c call) (eval.Value, error) {
 		return eval.Null{}, nil
 	}
 	return v, nil
+}
+
+func prune(c call) (eval.Value, error) {
+	v, err := c.value(0)
+	if err != nil {
+		return nil, err
+	}
+	return pruned(v)
+}
+
+// pruned answers v without the empty items and entries at any depth. A
+// collection is pruned before it is judged, so one that held only empty
+// values is left out as well.
+func pruned(v eval.Value) (eval.Value, error) {
+	switch t := v.(type) {
+	case *eval.Array:
+		var items []*eval.Elem
+		for _, item := range t.Items() {
+			v, err := item.Value.Value()
+			if err != nil {
+				return nil, err
+			}
+			if v, err = pruned(v); err != nil {
+				return nil, err
+			}
+			if !isEmpty(v) {
+				items = append(items, &eval.Elem{Comments: item.Comments, Value: eval.Done(v)})
+			}
+		}
+		return eval.NewArray(items), nil
+	case *eval.Object:
+		out := eval.NewObject()
+		for _, f := range t.Fields() {
+			v, err := f.Value.Value()
+			if err != nil {
+				return nil, err
+			}
+			if v, err = pruned(v); err != nil {
+				return nil, err
+			}
+			if !isEmpty(v) {
+				kept := *f
+				kept.Value = eval.Done(v)
+				out.Add(&kept)
+			}
+		}
+		return out, nil
+	default:
+		return v, nil
+	}
 }
 
 // isEmpty reports whether a value holds nothing. Only null and the three

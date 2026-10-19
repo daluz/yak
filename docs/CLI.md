@@ -57,7 +57,7 @@ The one argument is the template to render, a directory of them, or a
 [remote package](#rendering-a-remote-package). `-`
 reads a template from standard input; it is then called `<stdin>` by
 diagnostics and `$yak.filepath`, and `std.files` reads relative to the
-current directory. A `.yakl` file is a [library](SPEC.md#modules), which can
+current directory. A `.yakl` file is a [library](SPEC.md#modules-and-packages), which can
 be imported but not rendered, so naming one is an error.
 
 ### Rendering a directory

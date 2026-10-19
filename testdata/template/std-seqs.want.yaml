@@ -42,19 +42,26 @@ flattened:
   - 1
   - 2
   - 3
-taken:
-  some:
+sliced:
+  middle:
+    - api
+  rest:
+    - api
+    - db
+  last:
+    - api
+    - db
+  trimmed:
     - web
     - api
-  more:
+  past:
     - web
     - api
     - db
-dropped:
-  some:
+  crossed: []
+  named:
+    - web
     - api
-    - db
-  more: []
 ranges:
   stop:
     - 0
@@ -93,12 +100,12 @@ extremes:
   lightest: api
   heaviest: web
 quantified:
-  anyPrivileged: true
-  allPrivileged: false
-  anyTrue: true
-  allTrue: false
-  anyOfNone: false
-  allOfNone: true
+  somePrivileged: true
+  everyPrivileged: false
+  someTrue: true
+  everyTrue: false
+  someOfNone: false
+  everyOfNone: true
 descending:
   - 8080
   - 443
