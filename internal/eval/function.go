@@ -23,7 +23,6 @@ type function struct {
 	env  *Env
 }
 
-// TypeName implements Value.
 func (*function) TypeName() string { return "function" }
 
 // callee names the function a diagnostic is about. An anonymous function has

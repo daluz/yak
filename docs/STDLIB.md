@@ -287,7 +287,7 @@ Besides Go's `text/template` functions, the following extra template functions a
 
 There are fewer functions than, for example, Helm, because you should compute everything
 else in yak and pass it in `data`, such as YAML from `std.yaml`, so the template only lays
-text out. Other functions might be added in the future if they prove to be helpful.
+text out.
 
 ### `std.hash`
 

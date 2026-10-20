@@ -29,7 +29,6 @@ const (
 	FormatJWCC
 	// FormatJSONL is one compact JSON document per line.
 	FormatJSONL
-	// FormatTOML is TOML.
 	FormatTOML
 )
 
@@ -86,7 +85,6 @@ func (f Format) spec() (formatSpec, bool) {
 	return formatSpecs[f], true
 }
 
-// String returns the format's name.
 func (f Format) String() string {
 	s, ok := f.spec()
 	if !ok {

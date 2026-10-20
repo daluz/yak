@@ -218,10 +218,8 @@ type Token struct {
 	End Pos
 }
 
-// Line reports the line the token starts on.
 func (t Token) Line() int { return t.Pos.Line }
 
-// Col reports the column the token starts on.
 func (t Token) Col() int { return t.Pos.Col }
 
 func (t Token) String() string {

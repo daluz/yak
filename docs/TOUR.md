@@ -31,7 +31,7 @@ For the precise rules, [SPEC.md](SPEC.md) defines the language and
 
 ## 1. Your first template
 
-Install the tool, or build it from a checkout:
+Install the tool:
 
 ```console
 $ go install github.com/daluz/yak/cmd/yak@latest

@@ -2,8 +2,8 @@
 
 `yak` is a YAML templating language. Go module `github.com/daluz/yak`;
 the CLI entry point is `cmd/yak`, and everything else lives under `internal/`
-(`lexer`, `parser`, `ast`, `eval`, `stdlib`, `module`, `deps`, `engine`,
-`render`, `ctxfile`, `schemaimport`, `yakfmt`, `cli`).
+(`token`, `lexer`, `parser`, `ast`, `eval`, `stdlib`, `module`, `deps`,
+`engine`, `render`, `ctxfile`, `schemaimport`, `yakfmt`, `version`, `cli`).
 
 A module is what an `import` names: a built-in module written in Go under
 `stdlib`, or a file module read from a `.yak` template or a `.yakl` library.
@@ -32,6 +32,8 @@ $ make test # go test ./...
 $ make update # rewrite golden files under testdata/
 $ make check # go vet + go test
 $ make fmt # gofmt -l -w .
+$ make docs # build the docs site with Zensical
+$ make docs-serve # serve the docs site locally
 ```
 
 ## Tests

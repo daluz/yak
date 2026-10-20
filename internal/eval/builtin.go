@@ -19,8 +19,8 @@ type Builtin struct {
 	Fn func(args []*Thunk) (Value, error)
 }
 
-// TypeName implements Value. A built-in is a function as far as the rest of
-// the language is concerned, output formats included.
+// A built-in is a function as far as the rest of the language is concerned,
+// output formats included.
 func (*Builtin) TypeName() string { return "function" }
 
 func (b *Builtin) call(node *ast.Call, env *Env) (Value, error) {

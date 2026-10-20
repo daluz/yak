@@ -17,20 +17,13 @@ type Value interface {
 	TypeName() string
 }
 
-// Null is the null value.
-type Null struct{}
-
-// Bool is a boolean value.
-type Bool bool
-
-// Int is an integer value.
-type Int int64
-
-// Float is a floating point value.
-type Float float64
-
-// String is a string value.
-type String string
+type (
+	Null   struct{}
+	Bool   bool
+	Int    int64
+	Float  float64
+	String string
+)
 
 func (Null) TypeName() string   { return "null" }
 func (Bool) TypeName() string   { return "boolean" }
@@ -87,12 +80,10 @@ type Object struct {
 	index  map[string]int
 }
 
-// NewObject returns an empty mapping.
 func NewObject() *Object {
 	return &Object{index: map[string]int{}}
 }
 
-// TypeName implements Value.
 func (*Object) TypeName() string { return "mapping" }
 
 // Fields returns the mapping's entries in source order.
@@ -101,7 +92,6 @@ func (o *Object) Fields() []*Field { return o.fields }
 // Len returns the number of entries, including hidden ones.
 func (o *Object) Len() int { return len(o.fields) }
 
-// Lookup returns the field with the given name.
 func (o *Object) Lookup(name string) (*Field, bool) {
 	i, ok := o.index[name]
 	if !ok {
@@ -189,16 +179,12 @@ type Array struct {
 	items []*Elem
 }
 
-// NewArray returns a sequence holding the given items.
 func NewArray(items []*Elem) *Array { return &Array{items: items} }
 
-// TypeName implements Value.
 func (*Array) TypeName() string { return "sequence" }
 
-// Items returns the sequence's items.
 func (a *Array) Items() []*Elem { return a.items }
 
-// Len returns the number of items.
 func (a *Array) Len() int { return len(a.items) }
 
 // stringify converts a value to the text used when interpolating it into a

@@ -92,7 +92,6 @@ func escapeInto(w stringWriter, s string) {
 	}
 }
 
-// quote returns s as a double-quoted string.
 func quote(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')

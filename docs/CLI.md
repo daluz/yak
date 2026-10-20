@@ -3,14 +3,6 @@
 This describes the tool that renders templates. The language is specified in
 [SPEC.md](SPEC.md).
 
-## Install
-
-```console
-$ go install github.com/daluz/yak/cmd/yak@latest
-```
-
-Or build from a checkout with `go build ./cmd/yak`.
-
 ## Commands
 
 | Command | Purpose |
