@@ -187,8 +187,8 @@ func (p *parser) parseIf() (ast.Node, error) {
 	return n, nil
 }
 
-// parseLoop parses the "for pattern in source" clause that turns a flow
-// collection into a comprehension, along with its optional "if" filter.
+// parseLoop parses a "for pattern in source" clause of a comprehension,
+// along with its optional "if" filter.
 func (p *parser) parseLoop(pos token.Pos) (ast.Loop, error) {
 	var loop ast.Loop
 	p.next()
@@ -628,10 +628,24 @@ func (p *parser) parseFlowMapping() (ast.Node, error) {
 	}
 }
 
+// parseLoops parses the "for" clauses of a comprehension, the current token
+// being the first "for".
+func (p *parser) parseLoops() ([]ast.Loop, error) {
+	var loops []ast.Loop
+	for p.atKeyword(token.KeywordFor) {
+		loop, err := p.parseLoop(p.cur().Pos)
+		if err != nil {
+			return nil, err
+		}
+		loops = append(loops, loop)
+	}
+	return loops, nil
+}
+
 // parseSeqComp parses the rest of "[item for name in source]", with item
 // already parsed and the current token being "for".
 func (p *parser) parseSeqComp(open token.Token, item ast.Node) (ast.Node, error) {
-	loop, err := p.parseLoop(open.Pos)
+	loops, err := p.parseLoops()
 	if err != nil {
 		return nil, err
 	}
@@ -639,7 +653,7 @@ func (p *parser) parseSeqComp(open token.Token, item ast.Node) (ast.Node, error)
 		return nil, p.errorf(p.cur().Pos, "expected %q to close a comprehension, found %s", "]", p.cur())
 	}
 	p.next()
-	return &ast.SeqComp{Loop: loop, Item: item}, nil
+	return &ast.SeqComp{Base: ast.At(open.Pos), Loops: loops, Item: item}, nil
 }
 
 // parseMapComp parses the rest of "{key: value for name in source}", with the
@@ -648,7 +662,7 @@ func (p *parser) parseMapComp(open token.Token, entry *ast.Entry) (ast.Node, err
 	if entry.Merge {
 		return nil, p.errorf(entry.KeyPos, "a comprehension needs an entry of its own, so it cannot start with %q", "<<")
 	}
-	loop, err := p.parseLoop(open.Pos)
+	loops, err := p.parseLoops()
 	if err != nil {
 		return nil, err
 	}
@@ -656,7 +670,7 @@ func (p *parser) parseMapComp(open token.Token, entry *ast.Entry) (ast.Node, err
 		return nil, p.errorf(p.cur().Pos, "expected %q to close a comprehension, found %s", "}", p.cur())
 	}
 	p.next()
-	return &ast.MapComp{Loop: loop, Entry: entry}, nil
+	return &ast.MapComp{Base: ast.At(open.Pos), Loops: loops, Entry: entry}, nil
 }
 
 // buildString converts a string token into an ast.String, parsing each

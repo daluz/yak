@@ -1,6 +1,7 @@
 package stdlib
 
 import (
+	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/eval"
 	"github.com/daluz/yak/internal/module"
 )
@@ -16,7 +17,31 @@ func init() {
 		builtin("pick", params("mapping", "keys"), selectKeys(true)),
 		builtin("omit", params("mapping", "keys"), selectKeys(false)),
 		builtin("visible", mapParam, visible),
+		builtin("merge", append(params("x", "y"),
+			optional("deep", &ast.Bool{Value: true}), optional("append", &ast.Bool{})), merge),
 	}})
+}
+
+// merge is "<<" with the choices it makes named: deep merges mappings found
+// on both sides at every depth, and append joins sequences found on both.
+func merge(c call) (eval.Value, error) {
+	x, err := c.mapping(0)
+	if err != nil {
+		return nil, err
+	}
+	y, err := c.mapping(1)
+	if err != nil {
+		return nil, err
+	}
+	deep, err := c.boolean(2)
+	if err != nil {
+		return nil, err
+	}
+	appendSeqs, err := c.boolean(3)
+	if err != nil {
+		return nil, err
+	}
+	return eval.MergeWith(x, y, deep, appendSeqs)
 }
 
 func keys(c call) (eval.Value, error) {

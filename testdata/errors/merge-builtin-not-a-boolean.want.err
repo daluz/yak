@@ -1,0 +1,1 @@
+merge-builtin-not-a-boolean.yak:1:38: "merge" needs a boolean, found string

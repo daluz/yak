@@ -1,0 +1,59 @@
+# By default merge is "<<": mappings merge at every depth, and anything
+# else on the right replaces what the left held.
+deep:
+  image: nginx
+  limits:
+    cpu: 1
+    memory: 512
+  args:
+    - -q
+  ports:
+    - 80
+  port: 8080
+operator:
+  image: nginx
+  limits:
+    cpu: 1
+    memory: 512
+  args:
+    - -q
+  ports:
+    - 80
+  port: 8080
+# A shallow merge lets a mapping on the right replace the one on the left.
+shallow:
+  image: nginx
+  limits:
+    memory: 512
+  args:
+    - -q
+  ports:
+    - 80
+  port: 8080
+# append joins sequences found on both sides, the left's items first.
+appended:
+  image: nginx
+  limits:
+    cpu: 1
+    memory: 512
+  args:
+    - -v
+    - -q
+  ports:
+    - 80
+  port: 8080
+nested:
+  a:
+    xs:
+      - 1
+      - 2
+topOnly:
+  xs:
+    - 1
+    - 2
+  a:
+    xs:
+      - 2
+# A sequence meeting anything else is still replaced.
+mixed:
+  xs: none

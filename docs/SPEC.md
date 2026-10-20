@@ -77,7 +77,8 @@ files always render the same output, so the result is safe to review as a
 diff and to re-render in a GitOps loop.
 
 Strict mode does two things. [Importing](#modules-and-packages) a module whose answers can
-change between renderings, such as [`std.random`](STDLIB.md#stdrandom), is an
+change between renderings, such as [`std.random`](STDLIB.md#stdrandom) and
+[`std.env`](STDLIB.md#stdenv), is an
 error, raised when the import is first read. And
 [`std.files`](STDLIB.md#stdfiles) reads only beneath the directory of the file
 that calls it. Both errors name strict mode as the reason and say how to turn
@@ -1140,7 +1141,8 @@ A key whose value is a mapping on both sides is merged at every depth, as
 `limits` is; any other value in `y` replaces the one in `x`. Both operands
 must be mappings, so `[80] << [443]` is an error naming both kinds. An entry
 keeps its modifiers, so a `::` on the right hides an entry the left would have
-rendered.
+rendered. The built-in [`merge`](STDLIB.md#mappings) makes the same merge
+shallow, or appends sequences held on both sides.
 
 Neither operand changes, and an entry still reads the mapping it was written
 in, so an override does not reach back into a sibling that referred to it:
@@ -1302,8 +1304,18 @@ An `if` clause after the source keeps only the items it accepts:
 public: [p.name for p in $$.ports if p.number < 1024]
 ```
 
+Several `for` clauses may follow one another, each with its own optional
+`if`. A later clause is walked once per item the clauses before it keep, and
+can read their names, so the element is evaluated once per combination:
+
+```yaml
+pairs: ["\(p.name)-\(r)" for p in $$.ports if p.number < 1024 for r in ["eu", "us"]]
+```
+
+renders as `["http-eu", "http-us"]` with the context above.
+
 The name is an ordinary binding: it shadows an outer one, is visible inside
-the element, and comprehensions may nest. A comprehension opens no mapping, so
+the element and in every later clause, and comprehensions may nest. A comprehension opens no mapping, so
 `.` still names the mapping it is written in.
 
 The name may be a [pattern](#destructuring). Patterns separated by commas are
@@ -1479,7 +1491,7 @@ operand     := literal | reference | flowSeq | flowMap | lambda | tag | "(" valu
 flowSeq     := "[" ((value loop) | (value ("," value)*)? ","?) "]"
 flowMap     := "{" ((entry loop) | (entry ("," entry)*)?) "}"
 entry       := (key | "<<") sep value
-loop        := "for" pattern ("," pattern)* "in" value ("if" value)?
+loop        := ("for" pattern ("," pattern)* "in" value ("if" value)?)+
 key         := identifier | string | "(" value ")"
 literal     := string | int | float | "true" | "false" | "null"
 reference   := (dots | builtin | identifier) postfix*

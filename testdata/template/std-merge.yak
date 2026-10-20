@@ -1,0 +1,18 @@
+let base = {image: "nginx", limits: {cpu: 1, memory: 256}, args: ["-v"], ports: [80]}
+let over = {limits: {memory: 512}, args: ["-q"], port: 8080}
+
+# By default merge is "<<": mappings merge at every depth, and anything
+# else on the right replaces what the left held.
+deep: merge(base, over)
+operator: base << over
+
+# A shallow merge lets a mapping on the right replace the one on the left.
+shallow: merge(base, over, deep = false)
+
+# append joins sequences found on both sides, the left's items first.
+appended: merge(base, over, append = true)
+nested: merge({a: {xs: [1]}}, {a: {xs: [2]}}, append = true)
+topOnly: merge({xs: [1], a: {xs: [1]}}, {xs: [2], a: {xs: [2]}}, deep = false, append = true)
+
+# A sequence meeting anything else is still replaced.
+mixed: merge({xs: [1]}, {xs: "none"}, append = true)

@@ -1,0 +1,1 @@
+env-strict.yak:3:8: module "std.env" can answer differently on every rendering, which strict mode does not allow; render with --strict=false to use it

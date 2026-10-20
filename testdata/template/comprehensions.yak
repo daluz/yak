@@ -16,6 +16,12 @@ labels: {"port-\(p.name)": "\(p.number)" for p in ports if p.tls}
 # The loop variable is an ordinary binding, so comprehensions nest.
 grid: [[n for n in row] for row in $$.grid]
 
+# Chained "for" clauses walk every combination, the later clause once per
+# item of the earlier, and each may have its own "if".
+flat: [n for row in $$.grid for n in row]
+pairs: ["\(p.name)-\(n)" for p in ports if p.tls for n in [1, 2] if n > 1]
+cells: {"\(r)-\(n)": n * 10 for r, row in [[0, [1, 2]], [1, [3]]] for n in row}
+
 # A comprehension opens no mapping of its own, so "." still names the one it
 # is written in.
 service: "web"

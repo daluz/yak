@@ -298,6 +298,25 @@ uuid: size(id) == 36 and strings.startsWith(strings.split(id, "-")[2], "4")
 	}
 }
 
+func TestEnvWhenNotStrict(t *testing.T) {
+	t.Setenv("YAK_TEST_SET", "shop")
+	t.Setenv("YAK_TEST_EMPTY", "")
+	src := `import std.env
+set: env.get("YAK_TEST_SET")
+empty: env.get("YAK_TEST_EMPTY", "fallback")
+unset: env.get("YAK_TEST_UNSET")
+fallback: env.get("YAK_TEST_UNSET", 8080)
+`
+	got, err := renderFile(t, t.TempDir(), "t.yak", src, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "set: shop\nempty: \"\"\nunset: null\nfallback: 8080\n"
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestTemplateWritesNothingOnFailure(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "broken.yak")

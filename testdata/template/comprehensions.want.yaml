@@ -29,6 +29,20 @@ grid:
     - 2
   - - 3
     - 4
+# Chained "for" clauses walk every combination, the later clause once per
+# item of the earlier, and each may have its own "if".
+flat:
+  - 1
+  - 2
+  - 3
+  - 4
+pairs:
+  - https-2
+  - admin-2
+cells:
+  0-1: 10
+  0-2: 20
+  1-3: 30
 # A comprehension opens no mapping of its own, so "." still names the one it
 # is written in.
 service: web

@@ -1,0 +1,5 @@
+# std.env reads the environment, which can change between renderings, so
+# strict mode refuses it.
+import std.env
+
+home: env.get("HOME")

@@ -222,14 +222,20 @@ func concat(x, y *Array) *Array {
 // A key whose value is a mapping on both sides merges rather than being
 // replaced, however deep that goes. Anything else y holds replaces what x
 // held, so a sequence or a scalar overrides rather than combining.
-func Merge(x, y *Object) (*Object, error) {
+func Merge(x, y *Object) (*Object, error) { return MergeWith(x, y, true, false) }
+
+// MergeWith joins two mappings as Merge does, except that a key whose value
+// is a mapping on both sides merges only when deep is set, and a key whose
+// value is a sequence on both sides takes x's items then y's when
+// appendSeqs is set.
+func MergeWith(x, y *Object, deep, appendSeqs bool) (*Object, error) {
 	o := NewObject()
 	for _, f := range x.fields {
 		o.Add(f)
 	}
 	for _, f := range y.fields {
 		if prev, held := o.Lookup(f.Name); held {
-			value, err := combined(prev, f)
+			value, err := combined(prev, f, deep, appendSeqs)
 			if err != nil {
 				return nil, err
 			}
@@ -246,33 +252,51 @@ func Merge(x, y *Object) (*Object, error) {
 }
 
 // combined answers the value a key takes when a merge finds it on both
-// sides: the two mappings merge, and anything else new replaces old.
+// sides: two mappings merge when deep is set, two sequences join when
+// appendSeqs is, and anything else new replaces old.
 //
-// Telling a mapping from anything else means resolving the value, which is
-// why a key held by both sides is evaluated where the merge is written
-// rather than where the merged mapping is read.
-func combined(old, new *Field) (*Thunk, error) {
+// Telling a mapping or a sequence from anything else means resolving the
+// value, which is why a key held by both sides is evaluated where the merge
+// is written rather than where the merged mapping is read.
+func combined(old, new *Field, deep, appendSeqs bool) (*Thunk, error) {
+	if !deep && !appendSeqs {
+		return new.Value, nil
+	}
 	prev, err := old.Value.Value()
 	if err != nil {
 		return nil, err
 	}
-	a, ok := prev.(*Object)
-	if !ok {
+	switch prev.(type) {
+	case *Object:
+		if !deep {
+			return new.Value, nil
+		}
+	case *Array:
+		if !appendSeqs {
+			return new.Value, nil
+		}
+	default:
 		return new.Value, nil
 	}
 	next, err := new.Value.Value()
 	if err != nil {
 		return nil, err
 	}
-	b, ok := next.(*Object)
-	if !ok {
-		return new.Value, nil
+	switch b := next.(type) {
+	case *Object:
+		if a, ok := prev.(*Object); ok {
+			merged, err := MergeWith(a, b, deep, appendSeqs)
+			if err != nil {
+				return nil, err
+			}
+			return Done(merged), nil
+		}
+	case *Array:
+		if a, ok := prev.(*Array); ok {
+			return Done(concat(a, b)), nil
+		}
 	}
-	merged, err := Merge(a, b)
-	if err != nil {
-		return nil, err
-	}
-	return Done(merged), nil
+	return new.Value, nil
 }
 
 // Equal compares two values for "==", and fails where it would. Values of

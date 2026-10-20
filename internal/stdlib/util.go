@@ -81,6 +81,18 @@ func (c call) optionalStr(i int) (string, bool, error) {
 	return s, err == nil, err
 }
 
+func (c call) boolean(i int) (bool, error) {
+	v, err := c.value(i)
+	if err != nil {
+		return false, err
+	}
+	b, ok := v.(eval.Bool)
+	if !ok {
+		return false, c.errorf(i, "needs a boolean, found %s", v.TypeName())
+	}
+	return bool(b), nil
+}
+
 func (c call) integer(i int) (eval.Int, error) {
 	v, err := c.value(i)
 	if err != nil {

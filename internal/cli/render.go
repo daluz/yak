@@ -57,9 +57,9 @@ func newRenderCommand() *cobra.Command {
 			"A document that evaluates to null, such as one holding nothing but\n" +
 			"bindings, is left out unless --keep-null-documents is given.\n\n" +
 			"Rendering is strict unless --strict=false is given: the same template and\n" +
-			"context always render the same output, so modules such as std.random are\n" +
-			"refused, and std.files reads only beneath the directory of the file that\n" +
-			"calls it.\n\n" +
+			"context always render the same output, so modules such as std.random and\n" +
+			"std.env are refused, and std.files reads only beneath the directory of the\n" +
+			"file that calls it.\n\n" +
 			"--skip-schema-checks lets every value through the schemas, which then\n" +
 			"only fill in defaults.",
 		Args: cobra.ExactArgs(1),
@@ -109,7 +109,7 @@ func newRenderCommand() *cobra.Command {
 		"write the documents that evaluated to null instead of leaving them out")
 	plainHTTPFlag(cmd, &plainHTTP)
 	cmd.Flags().BoolVar(&strict, "strict", true,
-		"render deterministically; --strict=false admits std.random and reading files anywhere")
+		"render deterministically; --strict=false admits std.random, std.env and reading files anywhere")
 	cmd.Flags().BoolVar(&skipChecks, "skip-schema-checks", false,
 		"fill in the defaults schemas declare without checking any value against them")
 	cmd.MarkFlagsMutuallyExclusive("output", "automatic-output")

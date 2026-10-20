@@ -628,11 +628,20 @@ func checkNames(n ast.Node, env *Env) error {
 	case *ast.If:
 		return checkAll(env, n.Cond, n.Then, n.Else)
 	case *ast.SeqComp:
-		return checkAll(env, n.Source, n.Filter, n.Item)
+		return checkAll(env, append(loopNodes(n.Loops), n.Item)...)
 	case *ast.MapComp:
-		return checkAll(env, n.Source, n.Filter, n.Entry.Key, n.Entry.Value)
+		return checkAll(env, append(loopNodes(n.Loops), n.Entry.Key, n.Entry.Value)...)
 	}
 	return nil
+}
+
+// loopNodes lists the sources and filters of a comprehension's clauses.
+func loopNodes(loops []ast.Loop) []ast.Node {
+	var nodes []ast.Node
+	for _, l := range loops {
+		nodes = append(nodes, l.Source, l.Filter)
+	}
+	return nodes
 }
 
 func checkAll(env *Env, nodes ...ast.Node) error {

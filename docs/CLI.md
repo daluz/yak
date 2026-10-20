@@ -103,7 +103,7 @@ $ yak render oci://ghcr.io/acme/web:1.4.0 --output-dir build
 
 Rendering is strict unless `--strict=false` is given, so the same template and
 context always render the same output. Strict mode refuses modules that answer
-differently on every rendering, such as `std.random`, and confines
+differently on every rendering, such as `std.random` and `std.env`, and confines
 `std.files` to the directory of the file that calls it. Turning it off admits
 those modules and lets `std.files` read any path.
 [SPEC.md](SPEC.md#strict-mode) has the details.

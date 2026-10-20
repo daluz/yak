@@ -461,15 +461,20 @@ type Loop struct {
 	Filter  Node
 }
 
-// SeqComp is a sequence comprehension, "[item for name in source]".
+// SeqComp is a sequence comprehension, "[item for name in source]". Loops
+// holds its "for" clauses in the order they are written, so a later one
+// walks once per item of those before it.
 type SeqComp struct {
-	Loop
-	Item Node
+	Base
+	Loops []Loop
+	Item  Node
 }
 
-// MapComp is a mapping comprehension, "{key: value for name in source}".
+// MapComp is a mapping comprehension, "{key: value for name in source}",
+// whose Loops are as in SeqComp.
 type MapComp struct {
-	Loop
+	Base
+	Loops []Loop
 	Entry *Entry
 }
 

@@ -14,6 +14,7 @@ name a template uses.
     - [Mappings](#mappings)
 - [Modules](#modules)
     - [`std.base64`](#stdbase64)
+    - [`std.env`](#stdenv)
     - [`std.files`](#stdfiles)
     - [`std.gotemplate`](#stdgotemplate)
     - [`std.hash`](#stdhash)
@@ -176,6 +177,7 @@ selector: pick($$.labels, ["app", "tier"])
 | `pick(mapping, keys)` | The entries whose key is one of `keys`. |
 | `omit(mapping, keys)` | The entries whose key is not one of `keys`. |
 | `visible(mapping)` | The entries that are not hidden. |
+| `merge(x, y, deep = true, append = false)` | `x` and `y` merged as [`x << y`](SPEC.md#merging), with the choices below. |
 
 Hidden entries count, as for `size`, and every answer keeps the mapping's
 order rather than that of `keys`. A key in `keys` that `mapping` lacks is not
@@ -185,6 +187,16 @@ being hidden. Whether a mapping holds a key is what
 
 `visible` leaves out only entries written with `::`; a `:?` entry stays
 whatever its value. `keys(visible(m))` names the keys that are not hidden.
+
+With its defaults `merge` is `x << y`. `deep = false` lets a mapping in `y`
+replace the one in `x` rather than merging into it. `append = true` joins a
+key whose value is a sequence on both sides, the items of `x` first, at every
+depth the merge reaches; a sequence meeting anything else is still replaced.
+
+```yaml
+merge({args: ["-v"], limits: {cpu: 1}}, {args: ["-q"], limits: {memory: 512}}, deep = false, append = true)
+# {args: ["-v", "-q"], limits: {memory: 512}}
+```
 
 ## Modules
 
@@ -206,6 +218,22 @@ password: base64.encode($$.password)
 | `decode(value)` | The text that the base64 string `value` holds. |
 
 Decoded base64 that is not UTF-8 text is an error.
+
+### `std.env`
+
+```yaml
+import std.env
+
+region: env.get("AWS_REGION", "us-east-1")
+```
+
+| Call | Answer |
+| --- | --- |
+| `get(name, default = null)` | The value of the environment variable `name`, or `default` when it is not set. |
+
+A variable that is set to the empty string answers `""`, not `default`. The
+environment can change between renderings, so this module is only available
+with [strict mode](SPEC.md#strict-mode) off.
 
 ### `std.files`
 

@@ -86,9 +86,9 @@ func dump(n ast.Node) string {
 		}
 		return out + ")"
 	case *ast.SeqComp:
-		return "[" + dump(t.Item) + dumpLoop(t.Loop) + "]"
+		return "[" + dump(t.Item) + dumpLoops(t.Loops) + "]"
 	case *ast.MapComp:
-		return "{" + dumpEntry(t.Entry) + dumpLoop(t.Loop) + "}"
+		return "{" + dumpEntry(t.Entry) + dumpLoops(t.Loops) + "}"
 	case *ast.Let:
 		return "let(" + strings.Join(dumpBinds(t.Binds), " ") + ";" + dump(t.Body) + ")"
 	case *ast.Function:
@@ -140,10 +140,13 @@ func dumpEntry(e *ast.Entry) string {
 	return key + sep + dump(e.Value)
 }
 
-func dumpLoop(l ast.Loop) string {
-	out := " for " + dumpPattern(l.Pattern) + " in " + dump(l.Source)
-	if l.Filter != nil {
-		out += " if " + dump(l.Filter)
+func dumpLoops(loops []ast.Loop) string {
+	var out string
+	for _, l := range loops {
+		out += " for " + dumpPattern(l.Pattern) + " in " + dump(l.Source)
+		if l.Filter != nil {
+			out += " if " + dump(l.Filter)
+		}
 	}
 	return out
 }
@@ -496,6 +499,9 @@ func TestParseComprehensions(t *testing.T) {
 		{"wildcards", "a: [v for _, v, _ in $$.list]\n", `{"a":[ident(v) for [_ v _] in context.list]}`},
 		{"a lone wildcard", "a: [1 for _ in $$.list]\n", `{"a":[1 for _ in context.list]}`},
 		{"a pattern in a mapping", "a: {(k): v for k, v in $$.list}\n", `{"a":{(ident(k)):ident(v) for [k v] in context.list}}`},
+		{"chained clauses", "a: [x + y for x in $$.xs for y in $$.ys]\n", `{"a":[(ident(x)+ident(y)) for x in context.xs for y in context.ys]}`},
+		{"chained clauses with filters", "a: [y for x in $$.xs if x for y in x.ys if y]\n", `{"a":[ident(y) for x in context.xs if ident(x) for y in ident(x).ys if ident(y)]}`},
+		{"chained clauses in a mapping", "a: {(k): 1 for x in $$.xs for k in x}\n", `{"a":{(ident(k)):1 for x in context.xs for k in ident(x)}}`},
 	}
 
 	for _, tc := range tests {

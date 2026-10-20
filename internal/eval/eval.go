@@ -483,7 +483,7 @@ func applyMerge(o *Object, at int, e *ast.Entry, env *Env) (int, error) {
 			// The merge overrides an entry written above it. That entry
 			// keeps the place and the comments it was written with; the
 			// merge decides its value and whether it is hidden.
-			value, err := combined(o.fields[q], f)
+			value, err := combined(o.fields[q], f, true, false)
 			if err != nil {
 				return 0, err
 			}
@@ -492,7 +492,7 @@ func applyMerge(o *Object, at int, e *ast.Entry, env *Env) (int, error) {
 		default:
 			// The entry below was written after the merge, so it wins,
 			// and keeps everything it says about itself.
-			value, err := combined(f, o.fields[q])
+			value, err := combined(f, o.fields[q], true, false)
 			if err != nil {
 				return 0, err
 			}
@@ -539,7 +539,7 @@ func evalSequence(node *ast.Sequence, env *Env) (Value, error) {
 // per item of its source.
 func evalSeqComp(node *ast.SeqComp, env *Env) (Value, error) {
 	var items []*Elem
-	err := iterate(&node.Loop, env, func(child *Env) error {
+	err := iterate(node.Loops, env, func(child *Env) error {
 		items = append(items, &Elem{
 			Comments: carried(Comments{}, node.Item, child),
 			Value:    &Thunk{node: node.Item, env: child, pos: node.Item.Pos()},
@@ -558,7 +558,7 @@ func evalSeqComp(node *ast.SeqComp, env *Env) (Value, error) {
 func evalMapComp(node *ast.MapComp, env *Env) (Value, error) {
 	obj := NewObject()
 	e := node.Entry
-	err := iterate(&node.Loop, env, func(child *Env) error {
+	err := iterate(node.Loops, env, func(child *Env) error {
 		key, err := evalNode(e.Key, child)
 		if err != nil {
 			return err
@@ -580,12 +580,24 @@ func evalMapComp(node *ast.MapComp, env *Env) (Value, error) {
 	return obj, nil
 }
 
-// iterate walks the source sequence of a comprehension, calling yield with an
+// iterate walks the "for" clauses of a comprehension, calling yield with an
+// environment that names the current item of each. A later clause is
+// evaluated once per item of those before it, and can read their names.
+func iterate(loops []ast.Loop, env *Env, yield func(*Env) error) error {
+	if len(loops) == 0 {
+		return yield(env)
+	}
+	return walk(&loops[0], env, func(child *Env) error {
+		return iterate(loops[1:], child, yield)
+	})
+}
+
+// walk walks the source sequence of one "for" clause, calling yield with an
 // environment that names the current item. The filter has to be resolved as
 // the loop runs, so it forces each item it looks at; the body it guards stays
 // lazy like any other value. An item the pattern destructures is checked as
 // it is reached, whether or not anything reads the names it binds.
-func iterate(loop *ast.Loop, env *Env, yield func(*Env) error) error {
+func walk(loop *ast.Loop, env *Env, yield func(*Env) error) error {
 	src, err := evalNode(loop.Source, env)
 	if err != nil {
 		return err

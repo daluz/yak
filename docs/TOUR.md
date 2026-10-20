@@ -672,7 +672,33 @@ untouched:
 
 Merging builds a new mapping and leaves both sides as they were. Anything that
 is not a mapping on both sides is replaced outright, so `<<` never appends to
-a sequence; that is what `+` is for.
+a sequence; that is what `+` is for. The built-in `merge` names the other
+choices: `deep = false` makes the merge shallow, and `append = true` joins the
+sequences both sides hold:
+
+```yaml
+let base = {args: ["-v"], limits: {cpu: 1, memory: 256}}
+
+shallow: merge(base, {limits: {memory: 512}}, deep = false)
+appended: merge(base, {args: ["-q"]}, append = true)
+```
+
+renders as:
+
+```yaml
+shallow:
+  args:
+    - -v
+  limits:
+    memory: 512
+appended:
+  args:
+    - -v
+    - -q
+  limits:
+    cpu: 1
+    memory: 256
+```
 
 ### The merge key
 
@@ -913,6 +939,23 @@ matrix:
     - us-west
 ```
 
+Several `for` clauses in one comprehension walk every combination instead,
+giving one flat sequence. Each clause may have its own `if`, and a later one
+sees the names of those before it:
+
+```yaml
+zones: ["\(a)-\(b)" for a in ["eu", "us"] for b in ["east", "west"] if a != "us" or b == "east"]
+```
+
+renders as:
+
+```yaml
+zones:
+  - eu-east
+  - eu-west
+  - us-east
+```
+
 ## 16. Built-in functions
 
 A handful of functions need no import. `size` measures a sequence, a mapping
@@ -1064,7 +1107,8 @@ countdown:
 
 ### Mappings
 
-`keys`, `values`, `items`, `pick`, `omit` and `visible` work on mappings:
+`keys`, `values`, `items`, `pick`, `omit`, `visible` and `merge` work on
+mappings:
 
 ```yaml
 let labels = {app: "web", tier: "frontend", team: "platform"}
@@ -1189,7 +1233,7 @@ metadata:
 Beyond the built-ins of section 16, the standard library lives in modules
 whose paths begin with `std`: `std.strings`, `std.json`, `std.yaml`,
 `std.base64`, `std.hash`, `std.regex`, `std.math`, `std.path`, `std.files`,
-`std.gotemplate` and `std.random`. Given this context:
+`std.gotemplate`, `std.random` and `std.env`. Given this context:
 
 ```yaml
 name: "  Shop  "
@@ -1241,11 +1285,12 @@ import { std.files, std.gotemplate }
 
 Rendering is strict by default: the same template, context and files always
 produce the same output, so a rendered diff stays meaningful and a template is
-safe to re-render in a GitOps loop. Only two things differ between the modes:
+safe to re-render in a GitOps loop. Only these things differ between the modes:
 
 | | Strict (the default) | `--strict=false` |
 | --- | --- | --- |
 | `std.random` | Importing it is an error. | Available. |
+| `std.env` | Importing it is an error. | Available. |
 | `std.files` | Reads only beneath the directory of the file calling `read`. | Reads any path, absolute or relative. |
 
 An import is a binding, so the `std.random` error comes when the import is

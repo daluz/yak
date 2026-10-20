@@ -1,0 +1,1 @@
+merge-builtin-not-a-mapping.yak:1:23: "merge" needs a mapping, found sequence
