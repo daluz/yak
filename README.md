@@ -81,7 +81,7 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
   `(x) => x * 2`.
 - **Built-ins.** `size`, `empty`, `nempty` (an empty value becomes `null` for
   `:?` to drop), and `render`, which writes a value as the text of an output
-  format. Sequences have `sort`, `unique`, `range`, `any` and the like;
+  format. Sequences have `sort`, `unique`, `range`, `some` and the like;
   mappings have `keys`, `values`, `items`, `pick` and `omit`.
 - **Operators.** `+`, `-`, `*`, `/` and `%` on numbers, with `+` also joining
   strings and sequences; `==`, `<`, `and`, `or`, `not`, and `in` / `not in`
@@ -105,8 +105,9 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
   CustomResourceDefinitions, JSON Schema and OpenAPI v3 documents as a
   library.
 - **Strict by default.** The same template and context always render the same
-  output: `std.random` is refused and `std.files` cannot leave the template's
-  directory unless `--strict=false` is given.
+  output: `std.random` and `std.env` are refused and `std.files` cannot leave
+  the directory of the file that calls `read` unless `--strict=false` is
+  given.
 - **Comments survive.** They reach every output format that can hold them,
   and the ones on a `let` travel to wherever the binding is read. A comment
   starting with `## ` is a note about the template and is left out.

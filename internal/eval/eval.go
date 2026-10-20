@@ -40,8 +40,8 @@ type Session struct {
 	// stack records the positions currently being evaluated so that a cycle
 	// can be reported as the chain of references that formed it.
 	stack []token.Pos
-	// depth counts the function calls being evaluated, which bounds a
-	// recursion that never ends.
+	// depth counts the function calls and the schema references being
+	// evaluated, which bounds a recursion that never ends.
 	depth int
 	// choosing counts the unions picking an alternative, which they do by
 	// checking even when the run skips checks.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -323,6 +324,26 @@ func sourcesIn(dir string, exts ...string) ([]string, error) {
 		return nil
 	})
 	return files, err
+}
+
+// modulesAt answers path, or the templates and libraries beneath it when it is
+// a directory.
+func modulesAt(path string) ([]string, error) {
+	if info, err := os.Stat(path); err != nil || !info.IsDir() {
+		return []string{path}, nil
+	}
+	return sourcesIn(path, engine.ExtTemplate, module.ExtLibrary)
+}
+
+// readInput reads the file at path, or standard input for "-", and answers
+// the name to report it by.
+func readInput(cmd *cobra.Command, path string) (string, []byte, error) {
+	if path == "-" {
+		src, err := io.ReadAll(cmd.InOrStdin())
+		return "<stdin>", src, err
+	}
+	src, err := os.ReadFile(path)
+	return path, src, err
 }
 
 // writeOutput writes out to dest, creating its directory first when mkdir is

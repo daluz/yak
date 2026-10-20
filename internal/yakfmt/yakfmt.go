@@ -10,6 +10,7 @@ package yakfmt
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -45,7 +46,7 @@ func Source(file string, src []byte) ([]byte, error) {
 	out := []byte(p.finish())
 
 	afterToks, afterComments, err := lexer.Lex(file, out)
-	if err == nil && sameTokens(toks, afterToks) && sameComments(comments, afterComments) {
+	if err == nil && slices.EqualFunc(toks, afterToks, sameToken) && slices.EqualFunc(comments, afterComments, sameComment) {
 		after, err := parser.Parse(file, out)
 		if err == nil && sameTree(reflect.ValueOf(before), reflect.ValueOf(after)) {
 			return out, nil
@@ -117,18 +118,23 @@ func (p *printer) comment(c token.Comment) {
 		p.lines[len(p.lines)-1].comment = c.Text
 		return
 	}
-	indent := p.levels[0].indent
-	for i := len(p.levels) - 1; i >= 0; i-- {
-		if l := p.levels[i]; l.orig <= c.Pos.Col {
-			indent = l.indent
-			if l.orig < c.Pos.Col {
-				indent += indentStep
-			}
-			break
-		}
+	l := p.enclosing(c.Pos.Col)
+	indent := l.indent
+	if l.orig < c.Pos.Col {
+		indent += indentStep
 	}
 	p.newLine(c.Pos.Line, strings.Repeat(" ", indent)+c.Text)
 	p.prevEnd = c.Pos.Line
+}
+
+// enclosing answers the innermost level written at or before col.
+func (p *printer) enclosing(col int) level {
+	for _, l := range slices.Backward(p.levels) {
+		if l.orig <= col {
+			return l
+		}
+	}
+	return p.levels[0]
 }
 
 // indent answers the indentation of a line whose first token was written at
@@ -222,13 +228,7 @@ func (p *printer) shift(text string, col int) int {
 			return p.delta
 		}
 	}
-	indent := p.levels[0].indent
-	for i := len(p.levels) - 1; i >= 0; i-- {
-		if p.levels[i].orig < col {
-			indent = p.levels[i].indent
-			break
-		}
-	}
+	indent := p.enclosing(col - 1).indent
 	for l := range strings.SplitSeq(body, "\n") {
 		if strings.TrimSpace(l) != "" {
 			return indent + indentStep - (len(l) - len(strings.TrimLeft(l, " ")))
@@ -267,28 +267,12 @@ func (p *printer) offset(pos token.Pos) int {
 	return p.starts[pos.Line-1] + pos.Col - 1
 }
 
-func sameTokens(a, b []token.Token) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].Kind != b[i].Kind || a[i].Lit != b[i].Lit {
-			return false
-		}
-	}
-	return true
+func sameToken(a, b token.Token) bool {
+	return a.Kind == b.Kind && a.Lit == b.Lit
 }
 
-func sameComments(a, b []token.Comment) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].Text != b[i].Text || a[i].OwnLine != b[i].OwnLine || a[i].Next != b[i].Next {
-			return false
-		}
-	}
-	return true
+func sameComment(a, b token.Comment) bool {
+	return a.Text == b.Text && a.OwnLine == b.OwnLine && a.Next == b.Next
 }
 
 var posType = reflect.TypeFor[token.Pos]()

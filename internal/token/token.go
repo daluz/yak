@@ -262,8 +262,8 @@ const (
 	KeywordNot  = "not"
 )
 
-// IsReserved reports whether name is a reserved word that may not be used as a
-// plain value identifier.
+// IsReserved reports whether name is a reserved word, which names no binding,
+// schema or module and has to be quoted to be a key.
 func IsReserved(name string) bool {
 	switch name {
 	case KeywordTrue, KeywordFalse, KeywordNull, KeywordLet, KeywordImport, KeywordSchema:

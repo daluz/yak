@@ -153,8 +153,8 @@ const (
 )
 
 // BuiltinTypes are the types every schema can name. Each one but "any" is the
-// name the "type" built-in answers for the values it matches; "null" is the
-// literal type of the null value. None of them can name a schema.
+// name the "type" built-in answers for the values it matches. None of them can
+// name a schema.
 var BuiltinTypes = []string{"any", "boolean", "integer", "float", "string", "sequence", "mapping", "function"}
 
 // Schema is the value of a binding introduced by "schema": the type that the
@@ -431,7 +431,7 @@ type Unary struct {
 	X  Node
 }
 
-// Binary is a comparison or a logical operator applied to two operands.
+// Binary is an infix operator applied to two operands.
 type Binary struct {
 	Base
 	Op token.Kind

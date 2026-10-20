@@ -25,7 +25,6 @@ For the precise rules, [SPEC.md](SPEC.md) defines the language and
 - [17. Destructuring](#17-destructuring)
 - [18. Modules and the standard library](#18-modules-and-the-standard-library)
 - [19. Schemas](#19-schemas)
-- [20. Output formats](#20-output-formats)
 - [20. Packages](#20-packages)
 - [21. Output formats](#21-output-formats)
 - [22. Putting it together](#22-putting-it-together)
@@ -1269,7 +1268,7 @@ annotations:
   checksum: 6233995587e8b3290a28d0c96f35ab4ea89c5b01000efdfbd4dc39a5449923e0
 ```
 
-`std.files` reads a text file from beside the template, and `std.gotemplate`
+`std.files` reads a text file from beside the file that calls `read`, and `std.gotemplate`
 renders one as a Go template with data computed in yak, so a configuration
 file in another format can end up inside a value:
 

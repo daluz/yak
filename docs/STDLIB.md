@@ -331,7 +331,8 @@ replicas: math.ceil($$.nodes / 2)
 `ceil(value)` and `round(value)` round a float down, up, or to the nearest
 integer with halves away from zero, and answer an integer; an integer is
 answered as it is. `round(value, digits = null)` with `digits` rounds to that
-many decimal places and answers a float, so `round(3.14159, 2)` is `3.14`.
+many decimal places, so `round(3.14159, 2)` is `3.14`; an integer is again
+answered as it is.
 
 ### `std.path`
 

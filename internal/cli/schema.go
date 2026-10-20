@@ -2,8 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -51,14 +49,7 @@ func newSchemaImportCommand() *cobra.Command {
 			files := make([]schemaimport.File, len(args))
 			for i, path := range args {
 				var err error
-				if path == "-" {
-					files[i].Name = "<stdin>"
-					files[i].Data, err = io.ReadAll(cmd.InOrStdin())
-				} else {
-					files[i].Name = path
-					files[i].Data, err = os.ReadFile(path)
-				}
-				if err != nil {
+				if files[i].Name, files[i].Data, err = readInput(cmd, path); err != nil {
 					return err
 				}
 			}
@@ -85,7 +76,7 @@ func newSchemaImportCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&output, "output", "o", "",
 		"write the library to this file instead of standard output")
 	cmd.Flags().StringVar(&format, "format", "",
-		"input format: "+strings.Join(schemaimport.Formats, ", ")+" (default: detected from each file)")
+		"input format: "+strings.Join(schemaimport.Formats, ", ")+" (default: detected, the same for every file)")
 	return cmd
 }
 
@@ -123,15 +114,13 @@ func newSchemaCheckCommand() *cobra.Command {
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			for _, path := range args {
-				files := []string{path}
-				if info, err := os.Stat(path); err == nil && info.IsDir() {
-					if files, err = sourcesIn(path, engine.ExtTemplate, module.ExtLibrary); err != nil {
-						return err
-					}
-					if len(files) == 0 {
-						return fmt.Errorf("no %s templates or %s libraries beneath %s",
-							engine.ExtTemplate, module.ExtLibrary, path)
-					}
+				files, err := modulesAt(path)
+				if err != nil {
+					return err
+				}
+				if len(files) == 0 {
+					return fmt.Errorf("no %s templates or %s libraries beneath %s",
+						engine.ExtTemplate, module.ExtLibrary, path)
 				}
 				for _, file := range files {
 					if err := engine.CheckSchemas(file); err != nil {

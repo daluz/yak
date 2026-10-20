@@ -81,5 +81,5 @@ func singleDocument(f Format, docs []eval.Value) error {
 	if len(docs) == 1 {
 		return nil
 	}
-	return fmt.Errorf("%s holds one document, but the template produced %d; use jsonl or yaml for a stream", f, len(docs))
+	return fmt.Errorf("%s holds one document, but the template produced %d; use yaml, kyaml or jsonl for a stream", f, len(docs))
 }

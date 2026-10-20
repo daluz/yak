@@ -1,1 +1,1 @@
-jwcc holds one document, but the template produced 2; use jsonl or yaml for a stream
+jwcc holds one document, but the template produced 2; use yaml, kyaml or jsonl for a stream

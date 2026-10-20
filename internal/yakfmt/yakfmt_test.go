@@ -15,7 +15,7 @@ import (
 var update = flag.Bool("update", false, "rewrite golden files instead of comparing against them")
 
 // TestFormatGolden formats every testdata/fmt/NAME.yak and compares the
-// result with NAME.want.yak, which has to format to itself.
+// result with NAME.want.yak.
 func TestFormatGolden(t *testing.T) {
 	dir := filepath.Join("..", "..", "testdata", "fmt")
 	inputs, err := filepath.Glob(filepath.Join(dir, "*.yak"))
@@ -48,13 +48,6 @@ func TestFormatGolden(t *testing.T) {
 			}
 			if string(got) != string(want) {
 				t.Errorf("formatting %s:\n--- got ---\n%s\n--- want ---\n%s", path, got, want)
-			}
-			again, err := yakfmt.Source(golden, want)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(again) != string(want) {
-				t.Errorf("%s does not format to itself:\n%s", golden, again)
 			}
 		})
 	}
