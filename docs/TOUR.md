@@ -14,19 +14,21 @@ For the precise rules, [SPEC.md](SPEC.md) defines the language and
 - [6. The context](#6-the-context)
 - [7. Hidden and optional entries](#7-hidden-and-optional-entries)
 - [8. Let bindings](#8-let-bindings)
-- [9. Operators](#9-operators)
-- [10. Conditionals](#10-conditionals)
-- [11. Functions](#11-functions)
-- [12. Comprehensions](#12-comprehensions)
-- [13. Built-in functions](#13-built-in-functions)
-- [14. Destructuring](#14-destructuring)
-- [15. Merging](#15-merging)
-- [16. Comments](#16-comments)
-- [17. Several documents](#17-several-documents)
+- [9. Comments](#9-comments)
+- [10. Several documents](#10-several-documents)
+- [11. Operators](#11-operators)
+- [12. Merging](#12-merging)
+- [13. Conditionals](#13-conditionals)
+- [14. Functions](#14-functions)
+- [15. Comprehensions](#15-comprehensions)
+- [16. Built-in functions](#16-built-in-functions)
+- [17. Destructuring](#17-destructuring)
 - [18. Modules and the standard library](#18-modules-and-the-standard-library)
 - [19. Schemas](#19-schemas)
 - [20. Output formats](#20-output-formats)
-- [21. Putting it together](#21-putting-it-together)
+- [20. Packages](#20-packages)
+- [21. Output formats](#21-output-formats)
+- [22. Putting it together](#22-putting-it-together)
 
 ## 1. Your first template
 
@@ -94,7 +96,8 @@ yak: values.yak:1:10: "yes" is not a boolean in yak; write true, or quote it to 
 ```
 
 YAML's anchors (`&name`), aliases (`*name`) and tags (`!!str`) are gone too.
-The features in the rest of this tour replace them.
+The features in the rest of this tour replace them, and a tag returns in
+[section 19](#19-schemas) to check a value against a schema.
 
 ## 3. Strings
 
@@ -511,7 +514,79 @@ production:
   image: app:v1-patched
 ```
 
-## 9. Operators
+## 9. Comments
+
+Comments are part of the output. One above an entry stays above it, and one
+beside a value stays beside it. A comment that starts with `## ` is a note
+for whoever edits the template, and is left out:
+
+```yaml
+# The public face of the service.
+service:
+  name: "web"    # and its DNS label
+  ## A note for whoever edits this template next.
+  port: 8080
+
+let {
+  # Where everything lands.
+  region = "us-east-1"
+}
+
+placement: region
+```
+
+renders as:
+
+```yaml
+# The public face of the service.
+service:
+  name: web # and its DNS label
+  port: 8080
+# Where everything lands.
+placement: us-east-1
+```
+
+A binding renders nothing, so its comments travel to wherever it is read
+back, which is why the comment on `region` came out above `placement`.
+
+## 10. Several documents
+
+A file can hold several documents separated by `---`, as in YAML. Each one has
+its own bindings and its own `$`; the context is shared by all of them. Given
+a context of `{app: shop}`:
+
+```yaml
+let name = "web"
+
+kind: "Deployment"
+metadata:
+  name: name
+---
+kind: "Service"
+metadata:
+  name: "\($$.app)-svc"
+spec:
+  selector: $.metadata
+```
+
+renders as:
+
+```yaml
+kind: Deployment
+metadata:
+  name: web
+---
+kind: Service
+metadata:
+  name: shop-svc
+spec:
+  selector:
+    name: shop-svc
+```
+
+A document holding nothing but bindings renders nothing at all.
+
+## 11. Operators
 
 Arithmetic works on numbers, and `+` also joins two strings or two sequences:
 
@@ -568,7 +643,86 @@ alerting: $$.env == "prod" and not ("batch" in $$.roles)
 
 renders every entry as `true`.
 
-## 10. Conditionals
+## 12. Merging
+
+`<<` merges two mappings, and the one on the right wins. The merge goes as
+deep as both sides hold mappings, so overriding one field of a nested mapping
+keeps its siblings:
+
+```yaml
+let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+
+container: defaults << {limits: {memory: 512}, port: 8080}
+untouched: defaults.limits
+```
+
+renders as:
+
+```yaml
+container:
+  image: nginx
+  limits:
+    cpu: 1
+    memory: 512
+  port: 8080
+untouched:
+  cpu: 1
+  memory: 256
+```
+
+Merging builds a new mapping and leaves both sides as they were. Anything that
+is not a mapping on both sides is replaced outright, so `<<` never appends to
+a sequence; that is what `+` is for.
+
+### The merge key
+
+Written where a key belongs, `<<` merges into the mapping it is written in,
+like YAML's merge key without the anchor. The merge overrides the entries
+above it, and the entries below it override the merge:
+
+```yaml
+let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+
+container:
+  image: "alpine"
+  <<: defaults
+  tag: "1.27"
+  limits:
+    memory: 512
+```
+
+renders as:
+
+```yaml
+container:
+  image: nginx
+  tag: "1.27"
+  limits:
+    cpu: 1
+    memory: 512
+```
+
+The entry modifiers work on a merge too. `<<::` brings entries in hidden, for
+references to read, and `<<:?` merges nothing when the value is `null`, which
+suits optional overrides from the context:
+
+```yaml
+let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
+
+sidecar:
+  <<:: defaults
+  <<:? $$?.overrides
+  cpu: .limits.cpu
+```
+
+renders as:
+
+```yaml
+sidecar:
+  cpu: 1
+```
+
+## 13. Conditionals
 
 `if ... then ... else ...` chooses between two values. Only the branch that is
 chosen is evaluated, and an `else` may hold another `if` to form a chain:
@@ -605,7 +759,7 @@ error:
 yak: app.yak:1:7: the condition of an "if" must be a boolean, found integer
 ```
 
-## 11. Functions
+## 14. Functions
 
 A binding whose name is followed by parameters is a function. A parameter
 can have a default, and arguments are given by position, by name, or by
@@ -698,9 +852,9 @@ curried: 8
 ```
 
 Anonymous functions are what you will pass most often, to the built-in
-functions in section 13.
+functions in section 16.
 
-## 12. Comprehensions
+## 15. Comprehensions
 
 A comprehension builds a sequence or a mapping by walking a sequence. Write
 one element followed by `for name in source`, and the element is evaluated
@@ -759,7 +913,7 @@ matrix:
     - us-west
 ```
 
-## 13. Built-in functions
+## 16. Built-in functions
 
 A handful of functions need no import. `size` measures a sequence, a mapping
 or a string, `empty` asks whether a value is `null` or has nothing in it, and
@@ -942,7 +1096,7 @@ pairs:
 A `let` of the same name as a built-in shadows it, so a template that
 already uses one of these names keeps working.
 
-## 14. Destructuring
+## 17. Destructuring
 
 `items` hands out `[key, value]` pairs, and taking them apart has its own
 syntax. A binding can name the items of a sequence instead of the sequence,
@@ -992,157 +1146,6 @@ large:
   - memory
 ```
 
-## 15. Merging
-
-`<<` merges two mappings, and the one on the right wins. The merge goes as
-deep as both sides hold mappings, so overriding one field of a nested mapping
-keeps its siblings:
-
-```yaml
-let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
-
-container: defaults << {limits: {memory: 512}, port: 8080}
-untouched: defaults.limits
-```
-
-renders as:
-
-```yaml
-container:
-  image: nginx
-  limits:
-    cpu: 1
-    memory: 512
-  port: 8080
-untouched:
-  cpu: 1
-  memory: 256
-```
-
-Merging builds a new mapping and leaves both sides as they were. Anything that
-is not a mapping on both sides is replaced outright, so `<<` never appends to
-a sequence; that is what `+` is for.
-
-### The merge key
-
-Written where a key belongs, `<<` merges into the mapping it is written in,
-like YAML's merge key without the anchor. The merge overrides the entries
-above it, and the entries below it override the merge:
-
-```yaml
-let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
-
-container:
-  image: "alpine"
-  <<: defaults
-  tag: "1.27"
-  limits:
-    memory: 512
-```
-
-renders as:
-
-```yaml
-container:
-  image: nginx
-  tag: "1.27"
-  limits:
-    cpu: 1
-    memory: 512
-```
-
-The entry modifiers work on a merge too. `<<::` brings entries in hidden, for
-references to read, and `<<:?` merges nothing when the value is `null`, which
-suits optional overrides from the context:
-
-```yaml
-let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
-
-sidecar:
-  <<:: defaults
-  <<:? $$?.overrides
-  cpu: .limits.cpu
-```
-
-renders as:
-
-```yaml
-sidecar:
-  cpu: 1
-```
-
-## 16. Comments
-
-Comments are part of the output. One above an entry stays above it, and one
-beside a value stays beside it. A comment that starts with `## ` is a note
-for whoever edits the template, and is left out:
-
-```yaml
-# The public face of the service.
-service:
-  name: "web"    # and its DNS label
-  ## A note for whoever edits this template next.
-  port: 8080
-
-let {
-  # Where everything lands.
-  region = "us-east-1"
-}
-
-placement: region
-```
-
-renders as:
-
-```yaml
-# The public face of the service.
-service:
-  name: web # and its DNS label
-  port: 8080
-# Where everything lands.
-placement: us-east-1
-```
-
-A binding renders nothing, so its comments travel to wherever it is read
-back, which is why the comment on `region` came out above `placement`.
-
-## 17. Several documents
-
-A file can hold several documents separated by `---`, as in YAML. Each one has
-its own bindings and its own `$`; the context is shared by all of them. Given
-a context of `{app: shop}`:
-
-```yaml
-let name = "web"
-
-kind: "Deployment"
-metadata:
-  name: name
----
-kind: "Service"
-metadata:
-  name: "\($$.app)-svc"
-spec:
-  selector: $.metadata
-```
-
-renders as:
-
-```yaml
-kind: Deployment
-metadata:
-  name: web
----
-kind: Service
-metadata:
-  name: shop-svc
-spec:
-  selector:
-    name: shop-svc
-```
-
-A document holding nothing but bindings renders nothing at all.
-
 ## 18. Modules and the standard library
 
 ### Your own modules
@@ -1158,19 +1161,9 @@ let team = "platform"
 standard:: (app) => {app: app, team: team}
 ```
 
-A directory with a `yak.pkg` at its root is a package. `yak init` makes the
-current directory one, with a `yak.pkg` like this:
-
-```yaml
-package:
-  name: web
-  version: 0.1.0
-dependencies: {}
-```
-
-The import path is dotted and resolves from the package root, so every file
-in the package names the library the same way, and the module is bound under
-the last segment of its path. Import it from a template in the package:
+The import path is dotted and resolves from the importing file's directory,
+and the module is bound under the last segment of its path. Import it from a
+template beside `lib/`:
 
 ```yaml
 import lib.labels
@@ -1189,32 +1182,11 @@ metadata:
 ```
 
 `import shared = lib.labels` picks a different name, and an
-`import { ... }` block takes several imports at once. The `dependencies` of a
-`yak.pkg` map import paths onto other packages; [SPEC.md](SPEC.md#packages)
-describes them. A package can come from a git repository or an OCI
-registry:
-
-```console
-$ yak add git+https://github.com/acme/lib.git@v1.2.0
-$ yak add oci://ghcr.io/acme/labels:2.0.0
-```
-
-adds each under the name its own `yak.pkg` gives it, vendors it into
-`vendor/` and pins its commit or digest in `yak.lock`. After a fresh checkout,
-`yak sync` vendors the same ones again. `yak package build` and
-`yak package push oci://ghcr.io/acme/web` publish a package for others to
-add.
-
-`yak render` given the package directory renders every template in it, and
-leaves the libraries out:
-
-```console
-$ yak render . --output-dir build
-```
+`import { ... }` block takes several imports at once.
 
 ### The standard library
 
-Beyond the built-ins of section 13, the standard library lives in modules
+Beyond the built-ins of section 16, the standard library lives in modules
 whose paths begin with `std`: `std.strings`, `std.json`, `std.yaml`,
 `std.base64`, `std.hash`, `std.regex`, `std.math`, `std.path`, `std.files`,
 `std.gotemplate` and `std.random`. Given this context:
@@ -1298,18 +1270,6 @@ yak: app.yak:3:19: "read" cannot read "/etc/hosts" in strict mode, which reads o
 
 Both errors say how to turn strict mode off. That is a choice about the run,
 not the template, and a template can read it as `$yak.strict`.
-
-### Information about the rendering
-
-`$filepath`, `$contextpaths`, `$workdir` and `$yak` describe the rendering
-rather than the document, which is enough for a provenance note:
-
-```yaml
-note: "rendered from \($filepath) by yak \($yak.version)"
-contexts: $contextpaths
-```
-
-[The spec](SPEC.md#builtin-variables) lists every builtin variable.
 
 ## 19. Schemas
 
@@ -1498,12 +1458,49 @@ The nested `metadata` is checked against `Metadata` and gets its defaults
 too. [The spec](SPEC.md#schemas) has every type and the exact rules of when
 a value is checked.
 
-## 20. Output formats
+## 20. Packages
+
+A directory with a `yak.pkg` at its root is a package, which is how
+libraries such as `lib/k8s.yakl` are shared. `yak init` makes the current
+directory one, with a `yak.pkg` like this:
+
+```yaml
+package:
+  name: web
+  version: 0.1.0
+dependencies: {}
+```
+
+Inside a package an import path resolves from the package root rather than
+from the importing file, so every file in the package names a library the
+same way. The `dependencies` of a `yak.pkg` map import paths onto other
+packages; [SPEC.md](SPEC.md#packages) describes them. A package can come
+from a git repository or an OCI registry:
+
+```console
+$ yak add git+https://github.com/acme/lib.git@v1.2.0
+$ yak add oci://ghcr.io/acme/labels:2.0.0
+```
+
+adds each under the name its own `yak.pkg` gives it, vendors it into
+`vendor/` and pins its commit or digest in `yak.lock`. After a fresh checkout,
+`yak sync` vendors the same ones again. `yak package build` and
+`yak package push oci://ghcr.io/acme/web` publish a package for others to
+add.
+
+`yak render` given the package directory renders every template in it, and
+leaves the libraries out:
+
+```console
+$ yak render . --output-dir build
+```
+
+## 21. Output formats
 
 The same template can render JSON, JSONC, KYAML, TOML and more. `-f` picks
 one, or else the name of the output file or the template does:
 `app.toml.yak` renders TOML. Comments reach every format with room for them.
-The template from section 16, rendered with `-f jsonc`:
+The template from [section 9](#9-comments), rendered with `-f jsonc`:
 
 ```jsonc
 {
@@ -1549,7 +1546,20 @@ A format that cannot hold what the template produced refuses it: JSON takes
 only one document, and TOML has no `null`. [CLI.md](CLI.md#output-formats)
 lists every format and the flags for writing output to files.
 
-## 21. Putting it together
+### Information about the rendering
+
+`$yak.format` is one of the builtin variables that describe the rendering
+rather than the document. `$filepath`, `$contextpaths`, `$workdir` and the
+rest of `$yak` are others, which is enough for a provenance note:
+
+```yaml
+note: "rendered from \($filepath) by yak \($yak.version)"
+contexts: $contextpaths
+```
+
+[The spec](SPEC.md#builtin-variables) lists every builtin variable.
+
+## 22. Putting it together
 
 Here is a Deployment and a Service for Kubernetes, rendered from two layered
 context files. The base file, `base.yaml`, describes the application:
@@ -1597,6 +1607,13 @@ The template, `deployment.yak`, uses most of what this tour covered:
 ## Render with:
 ##   yak render deployment.yak -c base.yaml -c prod.yaml
 
+schema* $$ =
+  app: string
+  component: string
+  env: "staging" | "prod"
+  replicas: integer = 3
+  ports: [{name: string, number: integer}]
+
 let {
   name = "\($$.app)-\($$.component)"
   image = "\($$.image.repo):\($$.image.tag)"
@@ -1616,7 +1633,7 @@ metadata:
   labels: labels
   annotations:? nempty($$?.annotations)
 spec:
-  replicas: if prod then $$?.replicas ?? 3 else 1
+  replicas: if prod then $$.replicas else 1
   selector:
     matchLabels: labels
   template:
@@ -1726,7 +1743,9 @@ spec:
 ```
 
 Drop `-c prod.yaml` to render the staging variant: one replica, debug
-logging, no annotations, and limits equal to the requests.
+logging, no annotations, and limits equal to the requests. A context whose
+`env` is neither `staging` nor `prod`, or whose port has no `number`, is
+refused by the schema before anything renders.
 
 That is the whole language as it stands today. [SPEC.md](SPEC.md) has the
 exact rules for everything shown here, and [ROADMAP.md](ROADMAP.md) lists
