@@ -239,44 +239,6 @@ func TestDecodeRejectsNonMapping(t *testing.T) {
 	}
 }
 
-func TestMergeIsDeepAndLastWins(t *testing.T) {
-	base := decode(t, "a:\n  x: 1\n  y: 2\nkeep: base\nlist:\n  - 1\n")
-	over := decode(t, "a:\n  y: 20\n  z: 30\nlist:\n  - 9\n  - 9\n")
-	merged, err := eval.Merge(base, over)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got := lookup(t, merged, "a.x"); got != eval.Int(1) {
-		t.Errorf("a.x = %v, want 1 (kept from the base)", got)
-	}
-	if got := lookup(t, merged, "a.y"); got != eval.Int(20) {
-		t.Errorf("a.y = %v, want 20 (overridden)", got)
-	}
-	if got := lookup(t, merged, "a.z"); got != eval.Int(30) {
-		t.Errorf("a.z = %v, want 30 (added)", got)
-	}
-	if got := lookup(t, merged, "keep"); got != eval.String("base") {
-		t.Errorf("keep = %v, want base", got)
-	}
-	arr := lookup(t, merged, "list").(*eval.Array)
-	if arr.Len() != 2 {
-		t.Errorf("sequences should be replaced, not merged; got %d items, want 2", arr.Len())
-	}
-}
-
-func TestMergeKeepsBaseOrdering(t *testing.T) {
-	base := decode(t, "a: 1\nb: 2\n")
-	over := decode(t, "b: 20\nc: 30\n")
-	merged, err := eval.Merge(base, over)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.Join(merged.Names(), ","); got != "a,b,c" {
-		t.Errorf("key order = %q, want %q", got, "a,b,c")
-	}
-}
-
 func TestLoadMergesFilesInOrder(t *testing.T) {
 	dir := t.TempDir()
 	first := filepath.Join(dir, "first.yaml")

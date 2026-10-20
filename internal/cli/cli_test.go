@@ -414,101 +414,50 @@ func TestRenderRejectsUnknownFormat(t *testing.T) {
 	}
 }
 
-func TestRenderInfersFormatFromOutputFile(t *testing.T) {
-	dir := t.TempDir()
-	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
-	dest := filepath.Join(dir, "out.toml")
-
-	if _, err := run(t, "render", tmpl, "-o", dest); err != nil {
-		t.Fatalf("render returned error: %v", err)
+// TestRenderChoosesTheFormat checks the order in which the format is decided:
+// -f, then the extension of -o, then the name of the template, then YAML.
+func TestRenderChoosesTheFormat(t *testing.T) {
+	const (
+		toml = "name = \"web\"\n"
+		json = "{\n  \"name\": \"web\"\n}\n"
+		yaml = "name: web\n"
+	)
+	tests := []struct {
+		name     string
+		template string
+		output   string
+		args     []string
+		want     string
+	}{
+		{"from the output file", "app.yak", "out.toml", nil, toml},
+		{"the flag beats the output extension", "app.yak", "out.toml", []string{"-f", "json"}, json},
+		{"YAML for an unknown extension", "app.yak", "out.txt", nil, yaml},
+		{"from the template name", "app.toml.yak", "", nil, toml},
+		{"the output extension beats the template name", "app.toml.yak", "out.json", nil, json},
+		{"the template name holds for an unknown extension", "app.toml.yak", "out.txt", nil, toml},
 	}
-	got, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != "name = \"web\"\n" {
-		t.Errorf("file contents = %q, want TOML", got)
-	}
-}
-
-func TestRenderFormatFlagBeatsOutputExtension(t *testing.T) {
-	dir := t.TempDir()
-	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
-	dest := filepath.Join(dir, "out.toml")
-
-	if _, err := run(t, "render", tmpl, "-o", dest, "-f", "json"); err != nil {
-		t.Fatalf("render returned error: %v", err)
-	}
-	got, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != "{\n  \"name\": \"web\"\n}\n" {
-		t.Errorf("file contents = %q, want JSON", got)
-	}
-}
-
-func TestRenderKeepsYAMLForAnUnknownExtension(t *testing.T) {
-	dir := t.TempDir()
-	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")
-	dest := filepath.Join(dir, "out.txt")
-
-	if _, err := run(t, "render", tmpl, "-o", dest); err != nil {
-		t.Fatalf("render returned error: %v", err)
-	}
-	got, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != "name: web\n" {
-		t.Errorf("file contents = %q, want YAML", got)
-	}
-}
-
-func TestRenderInfersFormatFromTemplateName(t *testing.T) {
-	dir := t.TempDir()
-	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
-
-	out, err := run(t, "render", tmpl)
-	if err != nil {
-		t.Fatalf("render returned error: %v", err)
-	}
-	if out != "name = \"web\"\n" {
-		t.Errorf("stdout = %q, want TOML", out)
-	}
-}
-
-func TestRenderOutputExtensionBeatsTemplateName(t *testing.T) {
-	dir := t.TempDir()
-	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
-	dest := filepath.Join(dir, "out.json")
-
-	if _, err := run(t, "render", tmpl, "-o", dest); err != nil {
-		t.Fatalf("render returned error: %v", err)
-	}
-	got, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != "{\n  \"name\": \"web\"\n}\n" {
-		t.Errorf("file contents = %q, want JSON", got)
-	}
-}
-
-func TestRenderNameHoldsForAnUnknownOutputExtension(t *testing.T) {
-	dir := t.TempDir()
-	tmpl := write(t, dir, "app.toml.yak", "name: \"web\"\n")
-	dest := filepath.Join(dir, "out.txt")
-
-	if _, err := run(t, "render", tmpl, "-o", dest); err != nil {
-		t.Fatalf("render returned error: %v", err)
-	}
-	got, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != "name = \"web\"\n" {
-		t.Errorf("file contents = %q, want TOML", got)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			args := append([]string{"render", write(t, dir, tc.template, "name: \"web\"\n")}, tc.args...)
+			if tc.output != "" {
+				args = append(args, "-o", filepath.Join(dir, tc.output))
+			}
+			got, err := run(t, args...)
+			if err != nil {
+				t.Fatalf("render returned error: %v", err)
+			}
+			if tc.output != "" {
+				data, err := os.ReadFile(filepath.Join(dir, tc.output))
+				if err != nil {
+					t.Fatal(err)
+				}
+				got = string(data)
+			}
+			if got != tc.want {
+				t.Errorf("rendered %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

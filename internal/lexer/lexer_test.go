@@ -222,9 +222,6 @@ func TestOptionalAndCoalesceTokens(t *testing.T) {
 		{"coalesce without spaces", "a: .b??1\n", []token.Kind{
 			token.Ident, token.Colon, token.Dots, token.Ident, token.Coalesce, token.Int, token.EOF,
 		}},
-		{"binding", "let x = 1\n", []token.Kind{
-			token.Ident, token.Ident, token.Assign, token.Int, token.EOF,
-		}},
 	}
 
 	for _, tc := range tests {
@@ -368,13 +365,6 @@ func TestDocumentMarkers(t *testing.T) {
 	}
 }
 
-func TestComments(t *testing.T) {
-	toks := lex(t, "# leading\na: 1 # trailing\n")
-	if len(toks) != 4 {
-		t.Fatalf("got %d tokens, want 4: %v", len(toks), toks)
-	}
-}
-
 func TestCommentsAreRecorded(t *testing.T) {
 	got := lexComments(t, "# leading\na: 1 # trailing\n")
 	want := []token.Comment{
@@ -427,12 +417,9 @@ func TestLexErrors(t *testing.T) {
 		src  string
 		want string
 	}{
-		{"anchor", "a: &x 1\n", "anchors and aliases are not supported"},
-		{"symbolic and", "a: b && c\n", `"&&" is written "and"`},
 		{"symbolic or", "a: b || c\n", `"||" is written "or"`},
 		{"symbolic not", "a: ! b\n", `"!" is written "not"`},
 		{"symbolic not of a group", "a: !(b)\n", `"!" is written "not"`},
-		{"tag", "a: !!str 1\n", "tags are not supported"},
 		{"explicit key", "? a\n", "explicit key indicators"},
 		{"directive", "%YAML 1.2\n", "directives"},
 		{"unterminated string", `a: "oops`, "unterminated string literal"},

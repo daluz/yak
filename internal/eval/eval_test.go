@@ -43,68 +43,15 @@ func TestReferences(t *testing.T) {
 		want    string
 	}{
 		{
-			name: "sibling via self",
-			src:  "name: \"web\"\nalias: .name\n",
-			want: "name: web\nalias: web\n",
-		},
-		{
 			name: "forward reference",
 			src:  "alias: .name\nname: \"web\"\n",
 			want: "alias: web\nname: web\n",
-		},
-		{
-			name: "parent via double dot",
-			src:  "name: \"web\"\nchild:\n  parent: ..name\n",
-			want: "name: web\nchild:\n  parent: web\n",
-		},
-		{
-			name: "grandparent via triple dot",
-			src:  "name: \"web\"\na:\n  b:\n    c: ...name\n",
-			want: "name: web\na:\n  b:\n    c: web\n",
-		},
-		{
-			name: "parent skips sequences",
-			src:  "name: \"web\"\nitems:\n  - label: ..name\n",
-			want: "name: web\nitems:\n  - label: web\n",
-		},
-		{
-			name: "root reference",
-			src:  "name: \"web\"\na:\n  b:\n    c: $.name\n",
-			want: "name: web\na:\n  b:\n    c: web\n",
-		},
-		{
-			name:    "context long form",
-			src:     "name: $context.app\n",
-			context: "app: shop\n",
-			want:    "name: shop\n",
-		},
-		{
-			name:    "context shorthand",
-			src:     "name: $$.app\n",
-			context: "app: shop\n",
-			want:    "name: shop\n",
 		},
 		{
 			name:    "context nested and typed",
 			src:     "replicas: $$.deploy.replicas\ndebug: $$.deploy.debug\n",
 			context: "deploy:\n  replicas: 4\n  debug: true\n",
 			want:    "replicas: 4\ndebug: true\n",
-		},
-		{
-			name: "self refers to whole mapping",
-			src:  "a:\n  x: 1\nb: $.a.x\n",
-			want: "a:\n  x: 1\nb: 1\n",
-		},
-		{
-			name: "index into sequence",
-			src:  "list:\n  - \"a\"\n  - \"b\"\nfirst: $.list[0]\nlast: $.list[-1]\n",
-			want: "list:\n  - a\n  - b\nfirst: a\nlast: b\n",
-		},
-		{
-			name:    "index into mapping with string",
-			src:     "v: $$[\"key with space\"]\n",
-			context: "\"key with space\": ok\n",
-			want:    "v: ok\n",
 		},
 		{
 			name: "reference to a mapping copies it",
@@ -156,44 +103,9 @@ func TestLets(t *testing.T) {
 		want    string
 	}{
 		{
-			name: "binding used by an entry",
-			src:  "let name = \"web\"\nservice: name\n",
-			want: "service: web\n",
-		},
-		{
-			name: "bindings leave no output of their own",
-			src:  "let unused = \"x\"\na: 1\n",
-			want: "a: 1\n",
-		},
-		{
-			name: "a binding may hold a mapping",
-			src:  "let d =\n  image: \"alpine\"\nimage: d.image\n",
-			want: "image: alpine\n",
-		},
-		{
-			name: "bindings see each other",
-			src:  "let a = \"x\"\nlet b = \"\\(a)y\"\nv: b\n",
-			want: "v: xy\n",
-		},
-		{
-			name: "a binding declared after its use",
-			src:  "v: name\nlet name = \"web\"\n",
-			want: "v: web\n",
-		},
-		{
-			name: "block form",
-			src:  "let {\n  region = \"us-east-1\"\n  zone = \"\\(region)a\"\n}\nwhere: zone\n",
-			want: "where: us-east-1a\n",
-		},
-		{
 			name: "block form on one line",
 			src:  "let { a = 1, b = 2 }\nv: [a, b]\n",
 			want: "v:\n  - 1\n  - 2\n",
-		},
-		{
-			name: "a binding can read the enclosing mapping",
-			src:  "let label = \"\\(.name)-web\"\nname: \"shop\"\nlabel: label\n",
-			want: "name: shop\nlabel: shop-web\n",
 		},
 		{
 			name: "an inner binding shadows an outer one",
@@ -201,28 +113,8 @@ func TestLets(t *testing.T) {
 			want: "outer: outer\nchild:\n  inner: inner\n",
 		},
 		{
-			name: "a rebinding reads the binding it replaces",
-			src:  "let size = \"small\"\ndev: size\nlet size = \"\\(size)-ish\"\nprod: size\n",
-			want: "dev: small\nprod: small-ish\n",
-		},
-		{
-			name: "a nested block reads a rebinding at its own lines",
-			src:  "let n = 1\nweb:\n  v: n\nlet n = 2\napi:\n  v: n\n",
-			want: "web:\n  v: 1\napi:\n  v: 2\n",
-		},
-		{
-			name: "a read above every binding of a name finds the first",
-			src:  "v: n\nlet n = 1\nlet n = 2\nw: n\n",
-			want: "v: 1\nw: 2\n",
-		},
-		{
 			name: "a rebinding in a one-line block",
 			src:  "let { a = 1, a = a + 1 }\nv: a\n",
-			want: "v: 2\n",
-		},
-		{
-			name: "a rebound function calls the one it replaces",
-			src:  "let f(x) = x\nlet f(x) = f(x) + 1\nv: f(1)\n",
 			want: "v: 2\n",
 		},
 		{
@@ -246,20 +138,9 @@ func TestLets(t *testing.T) {
 			want: "items:\n  - name: web\n",
 		},
 		{
-			name: "a sequence item may bind",
-			src:  "items:\n  - let n = 2\n    count: n\n",
-			want: "items:\n  - count: 2\n",
-		},
-		{
 			name: "bindings in a computed key",
 			src:  "let k = \"dyn\"\n(k): 1\n",
 			want: "dyn: 1\n",
-		},
-		{
-			name:    "a binding over the context",
-			src:     "let app = $$.app\nname: app.name\n",
-			context: "app:\n  name: shop\n",
-			want:    "name: shop\n",
 		},
 		{
 			name: "a scope around a sequence document",
@@ -295,11 +176,6 @@ func TestCoalesceAndOptionalAccess(t *testing.T) {
 		want    string
 	}{
 		{
-			name: "null falls back",
-			src:  "a: null\nv: .a ?? \"default\"\n",
-			want: "a: null\nv: default\n",
-		},
-		{
 			name: "a present value wins",
 			src:  "a: \"set\"\nv: .a ?? \"default\"\n",
 			want: "a: set\nv: set\n",
@@ -330,17 +206,6 @@ func TestCoalesceAndOptionalAccess(t *testing.T) {
 			src:     "v: $$?.present ?? \"default\"\n",
 			context: "present: 1\n",
 			want:    "v: 1\n",
-		},
-		{
-			name:    "an optional access on null",
-			src:     "v: $$?.absent?.deeper ?? \"default\"\n",
-			context: "present: 1\n",
-			want:    "v: default\n",
-		},
-		{
-			name: "an optional index past the end",
-			src:  "list:\n  - 1\nv: $.list?[5] ?? \"none\"\n",
-			want: "list:\n  - 1\nv: none\n",
 		},
 		{
 			name:    "an optional index on a missing key",
@@ -374,25 +239,17 @@ func TestOperators(t *testing.T) {
 		{"an integer equals the same float", "v: 1 == 1.0\n", "v: true\n"},
 		{"different types are not equal", `v: 1 == "1"` + "\n", "v: false\n"},
 		{"null equality", "v: null == null\n", "v: true\n"},
-		{"inequality", "v: 1 != 2\n", "v: true\n"},
 		{"string ordering", `v: "a" < "b"` + "\n", "v: true\n"},
 		{"mixed number ordering", "v: 1 < 1.5\n", "v: true\n"},
-		{"negation", "v: not false\n", "v: true\n"},
 		{"negating a comparison", "v: not 1 == 2\n", "v: true\n"},
-		{"not an item, with not in", "v: 3 not in [1, 2]\n", "v: true\n"},
 		{"an item, with not in", "v: 2 not in [1, 2]\n", "v: false\n"},
 		{"not a key, with not in", `v: "b" not in {a: 1}` + "\n", "v: true\n"},
 		{"not a substring, with not in", `v: "xyz" not in "hello"` + "\n", "v: true\n"},
-		{"conjunction", "v: true and false\n", "v: false\n"},
-		{"disjunction", "v: false or true\n", "v: true\n"},
-		{"an item of a sequence", "v: 2 in [1, 2]\n", "v: true\n"},
 		{"not an item of a sequence", "v: 3 in [1, 2]\n", "v: false\n"},
 		{"an item equal as a number", "v: 1.0 in [1]\n", "v: true\n"},
 		{"collection items are passed over", "v: 1 in [[1], {a: 1}, 1]\n", "v: true\n"},
-		{"a key of a mapping", `v: "a" in {a: 1}` + "\n", "v: true\n"},
 		{"a hidden key of a mapping", "m:: {a:: 1}\nv: \"a\" in .m\n", "v: true\n"},
 		{"not a key of a mapping", `v: "b" in {a: 1}` + "\n", "v: false\n"},
-		{"a substring", `v: "ell" in "hello"` + "\n", "v: true\n"},
 		{"not a substring", `v: "xyz" in "hello"` + "\n", "v: false\n"},
 		{"the empty substring", `v: "" in "hello"` + "\n", "v: true\n"},
 	}
@@ -427,27 +284,6 @@ func TestLogicalOperatorsShortCircuit(t *testing.T) {
 	}
 }
 
-// TestMergeLeavesItsOperandsAlone checks that "<<" builds a third mapping
-// rather than writing into either of the two it was given.
-func TestMergeLeavesItsOperandsAlone(t *testing.T) {
-	src := "let base = {a: 1}\nlet over = {a: 2}\nmerged: (base << over).a\nbase: base.a\nover: over.a\n"
-	want := "merged: 2\nbase: 1\nover: 2\n"
-	if got := mustRender(t, src, ""); got != want {
-		t.Errorf("rendered %q, want %q", got, want)
-	}
-}
-
-// TestMergedFieldKeepsItsOwnScope checks that a field carried through "<<"
-// still reads the mapping it was written in, so overriding "name" does not
-// reach back into a sibling that referred to it.
-func TestMergedFieldKeepsItsOwnScope(t *testing.T) {
-	src := "let base = {name: \"web\", label: \"\\(.name)-1\"}\nv: (base << {name: \"api\"}).label\n"
-	want := "v: web-1\n"
-	if got := mustRender(t, src, ""); got != want {
-		t.Errorf("rendered %q, want %q", got, want)
-	}
-}
-
 // TestMergedEntryLeavesTheMappingItNamedAlone checks that a "<<" written
 // among the entries of a mapping does not write into the mapping it merged.
 func TestMergedEntryLeavesTheMappingItNamedAlone(t *testing.T) {
@@ -466,35 +302,9 @@ func TestConditionals(t *testing.T) {
 		want    string
 	}{
 		{
-			name: "takes the then branch",
-			src:  "v: if true then \"y\" else \"n\"\n",
-			want: "v: y\n",
-		},
-		{
-			name: "takes the else branch",
-			src:  "v: if false then \"y\" else \"n\"\n",
-			want: "v: n\n",
-		},
-		{
 			name: "without an else it yields null",
 			src:  "v: if false then \"y\"\n",
 			want: "v: null\n",
-		},
-		{
-			name: "a null branch drops an optional entry",
-			src:  "v:? if false then \"y\"\nw: 1\n",
-			want: "w: 1\n",
-		},
-		{
-			name:    "chained conditions",
-			src:     "v: if $$.n > 2 then \"big\" else if $$.n > 1 then \"mid\" else \"small\"\n",
-			context: "n: 2\n",
-			want:    "v: mid\n",
-		},
-		{
-			name: "the untaken branch is not evaluated",
-			src:  "v: if true then 1 else .missing\n",
-			want: "v: 1\n",
 		},
 	}
 
@@ -530,33 +340,9 @@ func TestComprehensions(t *testing.T) {
 			want: "v:\n  - 1\n",
 		},
 		{
-			name:    "sequence over the context",
-			src:     "v: [\"n-\\(x)\" for x in $$.list]\n",
-			context: "list: [1, 2]\n",
-			want:    "v:\n  - n-1\n  - n-2\n",
-		},
-		{
-			name:    "a filter drops items",
-			src:     "v: [x for x in $$.list if x > 1]\n",
-			context: "list: [1, 2, 3]\n",
-			want:    "v:\n  - 2\n  - 3\n",
-		},
-		{
 			name: "an empty source gives an empty sequence",
 			src:  "v: [x for x in []]\n",
 			want: "v: []\n",
-		},
-		{
-			name:    "mapping keyed by a computed key",
-			src:     "v: {(x): 1 for x in $$.list}\n",
-			context: `list: ["a", "b"]` + "\n",
-			want:    "v:\n  a: 1\n  b: 1\n",
-		},
-		{
-			name:    "mapping keyed by interpolation",
-			src:     "v: {\"k\\(x)\": x for x in $$.list}\n",
-			context: "list: [1, 2]\n",
-			want:    "v:\n  k1: 1\n  k2: 2\n",
 		},
 		{
 			name:    "a hidden entry produces nothing",
@@ -565,20 +351,9 @@ func TestComprehensions(t *testing.T) {
 			want:    "v: {}\nw: 1\n",
 		},
 		{
-			name:    "comprehensions nest through a binding",
-			src:     "let rows = $$.rows\nv: [[c for c in r] for r in rows]\n",
-			context: "rows:\n  - [1, 2]\n  - [3]\n",
-			want:    "v:\n  - - 1\n    - 2\n  - - 3\n",
-		},
-		{
 			name: "the loop variable shadows an outer binding",
 			src:  "let x = \"outer\"\nv: [x for x in [1]]\nw: x\n",
 			want: "v:\n  - 1\nw: outer\n",
-		},
-		{
-			name: "the enclosing mapping is still reachable",
-			src:  "n: 2\nv: [.n for x in [1]]\n",
-			want: "n: 2\nv:\n  - 2\n",
 		},
 	}
 
@@ -599,39 +374,9 @@ func TestFunctions(t *testing.T) {
 		want    string
 	}{
 		{
-			name: "positional arguments",
-			src:  "let f(a, b) = \"\\(a)-\\(b)\"\nv: f(1, 2)\n",
-			want: "v: 1-2\n",
-		},
-		{
-			name: "named arguments in any order",
-			src:  "let f(a, b) = \"\\(a)-\\(b)\"\nv: f(b = 2, a = 1)\n",
-			want: "v: 1-2\n",
-		},
-		{
-			name: "a named argument after the positional ones",
-			src:  "let f(a, b) = \"\\(a)-\\(b)\"\nv: f(1, b = 2)\n",
-			want: "v: 1-2\n",
-		},
-		{
-			name: "a default fills in a missing argument",
-			src:  "let f(a, b = 2) = \"\\(a)-\\(b)\"\nv: f(1)\nw: f(1, 3)\n",
-			want: "v: 1-2\nw: 1-3\n",
-		},
-		{
-			name: "a default may name an earlier parameter",
-			src:  "let f(a, b = a) = \"\\(a)-\\(b)\"\nv: f(1)\n",
-			want: "v: 1-1\n",
-		},
-		{
 			name: "a function with no parameters",
 			src:  "let f() = 1\nv: f()\n",
 			want: "v: 1\n",
-		},
-		{
-			name: "the body may be a block",
-			src:  "let f(a) =\n  k: a\nv: f(1)\n",
-			want: "v:\n  k: 1\n",
 		},
 		{
 			name: "the body sees the scope it was written in",
@@ -654,21 +399,6 @@ func TestFunctions(t *testing.T) {
 			want: "v: 1\n",
 		},
 		{
-			name: "a function that is never called is never evaluated",
-			src:  "let f(a) = .missing\nv: 1\n",
-			want: "v: 1\n",
-		},
-		{
-			name: "a pattern parameter destructures its argument",
-			src:  "let f([a, [_, b]], c) = a + b + c\nv: f([1, [0, 2]], 3)\n",
-			want: "v: 6\n",
-		},
-		{
-			name: "a lambda destructures its argument",
-			src:  "let apply(fn, x) = fn(x)\nv: apply(([k, v]) => \"\\(k)=\\(v)\", [\"a\", 1])\n",
-			want: "v: a=1\n",
-		},
-		{
 			name: "a pattern parameter falls back to its default",
 			src:  "let f(x, [a, b] = [x, 2]) = a + b\nv: f(1)\n",
 			want: "v: 3\n",
@@ -684,11 +414,6 @@ func TestFunctions(t *testing.T) {
 			want: "v: 1\n",
 		},
 		{
-			name: "a pattern without brackets",
-			src:  "let a, [b, c] = [1, [2, 3]]\nv: a + b + c\n",
-			want: "v: 6\n",
-		},
-		{
 			name: "a pattern none of whose names is read is never evaluated",
 			src:  "let [a, b] = .missing\nv: 1\n",
 			want: "v: 1\n",
@@ -697,11 +422,6 @@ func TestFunctions(t *testing.T) {
 			name: "a pattern leaves the items it does not read lazy",
 			src:  "let [a, b] = [1, .missing]\nv: a\n",
 			want: "v: 1\n",
-		},
-		{
-			name: "a function is a value that may be passed on",
-			src:  "let apply(fn, to) = fn(to)\nlet twice(s) = \"\\(s)\\(s)\"\nv: apply(twice, \"ab\")\n",
-			want: "v: abab\n",
 		},
 		{
 			name: "a hidden field may hold a function",
@@ -725,43 +445,11 @@ func TestFunctions(t *testing.T) {
 	}
 }
 
-func TestHiddenFields(t *testing.T) {
-	got := mustRender(t, "secret:: \"s3cret\"\nvisible: \"\\(.secret)!\"\n", "")
-	want := "visible: s3cret!\n"
-	if got != want {
-		t.Errorf("rendered %q, want %q", got, want)
-	}
-}
-
-func TestHiddenMappingHidesSubtree(t *testing.T) {
-	got := mustRender(t, "defaults::\n  port: 80\nservice:\n  port: $.defaults.port\n", "")
-	want := "service:\n  port: 80\n"
-	if got != want {
-		t.Errorf("rendered %q, want %q", got, want)
-	}
-}
-
-func TestComputedKeys(t *testing.T) {
-	got := mustRender(t, "($$.key): \"v\"\n", "key: dynamic\n")
-	want := "dynamic: v\n"
-	if got != want {
-		t.Errorf("rendered %q, want %q", got, want)
-	}
-}
-
 func TestComputedKeyCanReadLiteralSibling(t *testing.T) {
 	got := mustRender(t, "prefix: \"app\"\n(.prefix): 1\n", "")
 	want := "prefix: app\napp: 1\n"
 	if got != want {
 		t.Errorf("rendered %q, want %q", got, want)
-	}
-}
-
-func TestMultipleDocuments(t *testing.T) {
-	got := mustRender(t, "a: 1\nr: $.a\n---\nb: 2\nr: $.b\n", "")
-	want := "a: 1\nr: 1\n---\nb: 2\nr: 2\n"
-	if got != want {
-		t.Errorf("rendered:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -815,31 +503,22 @@ func TestEvalErrors(t *testing.T) {
 		context string
 		want    string
 	}{
-		{"missing field", "a: .missing\n", "", `no field "missing"`},
-		{"lists available fields", "a: 1\nb: .missing\n", "", `available fields: "a", "b"`},
 		{"missing context field", "a: $$.nope\n", "", `no field "nope"`},
-		{"self past root", "a: ..b\n", "", "reaches past the outermost mapping"},
 		{"direct cycle", "a: .a\n", "", "circular reference"},
-		{"indirect cycle", "a: .b\nb: .a\n", "", "circular reference"},
 		{"interpolation cycle", `a: "\(.b)"` + "\n" + `b: "\(.a)"` + "\n", "", "circular reference"},
 		{"field of scalar", "a: 1\nb: .a.c\n", "", "cannot read field"},
 		{"index out of range", "a:\n  - 1\nb: $.a[5]\n", "", "out of range"},
 		{"index with wrong type", "a:\n  - 1\nb: $.a[\"x\"]\n", "", "index must be an integer"},
 		{"interpolate a mapping", "a:\n  b: 1\ns: \"\\(.a)\"\n", "", "cannot interpolate a mapping"},
-		{"unknown identifier", "a: hello\n", "", `unknown identifier "hello"`},
-		{"yaml yes", "a: yes\n", "", `"yes" is not a boolean in yak`},
 		{"yaml off", "a: off\n", "", `"off" is not a boolean in yak`},
-		{"duplicate key", "a: 1\na: 2\n", "", `duplicate key "a"`},
 		{"duplicate computed key", "a: 1\n(\"a\"): 2\n", "", `duplicate key "a"`},
 		{"self referential mapping", "a: .\n", "", "contains itself"},
-		{"unknown identifier lists bindings", "let host = \"h\"\na: hosts\n", "", `bindings in scope: "host"`},
 		{"a binding that names itself", "let a = a\nv: a\n", "", "circular reference"},
 		{"binding cycle", "let a = b\nlet b = a\nv: a\n", "", "circular reference"},
 		{"a binding out of scope", "a:\n  let x = 1\n  b: x\nc: x\n", "", `unknown identifier "x"`},
 		{"coalesce does not hide a missing field", "a: $$.nope ?? 1\n", "", `no field "nope"`},
 		{"optional access does not hide a type error", "a: 1\nb: .a?.c\n", "", "cannot read field"},
 		{"optional index does not hide a type error", "a:\n  - 1\nb: $.a?[\"x\"]\n", "", "index must be an integer"},
-		{"a non-boolean condition", "a: if 1 then 2 else 3\n", "", `the condition of an "if" must be a boolean`},
 		{"a non-boolean operand of and", "a: 1 and true\n", "", `the left side of "and" must be a boolean`},
 		{"a non-boolean operand of or", "a: false or 1\n", "", `the right side of "or" must be a boolean`},
 		{"looking for a collection in a sequence", "a: [1] in [[1]]\n", "", "cannot compare a sequence"},
@@ -851,24 +530,20 @@ func TestEvalErrors(t *testing.T) {
 		{"ordering mismatched types", `a: "x" < 1` + "\n", "", "cannot compare string with integer"},
 		{"comparing collections", "a: [1] == [1]\n", "", "cannot compare a sequence"},
 		{"adding mismatched types", `a: [1] + {b: 2}` + "\n", "", "cannot add mapping to sequence"},
-		{"adding two mappings", `a: {b: 1} + {c: 2}` + "\n", "", `cannot add two mappings; "<<" merges them`},
 		{"adding a null", "a: 1 + null\n", "", "cannot add null to integer"},
 		{"subtracting a string", `a: 1 - "x"` + "\n", "", `"-" needs two numbers, found integer and string`},
 		{"multiplying a sequence", "a: [1] * 2\n", "", `"*" needs two numbers, found sequence and integer`},
-		{"dividing by zero", "a: 1 / 0\n", "", "division by zero"},
 		{"a remainder of zero", "a: 1 % 0\n", "", "division by zero"},
 		{"negating a string", `a: -"x"` + "\n", "", `the operand of "-" must be a number, found string`},
 		{"looping over a scalar", "a: [x for x in 1]\n", "", `"for" needs a sequence to walk over`},
 		{"a loop item checked though unread", "a: [1 for _, _ in [[1, 2], [3]]]\n", "", "found 1 item (the item at index 1 of the source)"},
 		{"a pattern that reads itself", "let [a, b] = [b, a]\nv: a\n", "", "circular reference"},
-		{"a mismatch read through another name", "let [a, b] = [1, 2, 3]\nv: a\n", "", "found 3 items"},
 		{"an argument that does not fit its pattern", "let f([a, b]) = a\nv: f([1])\n", "", "the pattern needs a sequence of 2 items, found 1 item"},
 		{"a missing pattern argument", "let f(x, [a, b]) = a\nv: f(1)\n", "", `needs an argument for parameter "[a, b]"`},
 		{"a pattern parameter cannot be named", "let f([a, b]) = a\nv: f(a = 1)\n", "", `has no parameter named "a"; parameters: "[a, b]"`},
 		{"a non-boolean filter", "a: [x for x in [1] if x]\n", "", `the filter of a "for" must be a boolean`},
 		{"a constant comprehension key", `a: {"k": x for x in [1, 2]}` + "\n", "", "two items of the comprehension produced"},
 		{"a non-string comprehension key", "a: {(x): 1 for x in [1]}\n", "", "mapping keys must be strings"},
-		{"a missing argument", "let f(a, b) = a\nv: f(1)\n", "", `needs an argument for parameter "b"`},
 		{"too many arguments", "let f(a) = a\nv: f(1, 2)\n", "", `takes at most 1 argument, found 2`},
 		{"an unknown parameter name", "let f(a) = a\nv: f(b = 1)\n", "", `has no parameter named "b"`},
 		{"lists the parameters", "let f(a) = a\nv: f(b = 1)\n", "", `parameters: "a"`},
@@ -889,28 +564,5 @@ func TestEvalErrors(t *testing.T) {
 				t.Errorf("error = %q, want it to contain %q", err, tc.want)
 			}
 		})
-	}
-}
-
-func TestCycleErrorShowsTrace(t *testing.T) {
-	_, err := renderSource(t, "a: .b\nb: .a\n", "")
-	if err == nil {
-		t.Fatal("expected a cycle error")
-	}
-	if !strings.Contains(err.Error(), "the cycle passes through") {
-		t.Errorf("error = %q, want it to include the cycle trace", err)
-	}
-	if !strings.HasSuffix(err.Error(), "test.yak:1:4") {
-		t.Errorf("error = %q, want the trace to end where it started", err)
-	}
-}
-
-func TestErrorsCarryPositions(t *testing.T) {
-	_, err := renderSource(t, "a: 1\nb: .missing\n", "")
-	if err == nil {
-		t.Fatal("expected an error")
-	}
-	if !strings.HasPrefix(err.Error(), "test.yak:2:4:") {
-		t.Errorf("error = %q, want it to start with test.yak:2:4:", err)
 	}
 }

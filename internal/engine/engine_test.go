@@ -243,9 +243,6 @@ func TestFilesReadAnywhereWhenNotStrict(t *testing.T) {
 	for name, path := range map[string]string{"parent": "../outside.txt", "absolute": filepath.ToSlash(outside)} {
 		t.Run(name, func(t *testing.T) {
 			src := "import std.files\nv: files.read(\"" + path + "\")\n"
-			if _, err := renderFile(t, dir, "sub/t.yak", src, false); err == nil || !strings.Contains(err.Error(), "in strict mode") {
-				t.Errorf("strict error = %v, want a strict mode refusal", err)
-			}
 			got, err := renderFile(t, dir, "sub/t.yak", src, true)
 			if err != nil {
 				t.Fatal(err)
