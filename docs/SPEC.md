@@ -1169,7 +1169,7 @@ Written where a key belongs, `<<` is [the merge key](#the-merge-key).
 
 Equality compares two scalars. Values of different types are never equal,
 except that integers and floats compare as numbers, so `1 == 1.0`. Comparing
-mappings or sequences is an error. Ordering works on two numbers or two
+mappings, sequences or functions is an error. Ordering works on two numbers or two
 strings; anything else is an error naming both types.
 
 `x in y` asks whether `y` holds `x`, and `x not in y` means

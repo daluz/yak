@@ -1,0 +1,5 @@
+schema Port = 80 | 443
+
+let double(x) = x * 2
+
+port: !Port double

@@ -99,7 +99,7 @@ func reverse(c call) (eval.Value, error) {
 }
 
 // unique keeps the first of the items that are equal to each other. Items are
-// compared as "==" compares them, so collections cannot be.
+// compared as "==" compares them, so collections and functions cannot be.
 func unique(c call) (eval.Value, error) {
 	a, values, err := c.seq(0)
 	if err != nil {

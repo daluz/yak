@@ -397,7 +397,7 @@ func member(op token.Kind, pos token.Pos, x, y Value) (bool, error) {
 // requireScalar rejects the values that equality has no useful answer for.
 func requireScalar(v Value) error {
 	switch v.(type) {
-	case *Object, *Array:
+	case *Object, *Array, *function, *Builtin:
 		return fmt.Errorf("cannot compare a %s", v.TypeName())
 	}
 	return nil
