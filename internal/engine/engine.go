@@ -32,6 +32,9 @@ type TemplateRequest struct {
 	Options render.Options
 	// NonStrict turns strict mode off; the zero value renders strictly.
 	NonStrict bool
+	// SkipChecks lets every value through a schema, which then only fills
+	// in defaults.
+	SkipChecks bool
 }
 
 // Template renders one template file to the request's writer.
@@ -51,8 +54,29 @@ func Template(req TemplateRequest) error {
 	if err != nil {
 		return fmt.Errorf("finding the working directory: %w", err)
 	}
-	run := eval.Run{FilePath: name, ContextPaths: req.ContextPaths, Workdir: workdir, NonStrict: req.NonStrict}
+	run := eval.Run{FilePath: name, ContextPaths: req.ContextPaths, Workdir: workdir, NonStrict: req.NonStrict,
+		SkipChecks: req.SkipChecks}
 	return Render(run, src, context, req.Out, req.Options)
+}
+
+// CheckSchemas checks the schemas a template or a library declares and the
+// tags it writes, without rendering it or reading a context.
+func CheckSchemas(path string) error {
+	name, src, err := readSource(path)
+	if err != nil {
+		return err
+	}
+	stream, err := parser.Parse(name, src)
+	if err != nil {
+		return err
+	}
+	run := eval.Run{FilePath: name}
+	for _, doc := range stream.Docs {
+		if err := eval.CheckSchemas(doc, run, module.NewLoader(run.Strict())); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Render parses, evaluates and writes a source buffer. It is the seam used by

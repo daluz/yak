@@ -1,0 +1,139 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: widgets.example.com
+spec:
+  group: example.com
+  names:
+    kind: Widget
+    plural: widgets
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: A widget.
+          x-kubernetes-validations:
+            - rule: "self.spec.size <= 10"
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 20
+            spec:
+              type: object
+              required: [size, image]
+              properties:
+                image:
+                  type: string
+                  minLength: 1
+                  pattern: '^[a-z]+(:\d+)?$'
+                size:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 3
+                ratio:
+                  type: number
+                  exclusiveMinimum: true
+                  minimum: 0
+                  multipleOf: 0.5
+                color:
+                  type: string
+                  enum: [red, blue]
+                  default: red
+                port:
+                  x-kubernetes-int-or-string: true
+                  pattern: '^\d+%?$'
+                  maximum: 65535
+                owner:
+                  type: string
+                  nullable: true
+                  format: email
+                tags:
+                  type: array
+                  x-kubernetes-list-type: set
+                  maxItems: 5
+                  items:
+                    type: string
+                conditions:
+                  type: array
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [type]
+                  items:
+                    type: object
+                    required: [type]
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ["True", "False", "Unknown"]
+                labels:
+                  type: object
+                  maxProperties: 8
+                  additionalProperties:
+                    type: string
+                limits:
+                  type: object
+                  default: {cpu: 1}
+                  properties:
+                    cpu:
+                      type: integer
+                    memory:
+                      type: string
+                      default: 256Mi
+                config:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                extra:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    mode:
+                      type: string
+                template:
+                  type: object
+                  x-kubernetes-embedded-resource: true
+                  x-kubernetes-preserve-unknown-fields: true
+                empty:
+                  type: object
+                my-field:
+                  type: boolean
+                if:
+                  type: string
+                let:
+                  type: string
+                  default: "say \"hi\" \\(x)"
+            status:
+              type: object
+              properties:
+                ready:
+                  type: boolean
+    - name: v1beta1
+      served: true
+      storage: false
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+    - name: v1alpha1
+      served: false
+      storage: false
+      schema:
+        openAPIV3Schema:
+          type: object
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: widgets

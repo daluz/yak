@@ -1,0 +1,5 @@
+widget.yaml: WidgetV1: "x-kubernetes-validations" is not imported
+widget.yaml: WidgetV1.metadata: its schema is not imported, since every object takes the same metadata
+widget.yaml: WidgetV1.spec.owner: "format" is not imported
+widget.yaml: WidgetV1.spec.conditions: its items are not checked to be unique by their x-kubernetes-list-map-keys
+widget.yaml: skipped a Namespace, which is not a CustomResourceDefinition

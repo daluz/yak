@@ -1,0 +1,3 @@
+none.yaml: skipped a Deployment, which is not a CustomResourceDefinition
+none.yaml: skipped a document that is not a CustomResourceDefinition
+found no CustomResourceDefinition in none.yaml

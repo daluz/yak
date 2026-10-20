@@ -1,0 +1,4 @@
+let make(n) =
+  schema Port = [Number]
+  value: n
+port: make(1)

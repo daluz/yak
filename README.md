@@ -123,10 +123,9 @@ lists the standard library, and [docs/CLI.md](docs/CLI.md) documents the tool.
 
 ## Status
 
-The `render` command and everything above are implemented. `schema`, remote
-packages and the `build` and `validate` commands are planned; a template that
-uses `schema` or imports a remote package fails today with a clear "not
-implemented yet" message. See [docs/ROADMAP.md](docs/ROADMAP.md).
+The `render`, `package`, `schema check` and `schema import` commands and everything above are
+implemented. The `fmt` command is planned; see
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Development
 

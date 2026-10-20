@@ -155,6 +155,41 @@ func TestTemplateErrors(t *testing.T) {
 	}
 }
 
+// TestSchemaCheck checks that every testdata/schemas/*.yak file fails
+// "yak schema check" with the message recorded in its .want.err golden, and
+// that every template in testdata/template passes it.
+func TestSchemaCheck(t *testing.T) {
+	dir := testdataDir("schemas")
+	templates, err := filepath.Glob(filepath.Join(dir, "*.yak"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(templates) == 0 {
+		t.Fatalf("no templates found in %s", dir)
+	}
+	for _, path := range templates {
+		name := strings.TrimSuffix(filepath.Base(path), engine.ExtTemplate)
+		t.Run(name, func(t *testing.T) {
+			err := engine.CheckSchemas(path)
+			if err == nil {
+				t.Fatalf("checking %s succeeded, want an error", path)
+			}
+			got := strings.ReplaceAll(err.Error(), dir+string(filepath.Separator), "")
+			compareGolden(t, filepath.Join(dir, name+".want.err"), got+"\n")
+		})
+	}
+
+	passing, err := filepath.Glob(filepath.Join(testdataDir("template"), "*.yak"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range passing {
+		if err := engine.CheckSchemas(path); err != nil {
+			t.Errorf("checking %s: %v", path, err)
+		}
+	}
+}
+
 func compareGolden(t *testing.T, golden, got string) {
 	t.Helper()
 	if *update {

@@ -97,6 +97,106 @@ func TestRenderIsStrictByDefault(t *testing.T) {
 	}
 }
 
+func TestRenderSkipChecksKeepsDefaults(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "schema $$ =\n  env: \"dev\" | \"prod\"\n"+
+		"schema Port =\n  name: string\n  number: integer if (n) => n > 0\n  protocol: string = \"TCP\"\n"+
+		"port: !Port {number: -1, extra: true}\nenv: $$.env\n")
+	ctx := write(t, dir, "qa.yaml", "env: qa\n")
+
+	if _, err := run(t, "render", tmpl, "-c", ctx); err == nil {
+		t.Fatal("render succeeded, want the context to be refused")
+	}
+	out, err := run(t, "render", tmpl, "-c", ctx, "--skip-schema-checks")
+	if err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	want := "port:\n  number: -1\n  extra: true\n  protocol: TCP\nenv: qa\n"
+	if out != want {
+		t.Errorf("stdout = %q, want %q", out, want)
+	}
+}
+
+func TestSchemaCheckReadsLibrariesBeneathADirectory(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "app.yak", "schema Port = {name: string}\nport: !Port {name: \"http\"}\n")
+	write(t, dir, "lib/k8s.yakl", "schema Deployment =\n  image: strng\n")
+
+	if _, err := run(t, "schema", "check", filepath.Join(dir, "app.yak")); err != nil {
+		t.Fatalf("checking the template returned error: %v", err)
+	}
+	_, err := run(t, "schema", "check", dir)
+	if err == nil || !strings.Contains(err.Error(), `k8s.yakl:2:10: no schema or type "strng" is in scope`) {
+		t.Errorf("error = %v, want the library's unknown type", err)
+	}
+}
+
+func TestSchemaImportWritesALibraryTemplatesCanTag(t *testing.T) {
+	dir := t.TempDir()
+	crd := write(t, dir, "widgets.yaml", `apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata: {name: widgets.example.com}
+spec:
+  group: example.com
+  names: {kind: Widget}
+  versions:
+    - name: v1
+      served: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                size: {type: integer, minimum: 1, default: 2}
+                owner: {type: string, format: email}
+`)
+	lib := filepath.Join(dir, "lib", "widgets.yakl")
+	if err := os.MkdirAll(filepath.Dir(lib), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := run(t, "schema", "import", crd, "-o", lib)
+	if err != nil {
+		t.Fatalf("schema import returned error: %v", err)
+	}
+	if want := "yak: warning: " + crd + `: WidgetV1.spec.owner: "format" is not imported` + "\n"; out != want {
+		t.Errorf("output = %q, want only the warning %q", out, want)
+	}
+	tmpl := write(t, dir, "app.yak", "import lib.widgets\nweb: !widgets.WidgetV1 {spec: {owner: \"me\"}}\n")
+	out, err = run(t, "render", tmpl)
+	if err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	if want := "web:\n  spec:\n    owner: me\n    size: 2\n  apiVersion: example.com/v1\n  kind: Widget\n"; out != want {
+		t.Errorf("stdout = %q, want %q", out, want)
+	}
+	bad := write(t, dir, "bad.yak", "import lib.widgets\nweb: !widgets.WidgetV1 {spec: {size: 0}}\n")
+	if _, err := run(t, "render", bad); err == nil || !strings.Contains(err.Error(), `field "spec.size" of schema "WidgetV1" is rejected`) {
+		t.Errorf("error = %v, want the minimum to refuse a size of 0", err)
+	}
+}
+
+func TestSchemaImportFormat(t *testing.T) {
+	dir := t.TempDir()
+	deploy := write(t, dir, "deploy.yaml", "apiVersion: apps/v1\nkind: Deployment\n")
+
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{nil, "deploy.yaml: cannot tell its format; give --format (crd)"},
+		{[]string{"--format", "crd"}, "found no CustomResourceDefinition in " + deploy},
+		{[]string{"--format", "xml"}, `unknown input format "xml"; known formats: crd`},
+	} {
+		_, err := run(t, append([]string{"schema", "import", deploy}, tc.args...)...)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("schema import %v: error = %v, want it to contain %q", tc.args, err, tc.want)
+		}
+	}
+}
+
 func TestRenderWritesToFile(t *testing.T) {
 	dir := t.TempDir()
 	tmpl := write(t, dir, "app.yak", "name: \"web\"\n")

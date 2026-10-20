@@ -43,7 +43,14 @@ type Session struct {
 	// depth counts the function calls being evaluated, which bounds a
 	// recursion that never ends.
 	depth int
+	// choosing counts the unions picking an alternative, which they do by
+	// checking even when the run skips checks.
+	choosing int
 }
+
+// skipping reports whether a check should let any value through, filling in
+// defaults alone.
+func (s *Session) skipping() bool { return s.run.SkipChecks && s.choosing == 0 }
 
 // Modules supplies the modules a document can reach: the root module, whose
 // built-ins are bare names, and every module an import names.
@@ -241,6 +248,9 @@ type Run struct {
 	// answers can change from one rendering to the next. It is negative so
 	// that the zero Run is strict.
 	NonStrict bool
+	// SkipChecks lets every value through a schema, which then only fills
+	// in defaults.
+	SkipChecks bool
 }
 
 // Strict reports whether the run is in strict mode, which is what
@@ -264,11 +274,15 @@ func Document(doc *ast.Document, context Value, run Run, mods Modules) (Value, e
 	if context == nil {
 		context = NewObject()
 	}
+	return newSession(context, run, mods).document(doc, run.FilePath, false).Value()
+}
+
+func newSession(context Value, run Run, mods Modules) *Session {
 	s := &Session{run: run, context: context, mods: mods, builtins: map[string]*Builtin{}}
 	for _, b := range mods.Root() {
 		s.builtins[b.Name] = b
 	}
-	return s.document(doc, run.FilePath, false).Value()
+	return s
 }
 
 // Document answers the root of doc, a module read from file, which is

@@ -194,12 +194,15 @@ func mismatch(at site, want string, v Value) *Error {
 
 // check checks v against the type t, which s declares, and answers v with
 // the defaults its mappings declare filled in. The items of a sequence and
-// the fields of a mapping are each checked when they are first read.
+// the fields of a mapping are each checked when they are first read. A run
+// that skips checks lets any value through, and only fills in defaults.
 func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) {
+	session := s.env.doc.session
+	skip := session.skipping()
 	switch t := t.(type) {
 	case *ast.TypeRef:
 		if t.Module == "" && slices.Contains(ast.BuiltinTypes, t.Name) {
-			if t.Name == "any" || v.TypeName() == t.Name {
+			if skip || t.Name == "any" || v.TypeName() == t.Name {
 				return v, nil
 			}
 			return nil, mismatch(at, t.Name, v)
@@ -208,7 +211,6 @@ func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 		if err != nil {
 			return nil, err
 		}
-		session := s.env.doc.session
 		if session.depth >= maxCallDepth {
 			return nil, errorf(t.Pos(), "%s refers to itself without ever reaching a type", target.label())
 		}
@@ -216,6 +218,9 @@ func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 		defer func() { session.depth-- }()
 		return target.check(v, target.decl.Type, at, fresh)
 	case *ast.TypeLiteral:
+		if skip {
+			return v, nil
+		}
 		want, err := evalNode(t.Value, s.env)
 		if err != nil {
 			return nil, err
@@ -229,6 +234,9 @@ func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 	case *ast.TypeSequence:
 		arr, ok := v.(*Array)
 		if !ok {
+			if skip {
+				return v, nil
+			}
 			return nil, mismatch(at, "sequence", v)
 		}
 		items := make([]*Elem, arr.Len())
@@ -239,6 +247,21 @@ func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 	case *ast.TypeMapping:
 		return s.checkMapping(v, t, at, fresh)
 	case *ast.TypeUnion:
+		if skip {
+			// The alternative still decides which defaults are filled in,
+			// so it is picked as it would be, and only a value that fits
+			// none goes through as it is.
+			session.choosing++
+			pick := slices.IndexFunc(t.Alts, func(alt ast.Node) bool {
+				_, err := s.check(v, alt, at, false)
+				return err == nil
+			})
+			session.choosing--
+			if pick < 0 {
+				return v, nil
+			}
+			return s.check(v, t.Alts[pick], at, fresh)
+		}
 		var deep error
 		for _, alt := range t.Alts {
 			r, err := s.check(v, alt, at, fresh)
@@ -257,8 +280,8 @@ func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 		return nil, mismatch(at, describe(t), v)
 	case *ast.TypeCheck:
 		r, err := s.check(v, t.Type, at, fresh)
-		if err != nil {
-			return nil, err
+		if err != nil || skip {
+			return r, err
 		}
 		pred, err := evalNode(t.Pred, s.env)
 		if err != nil {
@@ -309,8 +332,12 @@ type typeField struct {
 // and a hidden one is not checked at all. The values are checked when they
 // are read, and a default is evaluated with "." naming the checked mapping.
 func (s *Schema) checkMapping(v Value, t *ast.TypeMapping, at site, fresh bool) (Value, error) {
+	skip := s.env.doc.session.skipping()
 	obj, ok := v.(*Object)
 	if !ok {
+		if skip {
+			return v, nil
+		}
 		return nil, mismatch(at, "mapping", v)
 	}
 	fields, keys, err := s.members(t, map[*ast.TypeMapping]bool{})
@@ -353,7 +380,7 @@ func (s *Schema) checkMapping(v Value, t *ast.TypeMapping, at site, fresh bool) 
 			present[f.Name] = true
 			check[i] = m
 		case keys != nil:
-			if _, err := keys.owner.check(String(f.Name), keys.decl.Key, fieldAt, false); err != nil {
+			if _, err := keys.owner.check(String(f.Name), keys.decl.Key, fieldAt, false); err != nil && !skip {
 				if e, ok := err.(*Error); !ok || e.misfit == 0 {
 					return nil, err
 				}
@@ -361,12 +388,12 @@ func (s *Schema) checkMapping(v Value, t *ast.TypeMapping, at site, fresh bool) 
 					at, f.Name, describe(keys.decl.Key))
 			}
 			check[i] = *keys
-		case !s.decl.Open:
+		case !s.decl.Open && !skip:
 			return nil, misfit(deepMisfit, fieldAt.pos, "%s has no field %q%s", at, f.Name, declaredFields(names))
 		}
 	}
 	for _, m := range fields {
-		if !present[m.decl.Name] && m.decl.Default == nil && !m.decl.Optional {
+		if !skip && !present[m.decl.Name] && m.decl.Default == nil && !m.decl.Optional {
 			return nil, misfit(deepMisfit, at.pos, "%s needs a field %q", at, m.decl.Name)
 		}
 	}
@@ -529,4 +556,151 @@ func found(v Value) string {
 		return text
 	}
 	return v.TypeName()
+}
+
+// CheckSchemas checks the schemas doc declares, wherever it declares them,
+// and the tags it writes, without evaluating doc: every schema a type or a
+// tag names is in scope, and every "<<" in a mapping type merges a mapping
+// type without coming back to itself. Naming a module's schema loads the
+// module, as it does when rendering.
+func CheckSchemas(doc *ast.Document, run Run, mods Modules) error {
+	s := newSession(NewObject(), run, mods)
+	return checkNames(doc.Body, &Env{doc: &docState{yak: yakMapping(run), run: run, session: s}})
+}
+
+// checkNames checks the schemas and tags beneath n, which is read in env.
+func checkNames(n ast.Node, env *Env) error {
+	switch n := n.(type) {
+	case *ast.Mapping:
+		r := env.pushBindings(n.Binds)
+		if err := checkBindings(n.Binds, r); err != nil {
+			return err
+		}
+		for _, e := range n.Entries {
+			if err := checkAll(r.at(e.KeyPos), e.Key, e.Value); err != nil {
+				return err
+			}
+		}
+	case *ast.Let:
+		r := env.pushBindings(n.Binds)
+		if err := checkBindings(n.Binds, r); err != nil {
+			return err
+		}
+		return checkNames(n.Body, r.last())
+	case *ast.Tag:
+		if _, err := env.findSchema(n.Module, n.Name, n.Pos(), true); err != nil {
+			return err
+		}
+		return checkNames(n.X, env)
+	case *ast.Sequence:
+		for _, item := range n.Items {
+			if err := checkNames(item.Value, env); err != nil {
+				return err
+			}
+		}
+	case *ast.String:
+		for _, part := range n.Parts {
+			if err := checkNames(part.Expr, env); err != nil {
+				return err
+			}
+		}
+	case *ast.Function:
+		for _, p := range n.Params {
+			if err := checkNames(p.Default, env); err != nil {
+				return err
+			}
+		}
+		return checkNames(n.Body, env)
+	case *ast.Call:
+		for _, a := range n.Args {
+			if err := checkNames(a.Value, env); err != nil {
+				return err
+			}
+		}
+		return checkNames(n.Fn, env)
+	case *ast.Field:
+		return checkNames(n.X, env)
+	case *ast.Index:
+		return checkAll(env, n.X, n.Index)
+	case *ast.Coalesce:
+		return checkAll(env, n.X, n.Y)
+	case *ast.Unary:
+		return checkNames(n.X, env)
+	case *ast.Binary:
+		return checkAll(env, n.X, n.Y)
+	case *ast.If:
+		return checkAll(env, n.Cond, n.Then, n.Else)
+	case *ast.SeqComp:
+		return checkAll(env, n.Source, n.Filter, n.Item)
+	case *ast.MapComp:
+		return checkAll(env, n.Source, n.Filter, n.Entry.Key, n.Entry.Value)
+	}
+	return nil
+}
+
+func checkAll(env *Env, nodes ...ast.Node) error {
+	for _, n := range nodes {
+		if err := checkNames(n, env); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkBindings checks the schemas a block declares and the values it binds,
+// in the order they are written.
+func checkBindings(binds []*ast.Binding, r *regions) error {
+	for _, b := range binds {
+		var err error
+		if decl, ok := b.Value.(*ast.Schema); ok {
+			err = r.schemas[b.Name].checkType(decl.Type)
+		} else {
+			err = checkNames(b.Value, r.at(b.Pos()))
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkType checks the names t, which s declares, refers to.
+func (s *Schema) checkType(t ast.Node) error {
+	switch t := t.(type) {
+	case *ast.TypeRef:
+		if t.Module == "" && slices.Contains(ast.BuiltinTypes, t.Name) {
+			return nil
+		}
+		_, err := s.env.findSchema(t.Module, t.Name, t.Pos(), false)
+		return err
+	case *ast.TypeSequence:
+		return s.checkType(t.Item)
+	case *ast.TypeUnion:
+		for _, alt := range t.Alts {
+			if err := s.checkType(alt); err != nil {
+				return err
+			}
+		}
+	case *ast.TypeCheck:
+		if err := s.checkType(t.Type); err != nil {
+			return err
+		}
+		return checkNames(t.Pred, s.env)
+	case *ast.TypeMapping:
+		if _, _, err := s.members(t, map[*ast.TypeMapping]bool{}); err != nil {
+			return err
+		}
+		for _, m := range t.Members {
+			if err := s.checkType(m.Key); err != nil {
+				return err
+			}
+			if err := s.checkType(m.Type); err != nil {
+				return err
+			}
+			if err := checkNames(m.Default, s.env); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

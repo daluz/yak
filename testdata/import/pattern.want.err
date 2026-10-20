@@ -1,0 +1,1 @@
+pattern.yaml: HostV1.spec.name: its pattern is not imported, since it is not RE2: error parsing regexp: invalid or unsupported Perl syntax: `(?!`

@@ -1,0 +1,1 @@
+duplicate.yaml: CustomResourceDefinition "certificates.b.example.com" and CustomResourceDefinition "certificates.a.example.com" in duplicate.yaml both name a schema CertificateV1

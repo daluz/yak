@@ -1011,6 +1011,13 @@ never checked. Two tagged mappings may therefore read each other's fields.
 A union picks the first alternative that the value's shape matches, even if
 one of its fields fails later.
 
+`yak render --skip-schema-checks` lets every value through, so a schema only
+fills in defaults; a union still picks its alternative as above, and a value
+that fits none is left as it is. `yak schema check` checks the schemas
+themselves without rendering: see [CLI.md](CLI.md#yak-schema-check).
+`yak schema import` writes the schemas of Kubernetes CustomResourceDefinitions
+as a library: see [CLI.md](CLI.md#yak-schema-import).
+
 ### Schemas in modules
 
 The schemas declared at the top of a module are the ones a file importing it

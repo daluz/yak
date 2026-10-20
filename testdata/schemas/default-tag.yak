@@ -1,0 +1,2 @@
+schema Port =
+  number: integer = !Defaults.number 80

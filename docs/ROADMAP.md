@@ -42,12 +42,17 @@ What remains is formatting.
 
 ## 2. Remaining commands
 
-`render` and `package` are in; [CLI.md](CLI.md) documents them.
+`render`, `package`, `schema check` and `schema import` are in; [CLI.md](CLI.md)
+documents them.
 
-- `check` checks inputs and outputs against a schema without rendering.
+- `schema import` reads Kubernetes CustomResourceDefinitions. JSON Schema and
+  OpenAPI v3 documents are to follow, each as a value of `--format` that
+  `schemaimport.Detect` recognizes; `internal/schemaimport` translates an
+  OpenAPI schema node already, and `crd.go` is what is CRD-specific.
+
 - `fmt` formats yak files following best practices.
 
-They slot into `internal/cli` beside `render`, and both can reuse
+It slots into `internal/cli` beside `render`, and can reuse
 `internal/engine`.
 
 ## Smaller items

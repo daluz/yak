@@ -1,0 +1,4 @@
+schema A =
+  <<: B
+schema B =
+  <<: A

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -19,14 +20,15 @@ import (
 
 func newRenderCommand() *cobra.Command {
 	var (
-		contexts  []string
-		output    string
-		automatic bool
-		outputDir string
-		format    string
-		keepNull  bool
-		strict    bool
-		plainHTTP bool
+		contexts   []string
+		output     string
+		automatic  bool
+		outputDir  string
+		format     string
+		keepNull   bool
+		strict     bool
+		skipChecks bool
+		plainHTTP  bool
 	)
 
 	cmd := &cobra.Command{
@@ -55,10 +57,13 @@ func newRenderCommand() *cobra.Command {
 			"Rendering is strict unless --strict=false is given: the same template and\n" +
 			"context always render the same output, so modules such as std.random are\n" +
 			"refused, and std.files reads only beneath the directory of the file that\n" +
-			"calls it.",
+			"calls it.\n\n" +
+			"--skip-schema-checks lets every value through the schemas, which then\n" +
+			"only fill in defaults.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			req := renderRequest{contexts: contexts, format: format, keepNull: keepNull, nonStrict: !strict}
+			req := renderRequest{contexts: contexts, format: format, keepNull: keepNull, nonStrict: !strict,
+				skipChecks: skipChecks}
 			if module.IsRemote(args[0]) {
 				fetch := deps.Options{Log: cmd.ErrOrStderr(), PlainHTTP: plainHTTP}
 				return renderRemote(args[0], req, output, automatic, outputDir, fetch)
@@ -101,6 +106,8 @@ func newRenderCommand() *cobra.Command {
 	plainHTTPFlag(cmd, &plainHTTP)
 	cmd.Flags().BoolVar(&strict, "strict", true,
 		"render deterministically; --strict=false admits std.random and reading files anywhere")
+	cmd.Flags().BoolVar(&skipChecks, "skip-schema-checks", false,
+		"fill in the defaults schemas declare without checking any value against them")
 	cmd.MarkFlagsMutuallyExclusive("output", "automatic-output")
 
 	return cmd
@@ -177,10 +184,11 @@ func outputName(stem string, f render.Format) string {
 // renderRequest holds what every template one command renders has in
 // common.
 type renderRequest struct {
-	contexts  []string
-	format    string
-	keepNull  bool
-	nonStrict bool
+	contexts   []string
+	format     string
+	keepNull   bool
+	nonStrict  bool
+	skipChecks bool
 }
 
 func (r renderRequest) options(template, output string) (render.Options, error) {
@@ -199,6 +207,7 @@ func (r renderRequest) render(template string, opts render.Options) ([]byte, err
 		Out:          &buf,
 		Options:      opts,
 		NonStrict:    r.nonStrict,
+		SkipChecks:   r.skipChecks,
 	})
 	return buf.Bytes(), err
 }
@@ -286,7 +295,13 @@ func renderRemote(ref string, req renderRequest, output string, automatic bool, 
 // templatesIn lists the templates beneath dir, leaving out libraries,
 // whatever is hidden and the vendor directory of a package.
 func templatesIn(dir string) ([]string, error) {
-	var templates []string
+	return sourcesIn(dir, engine.ExtTemplate)
+}
+
+// sourcesIn lists the files beneath dir that end in one of exts, leaving out
+// whatever is hidden and the vendor directory of a package.
+func sourcesIn(dir string, exts ...string) ([]string, error) {
+	var files []string
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -302,12 +317,12 @@ func templatesIn(dir string) ([]string, error) {
 				return filepath.SkipDir
 			}
 		}
-		if !d.IsDir() && strings.HasSuffix(path, engine.ExtTemplate) {
-			templates = append(templates, path)
+		if !d.IsDir() && slices.ContainsFunc(exts, func(ext string) bool { return strings.HasSuffix(path, ext) }) {
+			files = append(files, path)
 		}
 		return nil
 	})
-	return templates, err
+	return files, err
 }
 
 // writeOutput writes out to dest, creating its directory first when mkdir is

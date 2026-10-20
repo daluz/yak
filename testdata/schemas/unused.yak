@@ -1,0 +1,3 @@
+## A schema nothing uses is checked all the same.
+schema Port =
+  name: strng
