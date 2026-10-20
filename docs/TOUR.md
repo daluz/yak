@@ -1031,7 +1031,8 @@ data:
 
 `int`, `float`, `bool` and `str` move a value between the scalar types, which
 a context written from environment variables, where everything is a string,
-often needs. `type` names the type of a value. Given a context of
+often needs. They also go by the full names of their types, `integer`,
+`boolean` and `string`. `type` names the type of a value. Given a context of
 `{replicas: "3", debug: "false", port: 8080}`:
 
 ```yaml
@@ -1359,6 +1360,37 @@ as `{name: "ssh", numbr: 22}`:
 yak: ports.yak:7:32: schema "Port" has no field "numbr"; it declares "name", "number", "protocol"
 ```
 
+The built-in types are `any`, `boolean`, `integer`, `float`, `string`,
+`sequence`, `mapping` and `function`, and all but `any` and `float` have a
+short name: `bool`, `int`, `str`, `seq`, `map` and `func`. `sequence[T]`, or
+`seq[T]`, takes a sequence whose every item is a `T`:
+
+```yaml
+schema Listener =
+  ports: seq[int]
+  hosts: sequence[str]
+
+web: !Listener {ports: [80, 443], hosts: ["web.example.com"]}
+```
+
+renders as:
+
+```yaml
+web:
+  ports:
+    - 80
+    - 443
+  hosts:
+    - web.example.com
+```
+
+A diagnostic names a type in full whichever name the schema wrote, so a port
+written `"443"` is reported as:
+
+```console
+yak: listener.yak:5:29: field "ports[1]" of schema "Listener" expects integer, found "443"
+```
+
 ### Defaults, checks and optional fields
 
 A default can read the mapping it fills in through `.`, `if` adds a check to
@@ -1683,7 +1715,7 @@ schema* $$ =
   component: string
   env: "staging" | "prod"
   replicas: integer = 3
-  ports: [{name: string, number: integer}]
+  ports: sequence[{name: string, number: integer}]
 
 let {
   name = "\($$.app)-\($$.component)"

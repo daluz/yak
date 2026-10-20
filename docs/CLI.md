@@ -225,13 +225,14 @@ single-document formats report the empty output as an error.
 ## `yak fmt`
 
 ```console
-$ yak fmt [-l] [-w] [FILE.yak|FILE.yakl|DIR|-]...
+$ yak fmt [-l] [-w] [--type-names keep|short|long] [FILE.yak|FILE.yakl|DIR|-]...
 ```
 
 | Flag | Meaning |
 | --- | --- |
 | `-l`, `--list` | List the files whose formatting differs, rather than writing them out. |
 | `-w`, `--write` | Rewrite the files whose formatting differs in place, rather than writing them out. |
+| `--type-names` | Spell the built-in types and their conversions `short` (`int`), `long` (`integer`), or `keep` them as written, the default. |
 
 Formats each template and library and writes the result to standard output.
 A directory formats every `.yak` template and `.yakl` library beneath it,
@@ -244,9 +245,9 @@ $ yak fmt -l -w .
 deploy/app.yak
 ```
 
-Formatting changes only whitespace. Every token, string and comment keeps its
-spelling, `##` notes included, and every line break stays where it was
-written:
+Formatting changes only whitespace, unless `--type-names` is given. Every
+token, string and comment keeps its spelling, `##` notes included, and every
+line break stays where it was written:
 
 - Each level of indentation becomes two spaces. A block sequence written at
   the column of its key stays there.
@@ -264,10 +265,24 @@ written:
 - The trailing comments of consecutive lines are aligned one space past the
   longest of them; a lone one sits one space after its line.
 
+`--type-names short` and `--type-names long` change spelling too. Every
+built-in type in a schema that has a [short name](SPEC.md#types) is written
+with the one asked for, so `--type-names long` turns `seq[int]` into
+`sequence[integer]`. So is every reference to the
+[conversions](STDLIB.md#conversions) `int`, `bool` and `str`, unless the file
+binds either name of that conversion anywhere, in a `let`, a parameter or a
+pattern: a file that binds `string` keeps every `str` and `string` it reads as
+written. A name inside an interpolation keeps its spelling, and so do keys and
+fields spelled like a type.
+
+```console
+$ yak fmt --type-names short -w .
+```
+
 A file that does not parse is reported, and the others are formatted all the
 same. `yak fmt` reads its own output back before writing anything, and
 refuses a file whose formatting would change its tokens, its comments or how
-it parses.
+it parses, beyond the names `--type-names` respells.
 
 ## `yak package`
 
@@ -532,7 +547,7 @@ yak: warning: service.json: Service.name: "format" is not imported
 schema Service =
   name: string
   replicas: integer if (v) => v > 0 = 1
-  ports:? [Port]
+  ports:? sequence[Port]
 
 schema Port =
   number: integer

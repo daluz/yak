@@ -870,7 +870,7 @@ written on its line or in braces:
 ```yaml
 schema Tier = "gold" | "silver"
 schema {
-  Ports = [Port]
+  Ports = sequence[Port]
   Labels = {(string): string}
 }
 ```
@@ -885,7 +885,8 @@ and every other name a binding. A block cannot declare one name as both, nor
 declare a schema twice. A schema covers its block and everything nested in
 it, as a binding does, and the schemas of a block may name each other in any
 order. Its types, defaults and checks read the names in scope where it is
-declared. The built-in types cannot name a schema, nor can a keyword.
+declared. The built-in types and their short names cannot name a schema, nor
+can a keyword.
 
 ### Types
 
@@ -894,11 +895,26 @@ declared. The built-in types cannot name a schema, nor can a keyword.
 | `any` | Every value. |
 | `boolean`, `integer`, `float`, `string`, `sequence`, `mapping`, `function` | A value whose [`type`](STDLIB.md#conversions) is that name. |
 | `null`, `true`, `"text"`, `8080`, `0.5` | That value alone, compared as `==` compares it. |
-| `[T]` | A sequence whose every item is a `T`. |
+| `sequence[T]` | A sequence whose every item is a `T`. |
 | A [mapping type](#mapping-types) | A mapping with the fields it declares. |
 | `Name`, `module.Name` | What the schema `Name` matches. |
 | `A \| B` | What any alternative matches; the first that does decides. |
 | `T if f` | A `T` that the function `f` answers `true` for. |
+
+Most built-in types have a short name that means the same:
+
+| Type | Short name |
+| --- | --- |
+| `boolean` | `bool` |
+| `integer` | `int` |
+| `string` | `str` |
+| `sequence` | `seq` |
+| `mapping` | `map` |
+| `function` | `func` |
+
+So `seq[int]` is `sequence[integer]`. The `[` is written against the name,
+and `[T]` on its own is an error. A diagnostic names a type by its full name,
+as `type` does, whichever name the schema wrote.
 
 An integer is not a float, so a field that takes either is written
 `integer | float`. A union is written on one line, since a `|` where a value
@@ -1469,7 +1485,7 @@ module      := (identifier "=")? identifier ("." identifier)*
 schema      := "schema" "*"? (target "=" type | "{" (target "=" type)+ "}")
 target      := identifier | "$" | "$$"
 type        := typeAtom ("|" typeAtom)* ("if" value)?
-typeAtom    := schemaName | literal | "[" type "]" | typeMapping
+typeAtom    := schemaName | literal | ("sequence" | "seq") "[" type "]" | typeMapping
 schemaName  := identifier ("." identifier)?
 typeMapping := "{" (member ("," member)*)? "}" | member+  -- aligned on one column
 member      := (identifier | string) (":" | ":?") type ("=" value)?

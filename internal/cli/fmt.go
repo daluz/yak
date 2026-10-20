@@ -13,8 +13,16 @@ import (
 	"github.com/daluz/yak/internal/yakfmt"
 )
 
+// typeNames are the values --type-names takes.
+var typeNames = map[string]yakfmt.TypeNames{
+	"keep":  yakfmt.KeepTypeNames,
+	"short": yakfmt.ShortTypeNames,
+	"long":  yakfmt.LongTypeNames,
+}
+
 func newFmtCommand() *cobra.Command {
 	var write, list bool
+	var typeNamesFlag string
 	cmd := &cobra.Command{
 		Use:   "fmt [PATH...]",
 		Short: "Format templates and libraries",
@@ -22,10 +30,15 @@ func newFmtCommand() *cobra.Command {
 			"standard output. A directory formats every template and library beneath\n" +
 			"it, skipping hidden files and directories and a package's vendor/.\n" +
 			"Without a PATH, or given \"-\", fmt reads standard input.\n\n" +
-			"Only whitespace changes, and line breaks stay where they were written.\n" +
+			"Only whitespace changes, and line breaks stay where they were written,\n" +
+			"unless --type-names respells the built-in types and their conversions.\n" +
 			"A file that does not parse is reported, and the others are formatted\n" +
 			"all the same.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			names, ok := typeNames[typeNamesFlag]
+			if !ok {
+				return fmt.Errorf("--type-names takes %q, %q or %q, not %q", "keep", "short", "long", typeNamesFlag)
+			}
 			if len(args) == 0 {
 				args = []string{"-"}
 			}
@@ -41,7 +54,7 @@ func newFmtCommand() *cobra.Command {
 				for _, file := range files {
 					name, src, err := readInput(cmd, file)
 					if err == nil {
-						err = formatSource(cmd.OutOrStdout(), name, src, list, write)
+						err = formatSource(cmd.OutOrStdout(), name, src, names, list, write)
 					}
 					errs = append(errs, err)
 				}
@@ -53,13 +66,15 @@ func newFmtCommand() *cobra.Command {
 		"rewrite the files whose formatting differs rather than writing them to standard output")
 	cmd.Flags().BoolVarP(&list, "list", "l", false,
 		"list the files whose formatting differs rather than writing them to standard output")
+	cmd.Flags().StringVar(&typeNamesFlag, "type-names", "keep",
+		`spell the built-in types and their conversions "short" (int), "long" (integer), or "keep" them as written`)
 	return cmd
 }
 
 // formatSource formats src and writes it to out, unless it is to be listed
 // or written back to the file name.
-func formatSource(out io.Writer, name string, src []byte, list, write bool) error {
-	formatted, err := yakfmt.Source(name, src)
+func formatSource(out io.Writer, name string, src []byte, names yakfmt.TypeNames, list, write bool) error {
+	formatted, err := yakfmt.Source(name, src, names)
 	if err != nil {
 		return err
 	}

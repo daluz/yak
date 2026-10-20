@@ -10,10 +10,10 @@ schema* $$ =
 schema $ =
   env: string
   services: {(string): LooseService}
-  ports: [Port]
+  ports: sequence[Port]
   deployment: k8s.Deployment
   loose: LooseService
-  tiers: [Tier]
+  tiers: sequence[Tier]
   pair: Pair
   anything: Anything
 
@@ -28,14 +28,14 @@ schema Service =
   name: string
   replicas: integer = $$.replicas
   host: string = "\(.name).svc"
-  ports: [Port] = []
+  ports: sequence[Port] = []
   labels: {(string): string} = {}
   selector:? mapping
 
 schema* LooseService =
   <<: Service
 
-schema { Tier = "gold" | "silver", Pair = [integer] }
+schema { Tier = "gold" | "silver", Pair = sequence[integer] }
 schema* { Anything = {} }
 
 env: $$.env

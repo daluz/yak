@@ -590,7 +590,7 @@ func (t *typ) text(indent string) string {
 	case t.mapping != nil:
 		alts = []string{t.mapping.text(indent)}
 	case t.item != nil:
-		alts = []string{"[" + t.item.text(indent) + "]"}
+		alts = []string{"sequence[" + t.item.text(indent) + "]"}
 	case t.union != nil:
 		alts = nil
 		for _, p := range t.union {

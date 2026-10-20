@@ -7,7 +7,7 @@ schema Service_Config =
   kind:? "Service"
   replicas: integer if (v) => v > 0 = 1
   owner:? string | null
-  ports: [Port] if (v) => size(v) >= 1
+  ports: sequence[Port] if (v) => size(v) >= 1
   labels:? {(string): string}
   probe:? HttpProbe | ExecProbe
   timeout:? integer | string if (v) => (type(v) != "integer" or v >= 1) and (type(v) != "string" or regex.match(v, r"^[0-9]+s$"))
@@ -32,11 +32,11 @@ schema HttpProbe =
 
 schema ExecProbe =
   <<: Probe
-  command: [string]
+  command: sequence[string]
   (string): any
 
 schema Node =
   value:? integer | float
-  children:? [Node]
+  children:? sequence[Node]
   parent:? any
   (string): any

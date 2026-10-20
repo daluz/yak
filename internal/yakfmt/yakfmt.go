@@ -4,7 +4,8 @@
 // keeps its spelling, and every line break stays where it was written. Each
 // level of indentation becomes two spaces, the spaces within a line follow
 // fixed rules, runs of blank lines become one, and the trailing comments of
-// consecutive lines are aligned.
+// consecutive lines are aligned. The one exception is the TypeNames a caller
+// asks for, which respell the built-in types and their conversions.
 package yakfmt
 
 import (
@@ -24,7 +25,7 @@ const indentStep = 2
 
 // Source formats a yak file. A file that does not parse is an error, and so
 // is one whose formatting would read back differently, which would be a bug.
-func Source(file string, src []byte) ([]byte, error) {
+func Source(file string, src []byte, names TypeNames) ([]byte, error) {
 	before, err := parser.Parse(file, src)
 	if err != nil {
 		return nil, err
@@ -33,7 +34,8 @@ func Source(file string, src []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &printer{src: src, starts: lineStarts(src), levels: []level{{orig: 1}}}
+	renames := respell(before, toks, names)
+	p := &printer{src: src, starts: lineStarts(src), levels: []level{{orig: 1}}, renames: renames}
 	next := 0
 	for i, t := range toks {
 		for ; next < len(comments) && comments[next].Next <= i; next++ {
@@ -45,6 +47,11 @@ func Source(file string, src []byte) ([]byte, error) {
 	}
 	out := []byte(p.finish())
 
+	for i, t := range toks {
+		if name, ok := renames[t.Pos]; ok {
+			toks[i].Lit = name
+		}
+	}
 	afterToks, afterComments, err := lexer.Lex(file, out)
 	if err == nil && slices.EqualFunc(toks, afterToks, sameToken) && slices.EqualFunc(comments, afterComments, sameComment) {
 		after, err := parser.Parse(file, out)
@@ -85,6 +92,8 @@ type printer struct {
 	indicator bool
 	// delta is how far the current line moved from where it was written.
 	delta int
+	// renames holds the spelling of each token that TypeNames respells.
+	renames map[token.Pos]string
 }
 
 func (p *printer) token(t token.Token) {
@@ -105,6 +114,9 @@ func (p *printer) token(t token.Token) {
 	}
 	cur := &p.lines[len(p.lines)-1]
 	text := string(p.src[p.offset(t.Pos):p.offset(t.End)])
+	if name, ok := p.renames[t.Pos]; ok {
+		text = name
+	}
 	if strings.Contains(text, "\n") {
 		text = reindent(text, p.shift(text, t.Pos.Col))
 	}

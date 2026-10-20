@@ -23,6 +23,10 @@ strs:
   whole-float: "3"
   flag: "true"
   same: true
+long-names:
+  integer: 8
+  boolean: true
+  string: "8"
 types:
   "null": "null"
   boolean: boolean

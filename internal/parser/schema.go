@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"slices"
-
 	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/token"
 )
@@ -84,7 +82,7 @@ func (p *parser) parseSchemaSpec(open bool, col int) (*ast.Binding, error) {
 // checkSchemaName rejects a name that cannot name a schema: a reserved word,
 // a keyword, or a type every schema can already name.
 func (p *parser) checkSchemaName(t token.Token) error {
-	if slices.Contains(ast.BuiltinTypes, t.Lit) {
+	if _, ok := ast.BuiltinType(t.Lit); ok {
 		return p.errorf(t.Pos, "%q is a built-in type and cannot name a schema", t.Lit)
 	}
 	return p.checkName(t, "schema")
@@ -293,6 +291,26 @@ func (p *parser) parseTypeAtom() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		if module == "" {
+			if long, ok := ast.BuiltinType(name); ok {
+				name = long
+			}
+		}
+		if module == "" && name == "sequence" && p.at(token.LBracket) {
+			if !p.adjacent() {
+				return nil, p.errorf(p.cur().Pos, "a sequence type is written %q, with no space before %q", t.Lit+"[T]", "[")
+			}
+			p.next()
+			item, err := p.parseType()
+			if err != nil {
+				return nil, err
+			}
+			if !p.at(token.RBracket) {
+				return nil, p.errorf(p.cur().Pos, "expected %q to close a sequence type, found %s", "]", p.cur())
+			}
+			p.next()
+			return &ast.TypeSequence{Base: ast.At(t.Pos), Item: item}, nil
+		}
 		return &ast.TypeRef{Base: ast.At(t.Pos), Module: module, Name: name}, nil
 	case token.String:
 		p.next()
@@ -311,16 +329,7 @@ func (p *parser) parseTypeAtom() (ast.Node, error) {
 		}
 		return &ast.TypeLiteral{Base: ast.At(t.Pos), Value: v}, nil
 	case token.LBracket:
-		p.next()
-		item, err := p.parseType()
-		if err != nil {
-			return nil, err
-		}
-		if !p.at(token.RBracket) {
-			return nil, p.errorf(p.cur().Pos, "expected %q to close a sequence type, found %s", "]", p.cur())
-		}
-		p.next()
-		return &ast.TypeSequence{Base: ast.At(t.Pos), Item: item}, nil
+		return nil, p.errorf(t.Pos, "a sequence type is written %q", "sequence[T]")
 	case token.LBrace:
 		return p.parseFlowTypeMapping()
 	}

@@ -13,8 +13,8 @@ schema WidgetV1 =
     color: "red" | "blue" = "red"
     port:? integer | string if (v) => (type(v) != "integer" or v <= 65535) and (type(v) != "string" or regex.match(v, r"^\d+%?$"))
     owner:? string | null
-    tags:? [string] if (v) => size(unique(v)) == size(v) and size(v) <= 5
-    conditions:? [{
+    tags:? sequence[string] if (v) => size(unique(v)) == size(v) and size(v) <= 5
+    conditions:? sequence[{
       type: string,
       status:? "True" | "False" | "Unknown",
     }]

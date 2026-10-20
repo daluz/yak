@@ -1,0 +1,40 @@
+import k8s = acme.k8s
+
+schema Config =
+  enabled: bool
+  replicas: int = 1
+  ratio: float | int
+  name: str
+  ports: seq[int]
+  hosts: seq[str]
+  matrix: seq[seq[int | float]]
+  labels: {(str): str}
+  meta:? map
+  hook:? func
+  deployment:? k8s.Deployment
+  rest:? any
+
+let convert(fn, values) = [fn(v) for v in values]
+
+config: !Config
+  enabled: bool("true")
+  replicas: int("3")
+  ratio: float("0.5")
+  name: str(1)
+  ports: convert(int, ["80", "443"])
+  hosts: ["a"]
+  matrix: []
+  labels: {}
+
+## A key or a field spelled like a type is neither a type nor a conversion.
+int: 1
+integer: $.int
+## A name in an interpolation is not a token of its own, and stays.
+note: "\(int("2"))"
+kind: type(1)
+
+## "string" is bound, so neither "str" nor "string" is touched anywhere.
+shadowed:
+  let string = (v) => "mine"
+  a: string(1)
+  b: str(2)

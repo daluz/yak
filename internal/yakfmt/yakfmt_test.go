@@ -14,8 +14,17 @@ import (
 
 var update = flag.Bool("update", false, "rewrite golden files instead of comparing against them")
 
+// typeNames are the TypeNames each golden file is formatted with, by the
+// suffix its name takes before ".want.yak".
+var typeNames = map[string]yakfmt.TypeNames{
+	"":       yakfmt.KeepTypeNames,
+	".short": yakfmt.ShortTypeNames,
+	".long":  yakfmt.LongTypeNames,
+}
+
 // TestFormatGolden formats every testdata/fmt/NAME.yak and compares the
-// result with NAME.want.yak.
+// result with NAME.want.yak, and with NAME.short.want.yak and
+// NAME.long.want.yak where they exist.
 func TestFormatGolden(t *testing.T) {
 	dir := filepath.Join("..", "..", "testdata", "fmt")
 	inputs, err := filepath.Glob(filepath.Join(dir, "*.yak"))
@@ -27,36 +36,47 @@ func TestFormatGolden(t *testing.T) {
 			continue
 		}
 		name := strings.TrimSuffix(filepath.Base(path), ".yak")
-		t.Run(name, func(t *testing.T) {
-			src, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
+		for suffix, names := range typeNames {
+			golden := filepath.Join(dir, name+suffix+".want.yak")
+			if _, err := os.Stat(golden); suffix != "" && err != nil {
+				continue
 			}
-			got, err := yakfmt.Source(path, src)
-			if err != nil {
-				t.Fatal(err)
-			}
-			golden := filepath.Join(dir, name+".want.yak")
-			if *update {
-				if err := os.WriteFile(golden, got, 0o644); err != nil {
+			t.Run(name+suffix, func(t *testing.T) {
+				src, err := os.ReadFile(path)
+				if err != nil {
 					t.Fatal(err)
 				}
-			}
-			want, err := os.ReadFile(golden)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(got) != string(want) {
-				t.Errorf("formatting %s:\n--- got ---\n%s\n--- want ---\n%s", path, got, want)
-			}
-		})
+				got, err := yakfmt.Source(path, src, names)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if *update {
+					if err := os.WriteFile(golden, got, 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				want, err := os.ReadFile(golden)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(got) != string(want) {
+					t.Errorf("formatting %s:\n--- got ---\n%s\n--- want ---\n%s", path, got, want)
+				}
+			})
+		}
 	}
 }
 
 // TestFormatEveryFixture formats every template and library under testdata
-// that parses, each of which has to format without changing what it means
-// and then stay as it is.
+// that parses, with each of the TypeNames, each of which has to format
+// without changing what it means and then stay as it is.
 func TestFormatEveryFixture(t *testing.T) {
+	for _, names := range typeNames {
+		formatEveryFixture(t, names)
+	}
+}
+
+func formatEveryFixture(t *testing.T, names yakfmt.TypeNames) {
 	err := filepath.WalkDir(filepath.Join("..", "..", "testdata"), func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !(strings.HasSuffix(path, ".yak") || strings.HasSuffix(path, ".yakl")) {
 			return err
@@ -68,12 +88,12 @@ func TestFormatEveryFixture(t *testing.T) {
 		if _, err := parser.Parse(path, src); err != nil {
 			return nil
 		}
-		once, err := yakfmt.Source(path, src)
+		once, err := yakfmt.Source(path, src, names)
 		if err != nil {
 			t.Error(err)
 			return nil
 		}
-		twice, err := yakfmt.Source(path, once)
+		twice, err := yakfmt.Source(path, once, names)
 		if err != nil {
 			t.Error(err)
 			return nil
@@ -89,7 +109,7 @@ func TestFormatEveryFixture(t *testing.T) {
 }
 
 func TestFormatReportsSyntaxErrors(t *testing.T) {
-	_, err := yakfmt.Source("bad.yak", []byte("name: \"web\"\nport: [80\n"))
+	_, err := yakfmt.Source("bad.yak", []byte("name: \"web\"\nport: [80\n"), yakfmt.KeepTypeNames)
 	if err == nil || !strings.Contains(err.Error(), `bad.yak:2:7: unterminated flow sequence`) {
 		t.Errorf("error = %v, want the parse error", err)
 	}

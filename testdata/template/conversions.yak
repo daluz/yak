@@ -31,6 +31,12 @@ strs:
   ## str writes a value as interpolating it does.
   same: str(1.5) == "\(1.5)"
 
+## Each conversion also goes by its type's full name.
+long-names:
+  integer: integer("8")
+  boolean: boolean("true")
+  string: string(8)
+
 types:
   "null": type(null)
   boolean: type(true)

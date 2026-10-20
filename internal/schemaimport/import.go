@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -198,7 +197,7 @@ func nameFor(s, what, file string) (string, error) {
 	if name == "" || (name[0] >= '0' && name[0] <= '9') {
 		name = "_" + name
 	}
-	if name == "_" || slices.Contains(ast.BuiltinTypes, name) || token.IsReserved(name) || token.IsKeyword(name) {
+	if _, builtin := ast.BuiltinType(name); name == "_" || builtin || token.IsReserved(name) || token.IsKeyword(name) {
 		return "", fmt.Errorf("%s: %s cannot name a schema %q", file, what, name)
 	}
 	return name, nil

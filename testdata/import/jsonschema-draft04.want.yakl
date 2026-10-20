@@ -2,7 +2,7 @@
 
 schema jsonschema_draft04 =
   size:? integer | float if (v) => v > 0 and v % 0.5 == 0
-  tags:? [string] if (v) => size(unique(v)) == size(v)
+  tags:? sequence[string] if (v) => size(unique(v)) == size(v)
   tuple:? sequence
   extra:? Extra
   (string): any

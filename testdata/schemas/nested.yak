@@ -1,4 +1,4 @@
 let make(n) =
-  schema Port = [Number]
+  schema Port = sequence[Number]
   value: n
 port: make(1)

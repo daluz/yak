@@ -101,13 +101,15 @@ port: str($$.port)             # 8080 becomes "8080"
 
 | Call | Answer |
 | --- | --- |
-| `int(value)` | An integer, a float with no fractional part, or a string holding an integer, as an integer. |
+| `int(value)`, `integer(value)` | An integer, a float with no fractional part, or a string holding an integer, as an integer. |
 | `float(value)` | A number, or a string holding a finite decimal number, as a float. |
-| `bool(value)` | A boolean, or the string `"true"` or `"false"`, as a boolean. |
-| `str(value)` | A string, number or boolean as the string that interpolating it writes. |
+| `bool(value)`, `boolean(value)` | A boolean, or the string `"true"` or `"false"`, as a boolean. |
+| `str(value)`, `string(value)` | A string, number or boolean as the string that interpolating it writes. |
 | `type(value)` | The name of the value's type: `"null"`, `"boolean"`, `"integer"`, `"float"`, `"string"`, `"sequence"`, `"mapping"` or `"function"`. |
 
-The conversions refuse rather than guess. `int(3.9)` is an error, since
+A conversion is named for its type by both of the names a
+[schema](SPEC.md#types) gives it, so `integer($$.replicas)` is
+`int($$.replicas)`. The conversions refuse rather than guess. `int(3.9)` is an error, since
 choosing a direction to round in is what [`std.math`](#stdmath) is for, and so
 is `int("3.5")`. `float` refuses `"inf"`, `"nan"` and hexadecimal forms such as `"0x1p3"`,
 and `bool` refuses

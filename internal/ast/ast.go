@@ -157,6 +157,26 @@ const (
 // name a schema.
 var BuiltinTypes = []string{"any", "boolean", "integer", "float", "string", "sequence", "mapping", "function"}
 
+// TypeAliases are the short names of BuiltinTypes. A TypeRef holds the name
+// an alias stands for, so that diagnostics name every type as "type" does.
+var TypeAliases = map[string]string{
+	"bool": "boolean",
+	"int":  "integer",
+	"str":  "string",
+	"seq":  "sequence",
+	"map":  "mapping",
+	"func": "function",
+}
+
+// BuiltinType reports whether name is one of the BuiltinTypes or an alias of
+// one, and answers the BuiltinTypes name it stands for.
+func BuiltinType(name string) (string, bool) {
+	if long, ok := TypeAliases[name]; ok {
+		return long, true
+	}
+	return name, slices.Contains(BuiltinTypes, name)
+}
+
 // Schema is the value of a binding introduced by "schema": the type that the
 // binding's name stands for, or that the document or the context has to
 // match when the name is SchemaRoot or SchemaContext.
@@ -189,7 +209,8 @@ type TypeLiteral struct {
 	Value Node
 }
 
-// TypeSequence is "[Item]", a sequence whose every item is of type Item.
+// TypeSequence is "sequence[Item]", a sequence whose every item is of type
+// Item.
 type TypeSequence struct {
 	Base
 	Item Node

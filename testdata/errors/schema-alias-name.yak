@@ -1,0 +1,3 @@
+schema int = {value: integer}
+
+v: !int {value: 1}

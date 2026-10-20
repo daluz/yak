@@ -15,9 +15,12 @@ import (
 func init() {
 	module.Register(module.BuiltinModule{Builtins: []*eval.Builtin{
 		builtin("int", valueParam, toInt),
+		builtin("integer", valueParam, toInt),
 		builtin("float", valueParam, toFloat),
 		builtin("bool", valueParam, toBool),
+		builtin("boolean", valueParam, toBool),
 		builtin("str", valueParam, toStr),
+		builtin("string", valueParam, toStr),
 		builtin("type", valueParam, typeOf),
 	}})
 }

@@ -702,7 +702,7 @@ func TestParseErrors(t *testing.T) {
 		{"optional key type", "schema A = {(string):? integer}\na: 1\n", `only a field can be optional`},
 		{"default of a merge", "schema A = {<<: B = {}}\na: 1\n", "only a field can have a default"},
 		{"interpolated type", `schema A = "\(x)"` + "\na: 1\n", "a string written as a type cannot interpolate"},
-		{"unclosed sequence type", "schema A = [string\na: 1\n", `expected "]" to close a sequence type`},
+		{"unclosed sequence type", "schema A = sequence[string\na: 1\n", `expected "]" to close a sequence type`},
 		{"junk after a type", "schema A = string string\na: 1\n", `unexpected "string" after a type`},
 		{"three-part schema name", "a: !a.b.c 1\n", `a schema is named "Name", or "module.Name"`},
 		{"tag without a value", "a: [!A]\n", `expected a value after "!A"`},
