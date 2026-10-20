@@ -1,8 +1,7 @@
 # The yak command line
 
 This describes the tool that renders templates. The language is specified in
-[SPEC.md](SPEC.md), and planned commands are listed in
-[ROADMAP.md](ROADMAP.md).
+[SPEC.md](SPEC.md).
 
 ## Install
 
@@ -17,6 +16,7 @@ Or build from a checkout with `go build ./cmd/yak`.
 | Command | Purpose |
 | --- | --- |
 | `yak render PATH` | Render one template, every template in a directory, or a remote package. |
+| `yak fmt [PATH...]` | Format templates and libraries. |
 | `yak package init [DIR]` | Make a directory a package. Also `yak init`. |
 | `yak package add SOURCE` | Add a dependency. Also `yak add`. |
 | `yak package remove NAME` | Remove a dependency. Also `yak remove`. |
@@ -30,7 +30,7 @@ Or build from a checkout with `go build ./cmd/yak`.
 
 `--version`, or `-v`, prints the version, the same string a template reads as
 `$yak.version`; an unstamped build reports `dev`. `yak pkg` is another name
-for `yak package`. `fmt` is planned; see [ROADMAP.md](ROADMAP.md).
+for `yak package`.
 
 ## `yak render`
 
@@ -229,6 +229,53 @@ A document that evaluates to `null`, because it holds only bindings, nothing
 at all, or a body written as `null`, is left out unless
 `--keep-null-documents` is given. If every document is dropped, the
 single-document formats report the empty output as an error.
+
+## `yak fmt`
+
+```console
+$ yak fmt [-l] [-w] [FILE.yak|FILE.yakl|DIR|-]...
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `-l`, `--list` | List the files whose formatting differs, rather than writing them out. |
+| `-w`, `--write` | Rewrite the files whose formatting differs in place, rather than writing them out. |
+
+Formats each template and library and writes the result to standard output.
+A directory formats every `.yak` template and `.yakl` library beneath it,
+skipping what `yak render` skips. With no argument, or `-`, it reads
+standard input, which `-w` cannot rewrite. `-l` and `-w` may be given
+together, as `gofmt` takes them:
+
+```console
+$ yak fmt -l -w .
+deploy/app.yak
+```
+
+Formatting changes only whitespace. Every token, string and comment keeps its
+spelling, `##` notes included, and every line break stays where it was
+written:
+
+- Each level of indentation becomes two spaces. A block sequence written at
+  the column of its key stays there.
+- The lines after the first of a string that spans lines, and the body of a
+  block scalar, start one level deeper than the block holding them; a body
+  whose header gives its indentation, as `|2` does, moves with its header.
+- A comma, a separator (`:`, `::`, `:?`) and the `-` of a sequence item are
+  followed by one space, with none before. Binary operators, `=` and `=>` take
+  one space on each side. Brackets and parentheses hold no space inside them;
+  braces keep one if they had any, so `let { a = 1 }` and `{a: 1}` both stay.
+- Elsewhere a run of spaces becomes one, and tokens written flush stay flush,
+  since that tells `-x` from `- x`.
+- Runs of blank lines become one, and blank lines at the start of the file
+  are dropped.
+- The trailing comments of consecutive lines are aligned one space past the
+  longest of them; a lone one sits one space after its line.
+
+A file that does not parse is reported, and the others are formatted all the
+same. `yak fmt` reads its own output back before writing anything, and
+refuses a file whose formatting would change its tokens, its comments or how
+it parses.
 
 ## `yak package`
 

@@ -14,7 +14,6 @@ nav = [
     { "Standard library" = "STDLIB.md" },
     { "Command line" = "CLI.md" },
   ] },
-  { "Roadmap" = "ROADMAP.md" },
 ]
 
 [project.theme]

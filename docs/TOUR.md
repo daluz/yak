@@ -1820,5 +1820,4 @@ logging, no annotations, and limits equal to the requests. A context whose
 refused by the schema before anything renders.
 
 That is the whole language as it stands today. [SPEC.md](SPEC.md) has the
-exact rules for everything shown here, and [ROADMAP.md](ROADMAP.md) lists
-what is coming next.
+exact rules for everything shown here.

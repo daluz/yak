@@ -117,9 +117,8 @@ lists the standard library, and [docs/CLI.md](docs/CLI.md) documents the tool.
 
 ## Status
 
-The `render`, `package`, `schema check` and `schema import` commands and
-everything above are implemented. The `fmt` command is planned; see
-[docs/ROADMAP.md](docs/ROADMAP.md).
+The `render`, `fmt`, `package`, `schema check` and `schema import` commands
+and everything above are implemented.
 
 ## Development
 

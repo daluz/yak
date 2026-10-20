@@ -131,6 +131,43 @@ func TestSchemaCheckReadsLibrariesBeneathADirectory(t *testing.T) {
 	}
 }
 
+func TestFmtWritesToStdout(t *testing.T) {
+	dir := t.TempDir()
+	tmpl := write(t, dir, "app.yak", "a:\n    b: [ 1,2 ]\n")
+
+	out, err := run(t, "fmt", tmpl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "a:\n  b: [1, 2]\n"; out != want {
+		t.Errorf("output = %q, want %q", out, want)
+	}
+}
+
+func TestFmtListsAndRewritesADirectory(t *testing.T) {
+	dir := t.TempDir()
+	messy := write(t, dir, "app.yak", "a:    1\n")
+	tidy := write(t, dir, "lib/tidy.yakl", "a: 1\n")
+	write(t, dir, "bad.yak", "a: [1\n")
+
+	out, err := run(t, "fmt", "-l", "-w", dir)
+	if err == nil || !strings.Contains(err.Error(), "bad.yak:1:4") {
+		t.Errorf("error = %v, want the file that does not parse", err)
+	}
+	if out != messy+"\n" {
+		t.Errorf("listed %q, want only %s", out, messy)
+	}
+	for path, want := range map[string]string{messy: "a: 1\n", tidy: "a: 1\n"} {
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != want {
+			t.Errorf("%s holds %q, want %q", path, got, want)
+		}
+	}
+}
+
 func TestSchemaImportWritesALibraryTemplatesCanTag(t *testing.T) {
 	dir := t.TempDir()
 	crd := write(t, dir, "widgets.yaml", `apiVersion: apiextensions.k8s.io/v1

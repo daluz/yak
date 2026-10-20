@@ -9,10 +9,10 @@ test:
 	go test ./...
 
 # Rewrite the golden files under testdata/ from current behavior. Only the
-# engine and schemaimport tests read them, and only their test binaries take
-# -update.
+# engine, schemaimport and yakfmt tests read them, and only their test
+# binaries take -update.
 update:
-	go test ./internal/engine ./internal/schemaimport -update
+	go test ./internal/engine ./internal/schemaimport ./internal/yakfmt -update
 
 fmt:
 	gofmt -l -w .

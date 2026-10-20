@@ -1,0 +1,16 @@
+let {region="us-east-1", zone="\(region)a"}
+let url(host,port=8080,  scheme="https")="\(scheme)://\(host):\(port)"
+let adder=(n)=>(x)=>x+n
+schema*   Port =
+    name:   string
+    number:   integer if (n)=>n>0 and n<65536
+    protocol:  "TCP"|"UDP" = "TCP"
+a: url( "web.example.com" , 443 )
+b: [ 1,2,  3 ]
+c: { <<: {image: "nginx"},tag:"1.27" }
+d: adder(5)(3)*2 - -1
+e: $$?.replicas??1
+f: [ p.name for p in $$?.ports ?? [] if p.number<1024 ]
+g: {(k): v*2 for [k,v] in items({cpu: 2})}
+h: !Port {name: "http", number: 80}
+i: not (1==2)  or  "a"!="b"

@@ -1,0 +1,26 @@
+## Indentation of four spaces becomes two, at every depth.
+service:
+    name: "web"
+    ports:
+    -   name: "http"
+        number: 80
+    -   - 1
+        -   - 2
+    labels:
+          app: "web"
+          tier: "front"
+let defaults =
+     image: "alpine"
+scripts:
+    -   run: |
+                echo "start"
+                  indented
+        shell: "sh"
+    - |
+       echo "item"
+    - "a string
+   that spans lines"
+banner:
+    if $$?.env == "prod"
+    then "live"
+    else "test"

@@ -1,0 +1,26 @@
+
+
+# Runs of blank lines become one, and trailing comments line up.
+a: 1 # one
+bb: 22   # two
+ccc: 333          # three
+
+
+
+d:
+    # above the first entry
+    e: 5 # alone
+    ## a note keeps its place
+    f:   |2
+          kept two spaces deeper
+        than the header
+    g: >-
+        folded
+        text
+    h: "a string
+        that spans lines"
+# at the end of the document
+---
+-   "second document"
+-   'single quoted' # beside
+...

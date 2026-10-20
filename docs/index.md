@@ -46,5 +46,3 @@ Or build from a checkout with `go build ./cmd/yak`.
   `std` modules.
 - [The command line](CLI.md) documents the commands, flags, context files and
   output formats.
-- [The roadmap](ROADMAP.md) covers what is planned: the `fmt`
-  command.

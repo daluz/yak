@@ -1,8 +1,7 @@
 # The yak language
 
-This describes the language as it exists today. Planned features are listed in
-[ROADMAP.md](ROADMAP.md), and the command line tool is documented in
-[CLI.md](CLI.md).
+This describes the language as it exists today. The command line tool is
+documented in [CLI.md](CLI.md).
 
 yak is a restricted dialect of YAML: what YAML does ambiguously is removed or
 made explicit, and a small expression language is added on top.
