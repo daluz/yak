@@ -38,12 +38,14 @@ for `yak package`. `fmt` is planned; see [ROADMAP.md](ROADMAP.md).
 $ yak render FILE.yak|DIR|REMOTE [-c context.yaml|context.json]... [-f FORMAT]
                                    [-o FILE | -O] [--output-dir DIR]
                                    [--keep-null-documents] [--strict=false]
-                                   [--skip-schema-checks] [--plain-http]
+                                   [--skip-schema-checks] [--skip-default-context]
+                                   [--plain-http]
 ```
 
 | Flag | Meaning |
 | --- | --- |
 | `-c`, `--context FILE` | Merge a YAML or JSON file into `$context`. Repeatable. |
+| `--skip-default-context` | Leave out the [default context](#default-context) of the template's package. |
 | `-f`, `--format NAME` | Write this [output format](#output-formats). |
 | `-o`, `--output FILE` | Write to this file rather than standard output. |
 | `-O`, `--automatic-output` | Write to a file named after the template. |
@@ -137,6 +139,23 @@ merge in order as separate files do.
 A `.json` file is read by the JSON parser, which accepts all of JSON,
 including escapes such as `\/` that YAML rejects. Any other file is read as
 YAML, which accepts most JSON too.
+
+### Default context
+
+A package can list default context files in its `yak.pkg`, as
+[`package.context`](SPEC.md#packages), relative to `yak.pkg`:
+
+```yaml
+package:
+  name: web
+  context: [defaults.yaml, regions.json]
+```
+
+Every template in the package, rendered alone, as part of a directory or
+from a remote package, is rendered with those files merged first, in the
+order listed, so each `-c` file overrides them. `$contextpaths` lists them
+first too. `--skip-default-context` leaves them out, so that only the `-c`
+files are read.
 
 ### Where the output goes
 

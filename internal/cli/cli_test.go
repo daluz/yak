@@ -720,6 +720,43 @@ func TestRenderDirectorySkipsTheVendorDirectory(t *testing.T) {
 	}
 }
 
+func TestRenderMergesTheDefaultContextFirst(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "yak.pkg", "package:\n  name: web\n  context: [defaults.yaml, env/base.json]\n")
+	write(t, dir, "defaults.yaml", "name: web\ntier: default\nregion: us\n")
+	write(t, dir, "env/base.json", `{"tier": "base"}`)
+	tmpl := write(t, dir, "deploy/app.yak", "name: $$.name\ntier: $$.tier\nregion: $$.region\n")
+	prod := write(t, t.TempDir(), "prod.yaml", "region: eu\n")
+
+	out, err := run(t, "render", tmpl, "-c", prod)
+	if err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	if want := "name: web\ntier: base\nregion: eu\n"; out != want {
+		t.Errorf("stdout = %q, want %q", out, want)
+	}
+	out, err = run(t, "render", tmpl, "-c", prod, "--skip-default-context")
+	if err == nil {
+		t.Fatalf("render with --skip-default-context succeeded with %q, want $$.name to be missing", out)
+	}
+}
+
+func TestRenderListsTheDefaultContextInContextPaths(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "yak.pkg", "package:\n  name: web\n  context: [defaults.yaml]\n")
+	write(t, dir, "defaults.yaml", "")
+	tmpl := write(t, dir, "app.yak", "import std.path\npaths: [path.base(p) for p in $contextpaths]\n")
+	prod := write(t, dir, "prod.yaml", "")
+
+	out, err := run(t, "render", tmpl, "-c", prod)
+	if err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	if want := "paths:\n  - defaults.yaml\n  - prod.yaml\n"; out != want {
+		t.Errorf("stdout = %q, want %q", out, want)
+	}
+}
+
 func TestPackageAddAndRemove(t *testing.T) {
 	dir := project(t)
 	write(t, dir, "../shared/yak.pkg", "package:\n  name: shared\n")

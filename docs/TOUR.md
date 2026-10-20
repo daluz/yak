@@ -1495,6 +1495,33 @@ leaves the libraries out:
 $ yak render . --output-dir build
 ```
 
+A package can carry the context its templates start from, as a Helm chart
+carries its `values.yaml`. `package.context` lists the files:
+
+```yaml
+package:
+  name: web
+  context: [defaults.yaml]
+```
+
+With `defaults.yaml` holding `{replicas: 1, env: staging}`, a template
+in the package reads both keys without any `-c`, and a `-c` file overrides
+them:
+
+```yaml
+replicas: $$.replicas
+env: $$.env
+```
+
+rendered with `-c prod.yaml`, where `prod.yaml` holds `{env: prod}`:
+
+```yaml
+replicas: 1
+env: prod
+```
+
+`--skip-default-context` renders with the `-c` files alone.
+
 ## 21. Output formats
 
 The same template can render JSON, JSONC, KYAML, TOML and more. `-f` picks

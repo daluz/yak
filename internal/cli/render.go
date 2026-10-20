@@ -28,6 +28,7 @@ func newRenderCommand() *cobra.Command {
 		keepNull   bool
 		strict     bool
 		skipChecks bool
+		skipCtx    bool
 		plainHTTP  bool
 	)
 
@@ -40,7 +41,8 @@ func newRenderCommand() *cobra.Command {
 			"directory skips libraries, and rendering one directly is an error.\n\n" +
 			"Context files may be YAML or JSON. They are merged in the order given,\n" +
 			"with later files taking precedence, and are available to the template as\n" +
-			"$context, $ctx or $$.\n\n" +
+			"$context, $ctx or $$. The files a package lists as package.context in its\n" +
+			"yak.pkg merge first, unless --skip-default-context is given.\n\n" +
 			"The output format defaults to YAML. A template named for a format, such\n" +
 			"as app.toml.yak, writes that format; naming an output file with a known\n" +
 			"extension takes precedence over the template's name, and --format over\n" +
@@ -63,7 +65,7 @@ func newRenderCommand() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			req := renderRequest{contexts: contexts, format: format, keepNull: keepNull, nonStrict: !strict,
-				skipChecks: skipChecks}
+				skipChecks: skipChecks, skipCtx: skipCtx}
 			if module.IsRemote(args[0]) {
 				fetch := deps.Options{Log: cmd.ErrOrStderr(), PlainHTTP: plainHTTP}
 				return renderRemote(args[0], req, output, automatic, outputDir, fetch)
@@ -93,6 +95,8 @@ func newRenderCommand() *cobra.Command {
 
 	cmd.Flags().StringArrayVarP(&contexts, "context", "c", nil,
 		"YAML or JSON file to merge into $context (repeatable; later files win)")
+	cmd.Flags().BoolVar(&skipCtx, "skip-default-context", false,
+		"leave out the default context files the template's package lists")
 	cmd.Flags().StringVarP(&output, "output", "o", "",
 		"write the rendered output to this file instead of standard output")
 	cmd.Flags().BoolVarP(&automatic, "automatic-output", "O", false,
@@ -189,6 +193,7 @@ type renderRequest struct {
 	keepNull   bool
 	nonStrict  bool
 	skipChecks bool
+	skipCtx    bool
 }
 
 func (r renderRequest) options(template, output string) (render.Options, error) {
@@ -202,12 +207,13 @@ func (r renderRequest) options(template, output string) (render.Options, error) 
 func (r renderRequest) render(template string, opts render.Options) ([]byte, error) {
 	var buf bytes.Buffer
 	err := engine.Template(engine.TemplateRequest{
-		Path:         template,
-		ContextPaths: r.contexts,
-		Out:          &buf,
-		Options:      opts,
-		NonStrict:    r.nonStrict,
-		SkipChecks:   r.skipChecks,
+		Path:               template,
+		ContextPaths:       r.contexts,
+		SkipDefaultContext: r.skipCtx,
+		Out:                &buf,
+		Options:            opts,
+		NonStrict:          r.nonStrict,
+		SkipChecks:         r.skipChecks,
 	})
 	return buf.Bytes(), err
 }

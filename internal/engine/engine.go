@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/daluz/yak/internal/ctxfile"
@@ -24,9 +25,13 @@ const ExtTemplate = module.Ext
 type TemplateRequest struct {
 	// Path is the template to render, or "-" to read standard input.
 	Path string
-	// ContextPaths are merged in order, with later files taking precedence.
+	// ContextPaths are merged in order, with later files taking precedence,
+	// after the default context of the template's package.
 	ContextPaths []string
-	Out          io.Writer
+	// SkipDefaultContext leaves out the default context of the template's
+	// package.
+	SkipDefaultContext bool
+	Out                io.Writer
 	// Options selects the output format and its indentation. The zero
 	// value renders YAML at the default indent.
 	Options render.Options
@@ -46,7 +51,17 @@ func Template(req TemplateRequest) error {
 	if err != nil {
 		return err
 	}
-	context, err := ctxfile.Load(req.ContextPaths)
+	paths := req.ContextPaths
+	if !req.SkipDefaultContext {
+		pkg, err := module.FindPackage(filepath.Dir(name))
+		if err != nil {
+			return err
+		}
+		if pkg != nil {
+			paths = append(pkg.ContextPaths(), paths...)
+		}
+	}
+	context, err := ctxfile.Load(paths)
 	if err != nil {
 		return err
 	}
@@ -54,7 +69,7 @@ func Template(req TemplateRequest) error {
 	if err != nil {
 		return fmt.Errorf("finding the working directory: %w", err)
 	}
-	run := eval.Run{FilePath: name, ContextPaths: req.ContextPaths, Workdir: workdir, NonStrict: req.NonStrict,
+	run := eval.Run{FilePath: name, ContextPaths: paths, Workdir: workdir, NonStrict: req.NonStrict,
 		SkipChecks: req.SkipChecks}
 	return Render(run, src, context, req.Out, req.Options)
 }

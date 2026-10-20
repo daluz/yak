@@ -342,7 +342,7 @@ listing the variables that exist.
 | `$root` | `$` | The root of the current document. |
 | `$context`, `$ctx` | `$$` | The merged [context](#context) data. |
 | `$filepath` | | The path of the file being read, exactly as it was given to the tool. |
-| `$contextpaths` | | The context files, in the order they were given. |
+| `$contextpaths` | | The context files, in the order they were merged. |
 | `$workdir` | | The absolute path of the directory yak was invoked from. |
 | `$yak` | | A mapping that describes the rendering, with the fields below. |
 | `$yak.version` | | The version of yak doing the rendering. |
@@ -734,6 +734,7 @@ package:
   name: web                    # required; an identifier
   version: 1.4.0               # optional
   description: The web tier    # optional
+  context: [defaults.yaml]     # optional; the default context
 dependencies:
   shared: ../shared            # a package: shared.x.y is ../shared/x/y.yak
   base: third_party/base.yak   # a module: base is third_party/base.yak
@@ -742,6 +743,13 @@ dependencies:
 
 A file belongs to the package of the nearest `yak.pkg` in its directory or
 above. A file in no package is a module all the same.
+
+`package.context` lists the package's default [context](#context) files,
+relative to `yak.pkg` and beneath it. A template the package holds is
+rendered with them merged first, in the order listed, before the files the
+rendering is given. Only the package of the template being rendered
+contributes them: a module it imports reads the importer's context, whatever
+package the module is in.
 
 ### Resolution
 
@@ -1316,7 +1324,8 @@ comprehension is built; the element stays lazy.
 
 `$context`, `$ctx` or `$$` is a mapping of data supplied from outside the
 template. It is shared by every document, and the paths it came from are
-[`$contextpaths`](#builtin-variables).
+[`$contextpaths`](#builtin-variables), the default context of the template's
+[package](#packages) first.
 
 Context data is plain YAML or JSON, not yak: a `\(` in a context string is a
 `\(`, and an unquoted scalar is the string YAML reads it as. Several sources

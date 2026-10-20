@@ -196,6 +196,8 @@ func TestResolveErrors(t *testing.T) {
 		{"an unknown field", pkg + "modules: {}\n", "q", "field modules not found"},
 		{"a package without a name", "dependencies: {}\n", "q", "the package has no name"},
 		{"a name that is not an identifier", "package:\n  name: a-b\n", "q", "cannot name a package"},
+		{"a context file above the package", pkg + "  context: [../ctx.yaml]\n", "q", "is not a path beneath the package root"},
+		{"an absolute context file", pkg + "  context: [/ctx.yaml]\n", "q", "is not a path beneath the package root"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
