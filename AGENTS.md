@@ -50,11 +50,13 @@ has to refuse the template.
 ## Behaviors and Conventions
 
 - Standard library: a built-in module under `internal/stdlib` hands a
- `module.BuiltinModule` to `module.Register` from its `init`, one file per
- module. Only the root module's built-ins are bare names; every other module
- is namespaced under `std`, so adding a function cannot take a name a
- template already uses. Names of more than one word are camelCase, and a
- built-in that takes a function calls it with `eval.Call`.
+  `module.BuiltinModule` to `module.Register` from its `init`, one file per
+  module. Only the root module's built-ins are bare names; every other module
+  is namespaced under `std`, so adding a function cannot take a name a
+  template already uses. Names of more than one word are camelCase, and a
+  built-in that takes a function calls it with `eval.Call`.
 - Write minimum code to solve the stated problem — no preemptive abstraction 
 - Ask before assuming when requirements are ambiguous 
 - Only modify files and functions directly involved in the current task
+- After finishing an implementation, always inform if the introduced
+  modifications are a breaking change, a new feature or just a fix.
