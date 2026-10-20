@@ -2,6 +2,7 @@ package eval
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/token"
@@ -13,17 +14,17 @@ import (
 // thunks of its own and so looks like fresh work each time.
 const maxCallDepth = 1000
 
-// Function is a binding that was declared with a parameter list, closed over
+// function is a binding that was declared with a parameter list, closed over
 // the environment it was written in. It is a value like any other, so it may
 // be passed to another function or held in a hidden field, but no output
 // format can hold one.
-type Function struct {
+type function struct {
 	decl *ast.Function
 	env  *Env
 }
 
 // TypeName implements Value.
-func (*Function) TypeName() string { return "function" }
+func (*function) TypeName() string { return "function" }
 
 // callee names the function a diagnostic is about. An anonymous function has
 // no name to give, so it is placed by where it was written instead. The text
@@ -46,7 +47,7 @@ func evalCall(node *ast.Call, env *Env) (Value, error) {
 		return nil, err
 	}
 	switch fn := target.(type) {
-	case *Function:
+	case *function:
 		return fn.call(node, env)
 	case *Builtin:
 		return fn.call(node, env)
@@ -61,7 +62,7 @@ func evalCall(node *ast.Call, env *Env) (Value, error) {
 //
 // The arguments stay behind thunks of the calling environment, and the
 // parameters share one frame, so a default may name another parameter.
-func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
+func (f *function) call(node *ast.Call, env *Env) (Value, error) {
 	if err := f.checkDepth(node.Pos()); err != nil {
 		return nil, err
 	}
@@ -72,11 +73,11 @@ func (f *Function) call(node *ast.Call, env *Env) (Value, error) {
 	return f.run(node.Pos(), args)
 }
 
-func (f *Function) callee() callee {
+func (f *function) callee() callee {
 	return callee{name: f.decl.Name, pos: f.decl.Pos()}
 }
 
-func (f *Function) checkDepth(pos token.Pos) error {
+func (f *function) checkDepth(pos token.Pos) error {
 	if f.env.doc.session.depth >= maxCallDepth {
 		return errorf(pos, "%s is nested more than %d calls deep and may not terminate",
 			f.callee(), maxCallDepth)
@@ -86,7 +87,7 @@ func (f *Function) checkDepth(pos token.Pos) error {
 
 // run evaluates the body with args bound to the parameters they name. pos is
 // the call, which a missing argument is reported at.
-func (f *Function) run(pos token.Pos, args map[string]*Thunk) (Value, error) {
+func (f *function) run(pos token.Pos, args map[string]*Thunk) (Value, error) {
 	session := f.env.doc.session
 	who := f.callee()
 	s := &scope{outer: f.env.scope, binds: make(map[string]*Thunk, len(f.decl.Params))}
@@ -120,7 +121,7 @@ func Call(fn Value, pos token.Pos, args ...Value) (Value, error) {
 		thunks[i] = &Thunk{state: resolved, val: a, pos: pos}
 	}
 	switch f := fn.(type) {
-	case *Function:
+	case *function:
 		if err := f.checkDepth(pos); err != nil {
 			return nil, err
 		}
@@ -167,7 +168,7 @@ func matchArguments(fn callee, params []*ast.Param, node *ast.Call, env *Env) (m
 				fn, plural(len(params), "argument"), len(node.Args))
 		case name == "":
 			name = params[i].Label()
-		case paramNamed(params, name) == nil:
+		case !slices.ContainsFunc(params, func(p *ast.Param) bool { return p.Name == name }):
 			return nil, errorf(arg.NamePos, "%s has no parameter named %q%s",
 				fn, name, parameterNames(params))
 		}
@@ -184,15 +185,6 @@ func matchArguments(fn callee, params []*ast.Param, node *ast.Call, env *Env) (m
 // default to fall back on.
 func missingArgument(fn callee, param string, pos token.Pos) error {
 	return errorf(pos, "%s needs an argument for parameter %q", fn, param)
-}
-
-func paramNamed(params []*ast.Param, name string) *ast.Param {
-	for _, p := range params {
-		if p.Name == name {
-			return p
-		}
-	}
-	return nil
 }
 
 // parameterNames lists the parameters so that a misspelled argument can show

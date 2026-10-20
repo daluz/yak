@@ -153,7 +153,7 @@ func outputPath(template, output string, automatic bool, dir string, f render.Fo
 	if automatic {
 		stem := templateStem(template)
 		if stem == "" {
-			return "", fmt.Errorf("--automatic-output needs a %s template, but got %q", engine.ExtTemplate, template)
+			return "", fmt.Errorf("--automatic-output needs a %s template, but got %q", module.Ext, template)
 		}
 		if dir != "" {
 			// The directory says where the file goes, so only the name
@@ -229,12 +229,12 @@ func renderDir(dir string, req renderRequest, output string, automatic bool, out
 	if !automatic && outputDir == "" {
 		return fmt.Errorf("the directory %s writes one file per template; give --output-dir or --automatic-output", dir)
 	}
-	templates, err := sourcesIn(dir, engine.ExtTemplate)
+	templates, err := sourcesIn(dir, module.Ext)
 	if err != nil {
 		return err
 	}
 	if len(templates) == 0 {
-		return fmt.Errorf("no %s templates beneath %s", engine.ExtTemplate, dir)
+		return fmt.Errorf("no %s templates beneath %s", module.Ext, dir)
 	}
 	base := dir
 	if outputDir != "" {
@@ -332,7 +332,7 @@ func modulesAt(path string) ([]string, error) {
 	if info, err := os.Stat(path); err != nil || !info.IsDir() {
 		return []string{path}, nil
 	}
-	return sourcesIn(path, engine.ExtTemplate, module.ExtLibrary)
+	return sourcesIn(path, module.Ext, module.ExtLibrary)
 }
 
 // readInput reads the file at path, or standard input for "-", and answers
@@ -364,8 +364,8 @@ func writeOutput(dest string, out []byte, mkdir bool) error {
 // empty string when it is not a template file at all, standard input
 // included.
 func templateStem(template string) string {
-	if !strings.HasSuffix(template, engine.ExtTemplate) {
+	if !strings.HasSuffix(template, module.Ext) {
 		return ""
 	}
-	return strings.TrimSuffix(template, engine.ExtTemplate)
+	return strings.TrimSuffix(template, module.Ext)
 }

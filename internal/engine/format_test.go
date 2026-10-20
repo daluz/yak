@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/daluz/yak/internal/engine"
+	"github.com/daluz/yak/internal/module"
 	"github.com/daluz/yak/internal/render"
 )
 
@@ -34,7 +35,7 @@ func TestFormatsAgree(t *testing.T) {
 	}
 
 	for _, path := range templates {
-		name := strings.TrimSuffix(filepath.Base(path), engine.ExtTemplate)
+		name := strings.TrimSuffix(filepath.Base(path), module.Ext)
 		t.Run(name, func(t *testing.T) {
 			contexts, err := filepath.Glob(filepath.Join(dir, name+".ctx*"))
 			if err != nil {
@@ -130,7 +131,7 @@ func parseFormat(f render.Format, out []byte) ([]any, error) {
 
 	case render.FormatJSONL:
 		var docs []any
-		for _, line := range bytes.Split(bytes.TrimRight(out, "\n"), []byte("\n")) {
+		for line := range bytes.SplitSeq(bytes.TrimRight(out, "\n"), []byte("\n")) {
 			parsed, err := unmarshalJSON(line)
 			if err != nil {
 				return nil, err

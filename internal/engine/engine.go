@@ -17,10 +17,6 @@ import (
 	_ "github.com/daluz/yak/internal/stdlib"
 )
 
-// ExtTemplate is the extension of a template, which is the one a module that
-// can be rendered is written with.
-const ExtTemplate = module.Ext
-
 // TemplateRequest describes a single template rendering.
 type TemplateRequest struct {
 	// Path is the template to render, or "-" to read standard input.

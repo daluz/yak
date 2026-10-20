@@ -8,11 +8,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// JSONSchemas translates each JSON Schema document of files into a schema
+// jsonSchemas translates each JSON Schema document of files into a schema
 // named for its title, or else its file, and each of its $defs and
 // definitions into a schema named for its key. A document holding nothing
 // but definitions declares no schema of its own.
-func JSONSchemas(files []File) ([]byte, []string, error) {
+func jsonSchemas(files []File) ([]byte, []string, error) {
 	return importFiles(files, true, "JSON Schema", (*importer).jsonSchema)
 }
 

@@ -9,10 +9,10 @@ import (
 	"github.com/daluz/yak/internal/token"
 )
 
-// Schema is a type a "schema" statement declares, closed over the block it
+// schema is a type a "schema" statement declares, closed over the block it
 // was declared in: the names its types, defaults and checks read are the
 // ones in scope there.
-type Schema struct {
+type schema struct {
 	// name is the schema's name, or ast.SchemaRoot or ast.SchemaContext.
 	name string
 	decl *ast.Schema
@@ -20,7 +20,7 @@ type Schema struct {
 }
 
 // label names the schema in a diagnostic.
-func (s *Schema) label() string {
+func (s *schema) label() string {
 	switch s.name {
 	case ast.SchemaRoot:
 		return "the document"
@@ -34,7 +34,7 @@ func (s *Schema) label() string {
 // the context against the one it declares for it. The context is plain data,
 // so it is checked in full before anything reads it, and every reader sees
 // it with its defaults filled in.
-func (d *docState) declare(schemas map[string]*Schema) error {
+func (d *docState) declare(schemas map[string]*schema) error {
 	d.schemas = schemas
 	s := schemas[ast.SchemaContext]
 	if s == nil {
@@ -73,14 +73,14 @@ func evalTag(node *ast.Tag, env *Env) (Value, error) {
 
 // apply checks v, written at pos, against the schema. fresh says that v is a
 // mapping nothing else holds yet, which then takes the defaults itself.
-func (s *Schema) apply(v Value, pos token.Pos, fresh bool) (Value, error) {
+func (s *schema) apply(v Value, pos token.Pos, fresh bool) (Value, error) {
 	return s.check(v, s.decl.Type, site{of: s.label(), pos: pos}, fresh)
 }
 
 // findSchema answers the schema a tag or a type names. A module's schemas
 // are the ones declared at the top of its document. tag says that a tag
 // names it, where a "!" may have been meant as a negation.
-func (e *Env) findSchema(module, name string, pos token.Pos, tag bool) (*Schema, error) {
+func (e *Env) findSchema(module, name string, pos token.Pos, tag bool) (*schema, error) {
 	if module != "" {
 		return e.moduleSchema(module, name, pos)
 	}
@@ -106,7 +106,7 @@ func (e *Env) findSchema(module, name string, pos token.Pos, tag bool) (*Schema,
 
 // moduleSchema answers the schema name that the module imported as module
 // declares. Reading it loads the module.
-func (e *Env) moduleSchema(module, name string, pos token.Pos) (*Schema, error) {
+func (e *Env) moduleSchema(module, name string, pos token.Pos) (*schema, error) {
 	t, ok := e.lookup(module)
 	var imp *ast.Import
 	if ok {
@@ -123,7 +123,7 @@ func (e *Env) moduleSchema(module, name string, pos token.Pos) (*Schema, error) 
 	if _, err := root.Value(); err != nil {
 		return nil, err
 	}
-	var schemas map[string]*Schema
+	var schemas map[string]*schema
 	if root.env != nil {
 		schemas = root.env.doc.schemas
 	}
@@ -195,7 +195,7 @@ func mismatch(at site, want string, v Value) *Error {
 // the defaults its mappings declare filled in. The items of a sequence and
 // the fields of a mapping are each checked when they are first read. A run
 // that skips checks lets any value through, and only fills in defaults.
-func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) {
+func (s *schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) {
 	session := s.env.doc.session
 	skip := session.skipping()
 	switch t := t.(type) {
@@ -224,10 +224,8 @@ func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 		if err != nil {
 			return nil, err
 		}
-		if requireScalar(v) == nil {
-			if eq, _ := Equal(v, want); eq {
-				return v, nil
-			}
+		if eq, _ := Equal(v, want); eq {
+			return v, nil
 		}
 		return nil, mismatch(at, describe(t), v)
 	case *ast.TypeSequence:
@@ -303,7 +301,7 @@ func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 
 // lazy answers a thunk that checks the value of t against typ when it is
 // first read. An optional field may be null whatever its type.
-func (s *Schema) lazy(t *Thunk, typ ast.Node, at site, optional bool) *Thunk {
+func (s *schema) lazy(t *Thunk, typ ast.Node, at site, optional bool) *Thunk {
 	return &Thunk{env: s.env, pos: at.pos, fn: func() (Value, error) {
 		v, err := t.Value()
 		if err != nil {
@@ -319,7 +317,7 @@ func (s *Schema) lazy(t *Thunk, typ ast.Node, at site, optional bool) *Thunk {
 // typeField is one field of a mapping type, along with the schema that wrote
 // it, whose scope its type and default are read in.
 type typeField struct {
-	owner *Schema
+	owner *schema
 	decl  *ast.TypeMember
 }
 
@@ -328,7 +326,7 @@ type typeField struct {
 // open. A field written with ":?" whose value is null counts as left out,
 // and a hidden one is not checked at all. The values are checked when they
 // are read, and a default is evaluated with "." naming the checked mapping.
-func (s *Schema) checkMapping(v Value, t *ast.TypeMapping, at site, fresh bool) (Value, error) {
+func (s *schema) checkMapping(v Value, t *ast.TypeMapping, at site, fresh bool) (Value, error) {
 	skip := s.env.doc.session.skipping()
 	obj, ok := v.(*Object)
 	if !ok {
@@ -420,7 +418,7 @@ func (s *Schema) checkMapping(v Value, t *ast.TypeMapping, at site, fresh bool) 
 
 // defaulted answers the default of the field m declares, checked against
 // its type like a value that was written.
-func (s *Schema) defaulted(target *Object, m typeField, at site) *Thunk {
+func (s *schema) defaulted(target *Object, m typeField, at site) *Thunk {
 	def := &Thunk{node: m.decl.Default, env: s.env.pushSelf(target), pos: m.decl.Default.Pos()}
 	return s.lazy(def, m.decl.Type, at, m.decl.Optional)
 }
@@ -438,7 +436,7 @@ func declaredFields(names []string) string {
 // taking the place of the merge, and a field written below overriding one
 // of the same name above it, as in a mapping. It answers the "(K): V" member
 // that types the other keys too, or nil.
-func (s *Schema) members(t *ast.TypeMapping, seen map[*ast.TypeMapping]bool) ([]typeField, *typeField, error) {
+func (s *schema) members(t *ast.TypeMapping, seen map[*ast.TypeMapping]bool) ([]typeField, *typeField, error) {
 	if seen[t] {
 		return nil, nil, errorf(t.Pos(), "this mapping type merges itself")
 	}
@@ -483,8 +481,8 @@ func (s *Schema) members(t *ast.TypeMapping, seen map[*ast.TypeMapping]bool) ([]
 
 // mappingType answers the mapping type that t is or names, and the schema
 // whose scope it is read in, for a "<<" to merge.
-func (s *Schema) mappingType(t ast.Node) (*Schema, *ast.TypeMapping, error) {
-	for hops := 0; hops < maxCallDepth; hops++ {
+func (s *schema) mappingType(t ast.Node) (*schema, *ast.TypeMapping, error) {
+	for range maxCallDepth {
 		switch tt := t.(type) {
 		case *ast.TypeMapping:
 			return s, tt, nil
@@ -671,7 +669,7 @@ func checkBindings(binds []*ast.Binding, r *regions) error {
 }
 
 // checkType checks the names t, which s declares, refers to.
-func (s *Schema) checkType(t ast.Node) error {
+func (s *schema) checkType(t ast.Node) error {
 	switch t := t.(type) {
 	case *ast.TypeRef:
 		if t.Builtin() {

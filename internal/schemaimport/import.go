@@ -57,11 +57,11 @@ func Detect(f File) (string, error) {
 func Import(format string, files []File) ([]byte, []string, error) {
 	switch format {
 	case FormatCRD:
-		return CRDs(files)
+		return crds(files)
 	case FormatJSONSchema:
-		return JSONSchemas(files)
+		return jsonSchemas(files)
 	case FormatOpenAPI:
-		return OpenAPI(files)
+		return openAPI(files)
 	}
 	return nil, nil, fmt.Errorf("unknown input format %q; known formats: %s", format, strings.Join(Formats, ", "))
 }

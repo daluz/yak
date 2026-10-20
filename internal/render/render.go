@@ -52,7 +52,7 @@ func Documents(w io.Writer, docs []eval.Value, opts Options) error {
 			return err
 		}
 	}
-	out, err := spec.encode(docs, opts, spec.floats)
+	out, err := spec.encode(docs, opts)
 	if err != nil {
 		return err
 	}

@@ -11,13 +11,6 @@ import (
 	"github.com/daluz/yak/internal/parser"
 )
 
-// A Module is what an import names: a *BuiltinModule written in Go, or a
-// *FileModule read from a template file.
-type Module interface {
-	// Name is the dotted path the module is imported by.
-	Name() string
-}
-
 // BuiltinModule is a module of the standard library written in Go. The root
 // module has no path, and its built-ins are bare names; any other module is
 // reached by importing its path.
@@ -31,16 +24,6 @@ type BuiltinModule struct {
 	// module that can do more when strict mode is off.
 	StrictBuiltins []*eval.Builtin
 }
-
-func (m *BuiltinModule) Name() string { return m.Path }
-
-// FileModule is a module written in yak, which holds exactly one document.
-type FileModule struct {
-	Path string
-	File string
-}
-
-func (m *FileModule) Name() string { return m.Path }
 
 // builtin holds every registered BuiltinModule, keyed by its path, the root
 // module under "".
@@ -75,23 +58,6 @@ func Register(m BuiltinModule) {
 	builtin[m.Path] = &m
 }
 
-// Find returns the module that path names when it is imported by the file at
-// from.
-func Find(from string, path []string) (Module, error) {
-	name := strings.Join(path, ".")
-	if path[0] == Std {
-		if m, ok := builtin[name]; ok {
-			return m, nil
-		}
-		return nil, fmt.Errorf("the standard library has no module %q", name)
-	}
-	file, err := Resolve(from, path)
-	if err != nil {
-		return nil, err
-	}
-	return &FileModule{Path: name, File: file}, nil
-}
-
 // Loader loads the modules of one document, reading each file once however
 // many times it is imported. It implements eval.Modules.
 type Loader struct {
@@ -119,54 +85,55 @@ func (l *Loader) Root() []*eval.Builtin {
 // mapping of its built-ins; a file module is the value of its one document,
 // evaluated in s.
 func (l *Loader) Import(s *eval.Session, node *ast.Import) (*eval.Thunk, error) {
-	m, err := Find(node.Pos().File, node.Path)
-	if err != nil {
-		return nil, eval.Errorf(node.Pos(), "%s", err.Error())
+	name := strings.Join(node.Path, ".")
+	if node.Path[0] != Std {
+		file, err := Resolve(node.Pos().File, node.Path)
+		if err != nil {
+			return nil, eval.Errorf(node.Pos(), "%s", err.Error())
+		}
+		return l.load(s, node, name, file)
 	}
-	switch m := m.(type) {
-	case *BuiltinModule:
-		if l.strict && m.Nondeterministic {
-			return nil, eval.Errorf(node.Pos(),
-				"module %q can answer differently on every rendering, which strict mode does not allow; render with --strict=false to use it",
-				m.Path)
-		}
-		builtins := m.Builtins
-		if l.strict && m.StrictBuiltins != nil {
-			builtins = m.StrictBuiltins
-		}
-		o := eval.NewObject()
-		for _, b := range builtins {
-			o.Set(b.Name, false, eval.Done(b))
-		}
-		return eval.Done(o), nil
-	case *FileModule:
-		return l.load(s, node, m)
-	default:
-		panic(fmt.Sprintf("module: unknown module %T", m))
+	m, ok := builtin[name]
+	if !ok {
+		return nil, eval.Errorf(node.Pos(), "the standard library has no module %q", name)
 	}
+	if l.strict && m.Nondeterministic {
+		return nil, eval.Errorf(node.Pos(),
+			"module %q can answer differently on every rendering, which strict mode does not allow; render with --strict=false to use it",
+			m.Path)
+	}
+	builtins := m.Builtins
+	if l.strict && m.StrictBuiltins != nil {
+		builtins = m.StrictBuiltins
+	}
+	o := eval.NewObject()
+	for _, b := range builtins {
+		o.Set(b.Name, false, eval.Done(b))
+	}
+	return eval.Done(o), nil
 }
 
-func (l *Loader) load(s *eval.Session, node *ast.Import, m *FileModule) (*eval.Thunk, error) {
-	key, err := filepath.Abs(m.File)
+// load reads the file module named name from file.
+func (l *Loader) load(s *eval.Session, node *ast.Import, name, file string) (*eval.Thunk, error) {
+	key, err := filepath.Abs(file)
 	if err != nil {
 		return nil, eval.Errorf(node.Pos(), "%s", err.Error())
 	}
 	if root, ok := l.loaded[key]; ok {
 		return root, nil
 	}
-	src, err := os.ReadFile(m.File)
+	src, err := os.ReadFile(file)
 	if err != nil {
-		return nil, eval.Errorf(node.Pos(), "reading module %q: %s", m.Name(), err.Error())
+		return nil, eval.Errorf(node.Pos(), "reading module %q: %s", name, err.Error())
 	}
-	stream, err := parser.Parse(m.File, src)
+	stream, err := parser.Parse(file, src)
 	if err != nil {
 		return nil, err
 	}
 	if n := len(stream.Docs); n != 1 {
-		return nil, eval.Errorf(node.Pos(), "module %q holds %d documents; a module holds exactly one",
-			m.Name(), n)
+		return nil, eval.Errorf(node.Pos(), "module %q holds %d documents; a module holds exactly one", name, n)
 	}
-	root := s.Document(stream.Docs[0], m.File)
+	root := s.Document(stream.Docs[0], file)
 	l.loaded[key] = root
 	return root, nil
 }

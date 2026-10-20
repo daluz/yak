@@ -56,7 +56,7 @@ func ignore(path string) error {
 		return err
 	}
 	have := map[string]bool{}
-	for _, line := range strings.Split(string(src), "\n") {
+	for line := range strings.SplitSeq(string(src), "\n") {
 		have[strings.TrimSpace(line)] = true
 	}
 	text := string(src)

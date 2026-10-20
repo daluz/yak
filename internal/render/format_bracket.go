@@ -10,9 +10,9 @@ import (
 
 var (
 	kyamlSpec = formatSpec{
-		name:   "kyaml",
-		floats: yamlFloats,
+		name: "kyaml",
 		encode: bracketed(bracketStyle{
+			floats: yamlFloats,
 			// A KYAML document opens with "---" so that it cannot be
 			// mistaken for JSON, which also starts with "{".
 			header:        "---\n",
@@ -80,12 +80,15 @@ type bracketStyle struct {
 	foldStrings bool
 	// compact writes a whole document on one line, without indentation.
 	compact bool
+	// floats names the non-finite floats. The zero value refuses them, as
+	// JSON has no way to write them.
+	floats floatSpelling
 }
 
 // bracketed returns the encoder for the bracketed format written in style.
-func bracketed(style bracketStyle) func([]eval.Value, Options, floatSpelling) ([]byte, error) {
-	return func(docs []eval.Value, opts Options, floats floatSpelling) ([]byte, error) {
-		w := &bracketWriter{style: style, format: opts.Format, indent: opts.Indent, floats: floats}
+func bracketed(style bracketStyle) func([]eval.Value, Options) ([]byte, error) {
+	return func(docs []eval.Value, opts Options) ([]byte, error) {
+		w := &bracketWriter{style: style, format: opts.Format, indent: opts.Indent}
 		for _, doc := range docs {
 			w.buf.WriteString(style.header)
 			if err := w.value(doc, 0); err != nil {
@@ -102,7 +105,6 @@ type bracketWriter struct {
 	style  bracketStyle
 	format Format
 	indent int
-	floats floatSpelling
 }
 
 // value writes v. depth is the nesting level of the line the value starts on,
@@ -116,7 +118,7 @@ func (w *bracketWriter) value(v eval.Value, depth int) error {
 	case eval.Int:
 		w.buf.WriteString(strconv.FormatInt(int64(t), 10))
 	case eval.Float:
-		s, err := formatFloat(float64(t), w.format, w.floats)
+		s, err := formatFloat(float64(t), w.format, w.style.floats)
 		if err != nil {
 			return err
 		}

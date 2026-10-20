@@ -25,7 +25,7 @@ type docState struct {
 	module bool
 	// schemas are the ones declared at the top of the document, which are
 	// what a module offers to the files that import it.
-	schemas map[string]*Schema
+	schemas map[string]*schema
 }
 
 // Session is the state a document and every module it imports have in common.
@@ -79,7 +79,7 @@ type scope struct {
 	outer *scope
 	binds map[string]*Thunk
 	// schemas are looked up apart from binds, by tags and by types.
-	schemas map[string]*Schema
+	schemas map[string]*schema
 }
 
 // atRoot reports whether e is the environment a document's body is
@@ -103,7 +103,7 @@ type regions struct {
 	// It is empty when one environment covers the whole block.
 	decl []token.Pos
 	// schemas are the ones the block declares, or nil.
-	schemas map[string]*Schema
+	schemas map[string]*schema
 }
 
 // at returns the environment a node written at pos reads names in, which is
@@ -148,10 +148,10 @@ func (e *Env) pushBindings(binds []*ast.Binding) *regions {
 	if len(decls) == 0 {
 		return e.pushValues(values)
 	}
-	schemas := make(map[string]*Schema, len(decls))
+	schemas := make(map[string]*schema, len(decls))
 	r := (&Env{doc: e.doc, self: e.self, scope: &scope{outer: e.scope, schemas: schemas}}).pushValues(values)
 	for _, b := range decls {
-		schemas[b.Name] = &Schema{name: b.Name, decl: b.Value.(*ast.Schema), env: r.at(b.Pos())}
+		schemas[b.Name] = &schema{name: b.Name, decl: b.Value.(*ast.Schema), env: r.at(b.Pos())}
 	}
 	r.schemas = schemas
 	return r
@@ -358,7 +358,7 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 	case *ast.Tag:
 		return evalTag(node, env)
 	case *ast.Function:
-		return &Function{decl: node, env: env}, nil
+		return &function{decl: node, env: env}, nil
 	case *ast.Call:
 		return evalCall(node, env)
 	case *ast.Ident:
@@ -389,7 +389,7 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 		}
 	}
 
-	slots := make([]*Field, len(node.Entries))
+	slots := make([]int, len(node.Entries))
 	for i, e := range node.Entries {
 		// A merge holds no entry of its own, so it reserves nothing; it
 		// folds into the mapping once every key in it is known.
@@ -763,12 +763,18 @@ func evalField(node *ast.Field, env *Env) (Value, error) {
 	if !ok {
 		return nil, errorf(node.Pos(), "cannot read field %q from a %s", node.Name, x.TypeName())
 	}
-	f, ok := obj.Lookup(node.Name)
+	return field(obj, node.Name, node.Optional, node.Pos())
+}
+
+// field reads the field name of o, answering null for an absent one when the
+// access is optional.
+func field(o *Object, name string, optional bool, pos token.Pos) (Value, error) {
+	f, ok := o.Lookup(name)
 	if !ok {
-		if node.Optional {
+		if optional {
 			return Null{}, nil
 		}
-		return nil, errorf(node.Pos(), "no field %q in mapping%s", node.Name, availableFields(obj))
+		return nil, errorf(pos, "no field %q in mapping%s", name, availableFields(o))
 	}
 	return f.Value.Value()
 }
@@ -807,14 +813,7 @@ func evalIndex(node *ast.Index, env *Env) (Value, error) {
 		if !ok {
 			return nil, errorf(node.Index.Pos(), "mapping index must be a string, found %s", idx.TypeName())
 		}
-		f, ok := container.Lookup(string(name))
-		if !ok {
-			if node.Optional {
-				return Null{}, nil
-			}
-			return nil, errorf(node.Index.Pos(), "no field %q in mapping%s", string(name), availableFields(container))
-		}
-		return f.Value.Value()
+		return field(container, string(name), node.Optional, node.Index.Pos())
 	default:
 		return nil, errorf(node.Pos(), "cannot index a %s", x.TypeName())
 	}

@@ -7,9 +7,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// OpenAPI translates each schema under the components.schemas of the
+// openAPI translates each schema under the components.schemas of the
 // OpenAPI v3 documents of files into a schema named for its key.
-func OpenAPI(files []File) ([]byte, []string, error) {
+func openAPI(files []File) ([]byte, []string, error) {
 	return importFiles(files, true, "schema under components.schemas", (*importer).openAPI)
 }
 

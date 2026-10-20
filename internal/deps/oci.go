@@ -28,14 +28,14 @@ import (
 )
 
 const (
-	// ArtifactType is the artifact type of a package's OCI manifest.
-	ArtifactType = "application/vnd.yak.package.v1"
-	// LayerMediaType is the media type of its one layer, which holds the
+	// artifactType is the artifact type of a package's OCI manifest.
+	artifactType = "application/vnd.yak.package.v1"
+	// layerMediaType is the media type of its one layer, which holds the
 	// package's files.
-	LayerMediaType = "application/vnd.yak.package.layer.v1.tar+gzip"
-	// BuildDir is where Build writes an OCI image layout, beneath the
+	layerMediaType = "application/vnd.yak.package.layer.v1.tar+gzip"
+	// buildDir is where Build writes an OCI image layout, beneath the
 	// package root.
-	BuildDir = ".yak/oci"
+	buildDir = ".yak/oci"
 )
 
 // BuildOptions configure Build.
@@ -66,7 +66,7 @@ func Build(pkg *module.Package, opts BuildOptions) error {
 	}
 	out := opts.Output
 	if out == "" {
-		out = filepath.Join(pkg.Root(), filepath.FromSlash(BuildDir))
+		out = filepath.Join(pkg.Root(), filepath.FromSlash(buildDir))
 	}
 	layout := out
 	archive := strings.HasSuffix(out, ".tar")
@@ -80,7 +80,7 @@ func Build(pkg *module.Package, opts BuildOptions) error {
 	if err != nil {
 		return err
 	}
-	layerDesc := content.NewDescriptorFromBytes(LayerMediaType, layer)
+	layerDesc := content.NewDescriptorFromBytes(layerMediaType, layer)
 	layerDesc.Annotations = map[string]string{ocispec.AnnotationTitle: pkg.Name + ".tar.gz"}
 	if ok, err := store.Exists(ctx, layerDesc); err != nil {
 		return err
@@ -93,7 +93,7 @@ func Build(pkg *module.Package, opts BuildOptions) error {
 	if pkg.Version != "" {
 		annotations[ocispec.AnnotationVersion] = pkg.Version
 	}
-	manifest, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1, ArtifactType, oras.PackManifestOptions{
+	manifest, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1, artifactType, oras.PackManifestOptions{
 		Layers:              []ocispec.Descriptor{layerDesc},
 		ManifestAnnotations: annotations,
 	})
@@ -136,7 +136,7 @@ func Push(pkg *module.Package, ref string, opts Options) error {
 	if err != nil {
 		return err
 	}
-	layout := filepath.Join(pkg.Root(), filepath.FromSlash(BuildDir))
+	layout := filepath.Join(pkg.Root(), filepath.FromSlash(buildDir))
 	if _, err := os.Stat(filepath.Join(layout, ocispec.ImageIndexFile)); err != nil {
 		return fmt.Errorf("%s holds no build; run yak package build first", layout)
 	}
@@ -244,7 +244,7 @@ func pull(src module.Source, ref string, plainHTTP bool, dest string) (string, e
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		return "", fmt.Errorf("%s at %s: %w", src.Repo, ref, err)
 	}
-	if manifest.ArtifactType != ArtifactType || len(manifest.Layers) != 1 || manifest.Layers[0].MediaType != LayerMediaType {
+	if manifest.ArtifactType != artifactType || len(manifest.Layers) != 1 || manifest.Layers[0].MediaType != layerMediaType {
 		return "", fmt.Errorf("%s at %s is not a yak package", src.Repo, ref)
 	}
 	layer, err := content.FetchAll(ctx, repo, manifest.Layers[0])

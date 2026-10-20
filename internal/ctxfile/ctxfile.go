@@ -19,8 +19,8 @@ import (
 	"github.com/daluz/yak/internal/eval"
 )
 
-// ExtJSON selects the JSON parser for a context file.
-const ExtJSON = ".json"
+// extJSON selects the JSON parser for a context file.
+const extJSON = ".json"
 
 // Load reads and merges context files in order. Later files win: mappings are
 // merged key by key, and every other value is replaced outright.
@@ -50,7 +50,7 @@ func Load(paths []string) (eval.Value, error) {
 // one.
 func Decode(name string, data []byte) (*eval.Object, error) {
 	src := source{name: name, what: "context file " + name, data: data}
-	if strings.EqualFold(filepath.Ext(name), ExtJSON) {
+	if strings.EqualFold(filepath.Ext(name), extJSON) {
 		return decodeJSON(src)
 	}
 	return decodeYAML(src)
@@ -254,8 +254,7 @@ func mergeMapping(src source, merged *eval.Object, v eval.Value) (*eval.Object, 
 // jsonError reports a decoding failure, pointing at the offending byte when
 // the decoder tells us where it was.
 func jsonError(src source, err error) error {
-	var syntax *json.SyntaxError
-	if errors.As(err, &syntax) {
+	if syntax, ok := errors.AsType[*json.SyntaxError](err); ok {
 		line, col := position(src.data, syntax.Offset)
 		return fmt.Errorf("%s:%d:%d: %s", src.name, line, col, syntax.Error())
 	}

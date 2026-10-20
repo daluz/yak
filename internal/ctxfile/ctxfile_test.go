@@ -34,7 +34,7 @@ func decodeAs(t *testing.T, name, src string) *eval.Object {
 func lookup(t *testing.T, obj *eval.Object, path string) eval.Value {
 	t.Helper()
 	var current eval.Value = obj
-	for _, part := range strings.Split(path, ".") {
+	for part := range strings.SplitSeq(path, ".") {
 		o, ok := current.(*eval.Object)
 		if !ok {
 			t.Fatalf("path %q: %s is not a mapping", path, current.TypeName())

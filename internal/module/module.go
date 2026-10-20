@@ -37,7 +37,7 @@ const (
 // at from.
 func Resolve(from string, path []string) (string, error) {
 	dir, segs := filepath.Dir(from), path
-	pkg, err := find(dir)
+	pkg, err := FindPackage(dir)
 	if err != nil {
 		return "", err
 	}
@@ -115,10 +115,6 @@ func (p *Package) ContextPaths() []string {
 // FindPackage reads the nearest yak.pkg in dir or above it, and answers nil
 // when there is none.
 func FindPackage(dir string) (*Package, error) {
-	return find(dir)
-}
-
-func find(dir string) (*Package, error) {
 	for {
 		path := filepath.Join(dir, PkgFile)
 		src, err := os.ReadFile(path)
@@ -209,10 +205,10 @@ func IsName(s string) bool {
 // below it, or an empty location when no dependency covers the path. A
 // location that is a module has nothing left below it; one that is a package
 // always does.
-func (m *Package) resolve(path []string) (string, []string, error) {
+func (p *Package) resolve(path []string) (string, []string, error) {
 	var key []string
 	var target string
-	for k, t := range m.Dependencies {
+	for k, t := range p.Dependencies {
 		segs := strings.Split(k, ".")
 		if len(segs) > len(path) || len(segs) <= len(key) {
 			continue
@@ -228,37 +224,37 @@ func (m *Package) resolve(path []string) (string, []string, error) {
 	if IsRemote(target) {
 		src, err := ParseSource(target)
 		if err != nil {
-			return "", nil, fmt.Errorf("%s maps %q to %w", m.Path, name, err)
+			return "", nil, fmt.Errorf("%s maps %q to %w", p.Path, name, err)
 		}
-		vendor, dir, ok := vendored(m.Root(), src.Key)
+		vendor, dir, ok := vendored(p.Root(), src.Key)
 		if !ok {
-			return "", nil, fmt.Errorf("%s maps %q to %s, which is not vendored; run yak sync", m.Path, name, target)
+			return "", nil, fmt.Errorf("%s maps %q to %s, which is not vendored; run yak sync", p.Path, name, target)
 		}
 		if err := checkVendored(vendor, src, target); err != nil {
-			return "", nil, fmt.Errorf("%s maps %q to %s, but %w", m.Path, name, target, err)
+			return "", nil, fmt.Errorf("%s maps %q to %s, but %w", p.Path, name, target, err)
 		}
 		target = filepath.Join(dir, filepath.FromSlash(src.Dir))
 	} else if !filepath.IsAbs(target) {
-		target = filepath.Join(m.Root(), target)
+		target = filepath.Join(p.Root(), target)
 	}
 	rest := path[len(key):]
 	if isModule(target) {
 		if len(rest) > 0 {
 			return "", nil, fmt.Errorf("%s maps %q to the module %s, so %q is not inside a package",
-				m.Path, name, target, strings.Join(path, "."))
+				p.Path, name, target, strings.Join(path, "."))
 		}
 		if _, err := os.Stat(target); err != nil {
-			return "", nil, fmt.Errorf("%s maps %q to %s, which does not exist", m.Path, name, target)
+			return "", nil, fmt.Errorf("%s maps %q to %s, which does not exist", p.Path, name, target)
 		}
 		return target, nil, nil
 	}
 	if _, err := os.Stat(filepath.Join(target, PkgFile)); err != nil {
 		return "", nil, fmt.Errorf("%s maps %q to %s, which is not a package: it holds no %s",
-			m.Path, name, target, PkgFile)
+			p.Path, name, target, PkgFile)
 	}
 	if len(rest) == 0 {
 		return "", nil, fmt.Errorf("%s maps %q to the package %s; import one of the modules in it",
-			m.Path, name, target)
+			p.Path, name, target)
 	}
 	return target, rest, nil
 }

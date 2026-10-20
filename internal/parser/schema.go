@@ -84,17 +84,10 @@ func (p *parser) parseSchemaSpec(open bool, col int) (*ast.Binding, error) {
 // checkSchemaName rejects a name that cannot name a schema: a reserved word,
 // a keyword, or a type every schema can already name.
 func (p *parser) checkSchemaName(t token.Token) error {
-	switch {
-	case token.IsReserved(t.Lit):
-		return p.errorf(t.Pos, "%q is a reserved word and cannot name a schema", t.Lit)
-	case token.IsKeyword(t.Lit):
-		return p.errorf(t.Pos, "%q is a keyword and cannot name a schema", t.Lit)
-	case t.Lit == ast.Wildcard:
-		return p.errorf(t.Pos, "%q discards a value and cannot name a schema", t.Lit)
-	case slices.Contains(ast.BuiltinTypes, t.Lit):
+	if slices.Contains(ast.BuiltinTypes, t.Lit) {
 		return p.errorf(t.Pos, "%q is a built-in type and cannot name a schema", t.Lit)
 	}
-	return nil
+	return p.checkName(t, "schema")
 }
 
 // parseSchemaBody parses the type after the "=" of a schema statement: one
@@ -157,7 +150,7 @@ func (p *parser) parseFlowTypeMapping() (*ast.TypeMapping, error) {
 	open := p.next()
 	m := &ast.TypeMapping{Base: ast.At(open.Pos)}
 	for {
-		more, err := p.nextInList(open, flowMapList, len(m.Members) == 0)
+		more, err := p.nextInList(open, typeMapList, len(m.Members) == 0)
 		if !more {
 			return m, err
 		}

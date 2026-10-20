@@ -120,7 +120,7 @@ func newSchemaCheckCommand() *cobra.Command {
 				}
 				if len(files) == 0 {
 					return fmt.Errorf("no %s templates or %s libraries beneath %s",
-						engine.ExtTemplate, module.ExtLibrary, path)
+						module.Ext, module.ExtLibrary, path)
 				}
 				for _, file := range files {
 					if err := engine.CheckSchemas(file); err != nil {

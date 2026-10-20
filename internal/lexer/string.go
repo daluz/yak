@@ -1,6 +1,7 @@
 package lexer
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -50,10 +51,6 @@ func (d *decoded) posAt(i int) token.Pos {
 		return d.pos[i]
 	}
 	return d.start
-}
-
-func (l *lexer) scanQuoted(raw bool) error {
-	return l.scanQuotedAt(l.pos(), raw)
 }
 
 func (l *lexer) scanQuotedAt(start token.Pos, raw bool) error {
@@ -235,14 +232,14 @@ func (l *lexer) scanEscape(d *decoded) error {
 func (d *decoded) addRune(r rune, p token.Pos) {
 	var b [utf8.UTFMax]byte
 	n := utf8.EncodeRune(b[:], r)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		d.addByte(b[i], p, true)
 	}
 }
 
 func (l *lexer) scanHexEscape(d *decoded, p token.Pos, n int) error {
 	var sb strings.Builder
-	for i := 0; i < n; i++ {
+	for range n {
 		if l.eof() || !isHex(l.peek()) {
 			return l.errorf(p, "escape sequence needs %d hexadecimal digits", n)
 		}
@@ -280,7 +277,7 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 
 	chomp := byte(0)
 	explicit := 0
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		switch c := l.peek(); {
 		case c == '-' || c == '+':
 			if chomp != 0 {
@@ -368,7 +365,7 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 			d.addText(bl.text, bl.pos)
 		}
 	} else {
-		l.foldLines(d, body, contentIndent)
+		foldLines(d, body, contentIndent)
 	}
 	if len(body) > 0 {
 		switch chomp {
@@ -393,7 +390,7 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 // foldLines implements folded ("greater than") block scalars: a single line
 // break becomes a space, blank lines become line breaks, and lines indented
 // beyond the block indentation keep their breaks verbatim.
-func (l *lexer) foldLines(d *decoded, body []blockLine, contentIndent int) {
+func foldLines(d *decoded, body []blockLine, contentIndent int) {
 	blanks := 0
 	first := true
 	prevMore := false
@@ -583,8 +580,4 @@ func matchParen(buf []byte, from int) (int, error) {
 	return 0, errUnterminatedInterp
 }
 
-var errUnterminatedInterp = interpError(`unterminated string interpolation: missing ")"; write "\\(" for a literal "\("`)
-
-type interpError string
-
-func (e interpError) Error() string { return string(e) }
+var errUnterminatedInterp = errors.New(`unterminated string interpolation: missing ")"; write "\\(" for a literal "\("`)

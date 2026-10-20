@@ -20,23 +20,19 @@ type floatSpelling struct {
 
 // formatFloat spells f for format, whose non-finite floats are named by s.
 func formatFloat(f float64, format Format, s floatSpelling) (string, error) {
-	var special string
-	switch {
-	case math.IsNaN(f):
-		special = s.nan
-	case math.IsInf(f, 1):
-		special = s.inf
-	case math.IsInf(f, -1):
-		special = s.negInf
-	}
+	out := strconv.FormatFloat(f, 'g', -1, 64)
 	if math.IsNaN(f) || math.IsInf(f, 0) {
+		special := s.nan
+		if math.IsInf(f, 1) {
+			special = s.inf
+		} else if math.IsInf(f, -1) {
+			special = s.negInf
+		}
 		if special == "" {
-			return "", fmt.Errorf("%s has no spelling for %s", format, strconv.FormatFloat(f, 'g', -1, 64))
+			return "", fmt.Errorf("%s has no spelling for %s", format, out)
 		}
 		return special, nil
 	}
-
-	out := strconv.FormatFloat(f, 'g', -1, 64)
 	// A float that formats without a decimal point would read back as an
 	// integer, so keep it unambiguous.
 	if !strings.ContainsAny(out, ".eE") {

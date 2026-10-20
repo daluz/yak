@@ -3,16 +3,17 @@ package schemaimport
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-// CRDs translates every served version of the CustomResourceDefinitions in
+// crds translates every served version of the CustomResourceDefinitions in
 // files into a schema named for its kind and version, such as WidgetV1. It
 // answers the library, and a warning for every keyword it leaves out and
 // every document that is not a CustomResourceDefinition.
-func CRDs(files []File) ([]byte, []string, error) {
+func crds(files []File) ([]byte, []string, error) {
 	return importFiles(files, false, "CustomResourceDefinition", (*importer).document)
 }
 
@@ -23,11 +24,7 @@ func holdsCRD(n *yaml.Node) bool {
 	case "CustomResourceDefinition":
 		return true
 	case "List", "CustomResourceDefinitionList":
-		for _, item := range deref(get(n, "items")).Content {
-			if holdsCRD(item) {
-				return true
-			}
-		}
+		return slices.ContainsFunc(deref(get(n, "items")).Content, holdsCRD)
 	}
 	return false
 }

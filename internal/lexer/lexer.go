@@ -224,7 +224,7 @@ func (l *lexer) scanToken() error {
 	// tells them apart. What falls through is an operator and nothing else.
 	switch {
 	case c == '"' || c == '\'':
-		return l.scanQuoted(false)
+		return l.scanQuotedAt(start, false)
 	case c == 'r' && isStringStart(l.peekAt(1)):
 		l.advance()
 		if l.peek() == '|' || l.peek() == '>' {
@@ -232,7 +232,8 @@ func (l *lexer) scanToken() error {
 		}
 		return l.scanQuotedAt(start, true)
 	case isIdentStart(c):
-		return l.scanIdent()
+		l.emit(token.Token{Kind: token.Ident, Lit: l.readIdent(), Pos: start})
+		return nil
 	case isDigit(c) || (c == '-' && isDigit(l.peekAt(1))):
 		return l.scanNumber()
 	case c == '.':
@@ -371,60 +372,53 @@ func (l *lexer) docMarker() (string, bool) {
 }
 
 func (l *lexer) readIdent() string {
-	var sb strings.Builder
-	sb.WriteByte(l.advance())
+	from := l.off
+	l.advance()
 	for !l.eof() {
 		c := l.peek()
 		if isIdentPart(c) {
-			sb.WriteByte(l.advance())
+			l.advance()
 			continue
 		}
 		// A hyphen belongs to the identifier only when it joins two word
 		// characters, keeping kebab-case keys usable without stealing the
 		// minus sign from future arithmetic.
 		if c == '-' && isIdentPart(l.peekAt(1)) {
-			sb.WriteByte(l.advance())
+			l.advance()
 			continue
 		}
 		break
 	}
-	return sb.String()
-}
-
-func (l *lexer) scanIdent() error {
-	start := l.pos()
-	name := l.readIdent()
-	l.emit(token.Token{Kind: token.Ident, Lit: name, Pos: start})
-	return nil
+	return string(l.src[from:l.off])
 }
 
 func (l *lexer) scanNumber() error {
 	start := l.pos()
-	var sb strings.Builder
+	from := l.off
 	if l.peek() == '-' {
-		sb.WriteByte(l.advance())
+		l.advance()
 	}
 	for isDigit(l.peek()) {
-		sb.WriteByte(l.advance())
+		l.advance()
 	}
 	isFloat := false
 	if l.peek() == '.' && isDigit(l.peekAt(1)) {
 		isFloat = true
-		sb.WriteByte(l.advance())
+		l.advance()
 		for isDigit(l.peek()) {
-			sb.WriteByte(l.advance())
+			l.advance()
 		}
 	}
 	if c := l.peek(); c == 'e' || c == 'E' {
 		next := l.peekAt(1)
 		if isDigit(next) || ((next == '+' || next == '-') && isDigit(l.peekAt(2))) {
 			isFloat = true
-			sb.WriteByte(l.advance())
+			l.advance()
 			if c := l.peek(); c == '+' || c == '-' {
-				sb.WriteByte(l.advance())
+				l.advance()
 			}
 			for isDigit(l.peek()) {
-				sb.WriteByte(l.advance())
+				l.advance()
 			}
 		}
 	}
@@ -435,7 +429,7 @@ func (l *lexer) scanNumber() error {
 	if isFloat {
 		kind = token.Float
 	}
-	l.emit(token.Token{Kind: kind, Lit: sb.String(), Pos: start})
+	l.emit(token.Token{Kind: kind, Lit: string(l.src[from:l.off]), Pos: start})
 	return nil
 }
 

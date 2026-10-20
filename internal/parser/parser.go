@@ -7,6 +7,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/daluz/yak/internal/ast"
@@ -158,9 +159,9 @@ func attachFoot(body ast.Node, foot []string) {
 	case *ast.Let:
 		attachFoot(t.Body, foot)
 	case *ast.Mapping:
-		for i := len(t.Entries) - 1; i >= 0; i-- {
-			if !t.Entries[i].Hidden {
-				t.Entries[i].Foot = foot
+		for _, e := range slices.Backward(t.Entries) {
+			if !e.Hidden {
+				e.Foot = foot
 				return
 			}
 		}
@@ -582,17 +583,25 @@ func (p *parser) parseName(what string) (token.Token, error) {
 	if t.Kind != token.Ident {
 		return t, p.errorf(t.Pos, "expected the name of a %s, found %s", what, t)
 	}
-	if token.IsReserved(t.Lit) {
-		return t, p.errorf(t.Pos, "%q is a reserved word and cannot name a %s", t.Lit, what)
-	}
-	if token.IsKeyword(t.Lit) {
-		return t, p.errorf(t.Pos, "%q is a keyword and cannot name a %s", t.Lit, what)
-	}
-	if t.Lit == ast.Wildcard {
-		return t, p.errorf(t.Pos, "%q discards a value and cannot name a %s", t.Lit, what)
+	if err := p.checkName(t, what); err != nil {
+		return t, err
 	}
 	p.next()
 	return t, nil
+}
+
+// checkName rejects a name that a reserved word, a keyword or the wildcard
+// already claims.
+func (p *parser) checkName(t token.Token, what string) error {
+	switch {
+	case token.IsReserved(t.Lit):
+		return p.errorf(t.Pos, "%q is a reserved word and cannot name a %s", t.Lit, what)
+	case token.IsKeyword(t.Lit):
+		return p.errorf(t.Pos, "%q is a keyword and cannot name a %s", t.Lit, what)
+	case t.Lit == ast.Wildcard:
+		return p.errorf(t.Pos, "%q discards a value and cannot name a %s", t.Lit, what)
+	}
+	return nil
 }
 
 // parseSignature parses the parameter list that turns a binding into a
@@ -630,18 +639,17 @@ func (p *parser) parseParams(fn *ast.Function) error {
 // list describes a comma-separated list in brackets, for nextInList.
 type list struct {
 	closer token.Kind
-	// close is how closer is written.
-	close string
 	// name is what the list is called, and in what an unexpected token is
 	// reported as being found in.
 	name, in string
 }
 
 var (
-	paramList   = list{closer: token.RParen, close: ")", name: "parameter list", in: "a parameter list"}
-	argList     = list{closer: token.RParen, close: ")", name: "argument list", in: "an argument list"}
-	flowSeqList = list{closer: token.RBracket, close: "]", name: "flow sequence", in: "flow sequence"}
-	flowMapList = list{closer: token.RBrace, close: "}", name: "flow mapping", in: "flow mapping"}
+	paramList   = list{closer: token.RParen, name: "parameter list", in: "a parameter list"}
+	argList     = list{closer: token.RParen, name: "argument list", in: "an argument list"}
+	flowSeqList = list{closer: token.RBracket, name: "flow sequence", in: "flow sequence"}
+	flowMapList = list{closer: token.RBrace, name: "flow mapping", in: "flow mapping"}
+	typeMapList = list{closer: token.RBrace, name: "mapping type", in: "a mapping type"}
 )
 
 // nextInList moves to the next item of the list l that open opened, and
@@ -655,12 +663,12 @@ func (p *parser) nextInList(open token.Token, l list, first bool) (bool, error) 
 	}
 	switch {
 	case p.at(token.EOF):
-		return false, p.errorf(open.Pos, "unterminated %s: missing %q", l.name, l.close)
+		return false, p.errorf(open.Pos, "unterminated %s: missing %q", l.name, l.closer.Text())
 	case p.at(l.closer):
 		p.next()
 		return false, nil
 	case !separated:
-		return false, p.errorf(p.cur().Pos, "expected %q or %q in %s, found %s", ",", l.close, l.in, p.cur())
+		return false, p.errorf(p.cur().Pos, "expected %q or %q in %s, found %s", ",", l.closer.Text(), l.in, p.cur())
 	}
 	return true, nil
 }
@@ -670,7 +678,10 @@ func (p *parser) nextInList(open token.Token, l list, first bool) (bool, error) 
 func (p *parser) parseParam(fn *ast.Function) (*ast.Param, error) {
 	var param *ast.Param
 	if p.at(token.LBracket) {
-		pat, err := p.parseNamingPattern("parameter")
+		pat, err := p.parsePattern("parameter")
+		if err == nil {
+			err = p.checkNaming(pat, "parameter")
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -768,16 +779,6 @@ func (p *parser) parsePatternHead() (bindHead, error) {
 	return bindHead{pattern: pat, assign: assign}, nil
 }
 
-// parseNamingPattern parses a bracketed pattern that has to bind a name, as
-// a parameter or a binding written as one does.
-func (p *parser) parseNamingPattern(what string) (*ast.Pattern, error) {
-	pat, err := p.parsePattern(what)
-	if err != nil {
-		return nil, err
-	}
-	return pat, p.checkNaming(pat, what)
-}
-
 // checkNaming rejects a pattern that binds a name twice or binds none. One of
 // nothing but wildcards would never be read, and so never be checked against
 // its value, which makes it a mistake rather than a test.
@@ -823,10 +824,7 @@ func (p *parser) parseBlockSequence(col int) (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		s.Items = append(s.Items, &ast.Item{
-			Comments: ast.Comments{Head: head, Line: p.takeLine(start)},
-			Value:    value,
-		})
+		s.Items = append(s.Items, &ast.Item{Head: head, Line: p.takeLine(start), Value: value})
 	}
 	return s, nil
 }

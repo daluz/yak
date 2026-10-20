@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/daluz/yak/internal/engine"
+	"github.com/daluz/yak/internal/module"
 	"github.com/daluz/yak/internal/render"
 )
 
@@ -40,7 +41,7 @@ func TestTemplateGolden(t *testing.T) {
 	}
 
 	for _, path := range templates {
-		name := strings.TrimSuffix(filepath.Base(path), engine.ExtTemplate)
+		name := strings.TrimSuffix(filepath.Base(path), module.Ext)
 		t.Run(name, func(t *testing.T) {
 			contexts, err := filepath.Glob(filepath.Join(dir, name+".ctx*"))
 			if err != nil {
@@ -135,7 +136,7 @@ func TestTemplateErrors(t *testing.T) {
 	}
 
 	for _, path := range templates {
-		name := strings.TrimSuffix(filepath.Base(path), engine.ExtTemplate)
+		name := strings.TrimSuffix(filepath.Base(path), module.Ext)
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
 			err := engine.Template(engine.TemplateRequest{
@@ -168,7 +169,7 @@ func TestSchemaCheck(t *testing.T) {
 		t.Fatalf("no templates found in %s", dir)
 	}
 	for _, path := range templates {
-		name := strings.TrimSuffix(filepath.Base(path), engine.ExtTemplate)
+		name := strings.TrimSuffix(filepath.Base(path), module.Ext)
 		t.Run(name, func(t *testing.T) {
 			err := engine.CheckSchemas(path)
 			if err == nil {

@@ -13,7 +13,6 @@ import (
 var yamlSpec = formatSpec{
 	name:    "yaml",
 	aliases: []string{"yml"},
-	floats:  yamlFloats,
 	encode:  encodeYAML,
 }
 
@@ -21,10 +20,10 @@ var yamlSpec = formatSpec{
 var yamlFloats = floatSpelling{nan: ".nan", inf: ".inf", negInf: "-.inf"}
 
 // encodeYAML writes the documents as block YAML, separated by "---".
-func encodeYAML(docs []eval.Value, opts Options, floats floatSpelling) ([]byte, error) {
+func encodeYAML(docs []eval.Value, opts Options) ([]byte, error) {
 	nodes := make([]*yaml.Node, 0, len(docs))
 	for _, doc := range docs {
-		node, err := toNode(doc, floats)
+		node, err := toNode(doc)
 		if err != nil {
 			return nil, err
 		}
@@ -50,7 +49,7 @@ func encodeYAML(docs []eval.Value, opts Options, floats floatSpelling) ([]byte, 
 	return buf.Bytes(), nil
 }
 
-func toNode(v eval.Value, floats floatSpelling) (*yaml.Node, error) {
+func toNode(v eval.Value) (*yaml.Node, error) {
 	switch t := v.(type) {
 	case eval.Null:
 		return scalar("!!null", "null"), nil
@@ -62,7 +61,7 @@ func toNode(v eval.Value, floats floatSpelling) (*yaml.Node, error) {
 		return scalar("!!int", strconv.FormatInt(int64(t), 10)), nil
 
 	case eval.Float:
-		s, err := formatFloat(float64(t), FormatYAML, floats)
+		s, err := formatFloat(float64(t), FormatYAML, yamlFloats)
 		if err != nil {
 			return nil, err
 		}
@@ -74,7 +73,7 @@ func toNode(v eval.Value, floats floatSpelling) (*yaml.Node, error) {
 	case *eval.Object:
 		node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 		for _, f := range fieldEntries(t) {
-			valNode, err := toNode(f.value, floats)
+			valNode, err := toNode(f.value)
 			if err != nil {
 				return nil, err
 			}
@@ -91,7 +90,7 @@ func toNode(v eval.Value, floats floatSpelling) (*yaml.Node, error) {
 	case *eval.Array:
 		node := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 		for _, item := range itemEntries(t) {
-			itemNode, err := toNode(item.value, floats)
+			itemNode, err := toNode(item.value)
 			if err != nil {
 				return nil, err
 			}

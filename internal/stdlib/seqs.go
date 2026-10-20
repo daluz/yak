@@ -299,10 +299,10 @@ func quantifier(stop bool) func(call) (eval.Value, error) {
 				}
 			}
 			b, ok := r.(eval.Bool)
-			if !ok && none {
-				return nil, c.errorf(0, "needs a sequence of booleans, found %s at index %d", r.TypeName(), i)
-			}
 			if !ok {
+				if none {
+					return nil, c.errorf(0, "needs a sequence of booleans, found %s at index %d", r.TypeName(), i)
+				}
 				return nil, c.errorf(1, "needs a predicate that answers a boolean, found %s at index %d",
 					r.TypeName(), i)
 			}

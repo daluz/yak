@@ -100,7 +100,7 @@ func (p *Pattern) walk(path []int, f func(*Pattern, []int)) {
 	switch {
 	case p.Items != nil:
 		for i, item := range p.Items {
-			item.walk(append(path[:len(path):len(path)], i), f)
+			item.walk(append(slices.Clip(path), i), f)
 		}
 	case p.Name != Wildcard:
 		f(p, path)

@@ -42,10 +42,7 @@ type formatSpec struct {
 	aliases []string
 	// single marks a format that holds exactly one document.
 	single bool
-	// floats names the non-finite floats. The zero value refuses them, as
-	// JSON has no way to write them.
-	floats floatSpelling
-	encode func(docs []eval.Value, opts Options, floats floatSpelling) ([]byte, error)
+	encode func(docs []eval.Value, opts Options) ([]byte, error)
 }
 
 // formatSpecs is indexed by Format, in the order formats are offered to the

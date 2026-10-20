@@ -157,26 +157,21 @@ func (o *Object) insertAt(i int, f *Field) {
 }
 
 // reserve appends an unnamed slot, preserving source order while the key is
-// still being evaluated.
-func (o *Object) reserve(c Comments, hidden, hideNull bool, v *Thunk) *Field {
-	f := &Field{Comments: c, Hidden: hidden, HideNull: hideNull, Value: v}
-	o.fields = append(o.fields, f)
-	return f
+// still being evaluated, and answers its position. Nothing may be inserted
+// before the slot until bind names it.
+func (o *Object) reserve(c Comments, hidden, hideNull bool, v *Thunk) int {
+	o.fields = append(o.fields, &Field{Comments: c, Hidden: hidden, HideNull: hideNull, Value: v})
+	return len(o.fields) - 1
 }
 
-// bind assigns a name to a reserved slot.
-func (o *Object) bind(f *Field, name string) error {
+// bind names the slot reserved at position i.
+func (o *Object) bind(i int, name string) error {
 	if _, ok := o.index[name]; ok {
 		return fmt.Errorf("duplicate key %q", name)
 	}
-	for i, existing := range o.fields {
-		if existing == f {
-			f.Name = name
-			o.index[name] = i
-			return nil
-		}
-	}
-	return fmt.Errorf("internal error: unknown field slot for key %q", name)
+	o.fields[i].Name = name
+	o.index[name] = i
+	return nil
 }
 
 // Elem is one item of an Array. It wraps the item's value so that the item

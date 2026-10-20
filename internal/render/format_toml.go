@@ -12,9 +12,10 @@ import (
 var tomlSpec = formatSpec{
 	name:   "toml",
 	single: true,
-	floats: floatSpelling{nan: "nan", inf: "inf", negInf: "-inf"},
 	encode: encodeTOML,
 }
+
+var tomlFloats = floatSpelling{nan: "nan", inf: "inf", negInf: "-inf"}
 
 // encodeTOML writes a single document as TOML.
 //
@@ -23,13 +24,13 @@ var tomlSpec = formatSpec{
 // are reported as errors; the third means a document's keys come out grouped
 // rather than in source order, which is the one place a yak renderer cannot
 // keep the order it was written in.
-func encodeTOML(docs []eval.Value, opts Options, floats floatSpelling) ([]byte, error) {
+func encodeTOML(docs []eval.Value, _ Options) ([]byte, error) {
 	root, ok := docs[0].(*eval.Object)
 	if !ok {
 		return nil, fmt.Errorf("toml needs a mapping at the top level, but the document is a %s", docs[0].TypeName())
 	}
 
-	w := &tomlWriter{floats: floats}
+	w := &tomlWriter{}
 	if err := w.table(root, nil); err != nil {
 		return nil, err
 	}
@@ -37,8 +38,7 @@ func encodeTOML(docs []eval.Value, opts Options, floats floatSpelling) ([]byte, 
 }
 
 type tomlWriter struct {
-	buf    bytes.Buffer
-	floats floatSpelling
+	buf bytes.Buffer
 }
 
 // table writes the body of the table at path: its plain keys first, then the
@@ -129,7 +129,7 @@ func (w *tomlWriter) inline(v eval.Value, path string) error {
 		w.buf.WriteString(strconv.FormatInt(int64(t), 10))
 
 	case eval.Float:
-		s, err := formatFloat(float64(t), FormatTOML, w.floats)
+		s, err := formatFloat(float64(t), FormatTOML, tomlFloats)
 		if err != nil {
 			return err
 		}

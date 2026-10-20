@@ -129,8 +129,7 @@ func (im *importer) convert(n *yaml.Node, path string, root bool) *typ {
 	}
 
 	var t *typ
-	own := get(n, "type") != nil || get(n, "properties") != nil ||
-		get(n, "additionalProperties") != nil || get(n, "required") != nil
+	own := get(n, "type") != nil || describesObject(n)
 	alts := ""
 	for _, key := range []string{"anyOf", "oneOf"} {
 		if !im.open || get(n, key) == nil {
@@ -224,8 +223,7 @@ func (im *importer) isObject(n *yaml.Node) bool {
 	case "object":
 		return true
 	case "":
-		return get(n, "properties") != nil || get(n, "additionalProperties") != nil ||
-			get(n, "required") != nil || get(n, "allOf") != nil
+		return describesObject(n) || get(n, "allOf") != nil
 	}
 	return false
 }
@@ -236,8 +234,7 @@ func (im *importer) isObject(n *yaml.Node) bool {
 // only a lone part is imported, with the keywords of n beside it.
 func (im *importer) allOf(n *yaml.Node, path string) *typ {
 	parts := deref(get(n, "allOf")).Content
-	own := get(n, "type") != nil || get(n, "properties") != nil ||
-		get(n, "additionalProperties") != nil || get(n, "required") != nil
+	own := get(n, "type") != nil || describesObject(n)
 	if len(parts) == 1 && !own {
 		return im.convert(parts[0], path, false)
 	}
@@ -317,8 +314,8 @@ func (m *mapping) add(f field) {
 // merges declares, or nil, warning about nothing translating it has warned
 // about already.
 func (im *importer) inherited(merges []string, name, path string) *typ {
-	for i := len(merges) - 1; i >= 0; i-- {
-		if p := get(get(im.defs[merges[i]], "properties"), name); p != nil {
+	for _, merge := range slices.Backward(merges) {
+		if p := get(get(im.defs[merge], "properties"), name); p != nil {
 			warnings, regex := len(im.warnings), im.regex
 			t := im.convert(p, path+"."+name, false)
 			im.warnings, im.regex = im.warnings[:warnings], regex || im.regex
@@ -384,7 +381,7 @@ func (im *importer) typed(n *yaml.Node, path string, root bool) *typ {
 		return im.union(parts, path)
 	}
 	name := str(get(n, "type"))
-	if name == "" && im.open && (get(n, "properties") != nil || get(n, "additionalProperties") != nil || get(n, "required") != nil) {
+	if name == "" && im.open && describesObject(n) {
 		name = "object"
 	}
 	return im.ofType(n, name, path, root)
@@ -430,6 +427,12 @@ func (im *importer) ofType(n *yaml.Node, name, path string, root bool) *typ {
 		t = builtin("any")
 	}
 	return t
+}
+
+// describesObject reports whether n declares the properties, the
+// additionalProperties or the required fields of an object.
+func describesObject(n *yaml.Node) bool {
+	return get(n, "properties") != nil || get(n, "additionalProperties") != nil || get(n, "required") != nil
 }
 
 // object translates the properties of the object schema n, answering nil

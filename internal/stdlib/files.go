@@ -40,12 +40,10 @@ func readFile(strict bool) func(call) (eval.Value, error) {
 			b, err = os.ReadFile(full)
 		}
 		if err != nil {
-			var e *eval.Error
-			if errors.As(err, &e) {
+			if _, ok := errors.AsType[*eval.Error](err); ok {
 				return nil, err
 			}
-			var pe *fs.PathError
-			if errors.As(err, &pe) {
+			if pe, ok := errors.AsType[*fs.PathError](err); ok {
 				err = pe.Err
 			}
 			return nil, c.errorf(0, "cannot read %q: %s", p, err.Error())

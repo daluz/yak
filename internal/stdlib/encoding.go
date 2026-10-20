@@ -90,8 +90,7 @@ func encode(c call, opts render.Options) (string, error) {
 	var buf bytes.Buffer
 	opts.KeepNullDocuments = true
 	if err := render.Documents(&buf, []eval.Value{v}, opts); err != nil {
-		var e *eval.Error
-		if errors.As(err, &e) {
+		if _, ok := errors.AsType[*eval.Error](err); ok {
 			return "", err
 		}
 		return "", c.errorf(0, "cannot encode its value: %s", err.Error())
