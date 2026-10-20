@@ -15,27 +15,40 @@ import (
 
 var update = flag.Bool("update", false, "rewrite golden files instead of comparing against them")
 
-// TestCRDsGolden imports every testdata/import/*.yaml file. The library it
-// answers is recorded in NAME.want.yakl and has to pass "yak schema check",
-// and its warnings, then its error, in NAME.want.err; a golden that would be
-// empty is not written.
-func TestCRDsGolden(t *testing.T) {
+// TestImportGolden imports every testdata/import/*.yaml and *.json file, in
+// the format its name begins with, "jsonschema-" or "openapi-", or else as
+// CustomResourceDefinitions. The library it answers is recorded in
+// NAME.want.yakl and has to pass "yak schema check", and its warnings, then
+// its error, in NAME.want.err; a golden that would be empty is not written.
+func TestImportGolden(t *testing.T) {
 	dir := filepath.Join("..", "..", "testdata", "import")
 	inputs, err := filepath.Glob(filepath.Join(dir, "*.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	jsons, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputs = append(inputs, jsons...)
 	if len(inputs) == 0 {
-		t.Fatalf("no CRDs found in %s", dir)
+		t.Fatalf("no inputs found in %s", dir)
 	}
 	for _, path := range inputs {
-		name := strings.TrimSuffix(filepath.Base(path), ".yaml")
+		file := filepath.Base(path)
+		name := strings.TrimSuffix(file, filepath.Ext(file))
+		format := schemaimport.FormatCRD
+		for _, f := range []string{schemaimport.FormatJSONSchema, schemaimport.FormatOpenAPI} {
+			if strings.HasPrefix(name, f+"-") {
+				format = f
+			}
+		}
 		t.Run(name, func(t *testing.T) {
 			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			lib, warnings, err := schemaimport.CRDs([]schemaimport.File{{Name: name + ".yaml", Data: data}})
+			lib, warnings, err := schemaimport.Import(format, []schemaimport.File{{Name: file, Data: data}})
 			diagnostics := strings.Join(warnings, "\n")
 			if err != nil {
 				diagnostics = strings.TrimPrefix(diagnostics+"\n"+err.Error(), "\n")

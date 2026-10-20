@@ -1,0 +1,1 @@
+jsonschema-draft04.yaml: jsonschema_draft04.tuple: its items are not imported, since they are a list of schemas

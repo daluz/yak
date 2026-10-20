@@ -1,0 +1,5 @@
+jsonschema-service.json: Service_Config.owner: "format" is not imported
+jsonschema-service.json: Service_Config.probe: its oneOf is imported as an anyOf, which lets a value match more than one alternative
+jsonschema-service.json: Service_Config.legacy: takes no value, which is not imported, so it takes any value
+jsonschema-service.json: Service_Config.pair: "prefixItems" is not imported
+jsonschema-service.json: Node.parent: its $ref "other.json#/Node" is not imported, so it takes any value

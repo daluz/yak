@@ -1,0 +1,23 @@
+$schema: "http://json-schema.org/draft-04/schema#"
+type: object
+properties:
+  size:
+    type: number
+    minimum: 0
+    exclusiveMinimum: true
+    multipleOf: 0.5
+  tags:
+    type: array
+    items: {type: string}
+    uniqueItems: true
+  tuple:
+    type: array
+    items: [{type: string}, {type: integer}]
+  extra: {$ref: "#/definitions/Extra"}
+definitions:
+  Extra:
+    description: Anything goes.
+  io.example.v1.Thing:
+    type: object
+    properties:
+      id: {type: string}

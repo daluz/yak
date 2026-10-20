@@ -1,10 +1,7 @@
 package schemaimport
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"regexp"
 	"strings"
 
@@ -16,75 +13,7 @@ import (
 // answers the library, and a warning for every keyword it leaves out and
 // every document that is not a CustomResourceDefinition.
 func CRDs(files []File) ([]byte, []string, error) {
-	im := &importer{declaredIn: map[string]string{}}
-	names := make([]string, len(files))
-	for i, f := range files {
-		names[i] = f.Name
-		if err := im.read(f); err != nil {
-			return nil, im.warnings, err
-		}
-	}
-	if len(im.schemas) == 0 {
-		return nil, im.warnings, fmt.Errorf("found no CustomResourceDefinition in %s", strings.Join(names, ", "))
-	}
-	return im.library(names), im.warnings, nil
-}
-
-type importer struct {
-	file     string
-	warnings []string
-	schemas  []decl
-	// declaredIn names the CRD that declared each schema, and its file.
-	declaredIn map[string]string
-	// regex says that a check calls std.regex, which the library imports.
-	regex bool
-}
-
-type decl struct {
-	name string
-	typ  *typ
-}
-
-func (im *importer) warn(path, format string, args ...any) {
-	msg := fmt.Sprintf(format, args...)
-	if path != "" {
-		msg = path + ": " + msg
-	}
-	im.warnings = append(im.warnings, im.file+": "+msg)
-}
-
-func (im *importer) read(f File) error {
-	im.file = f.Name
-	docs, err := documents(f)
-	if err != nil {
-		return err
-	}
-	for _, doc := range docs {
-		if err := im.document(doc); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// documents answers the documents of f that are not empty.
-func documents(f File) ([]*yaml.Node, error) {
-	var docs []*yaml.Node
-	dec := yaml.NewDecoder(bytes.NewReader(f.Data))
-	for {
-		var doc yaml.Node
-		err := dec.Decode(&doc)
-		if errors.Is(err, io.EOF) {
-			return docs, nil
-		}
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", f.Name, err)
-		}
-		if len(doc.Content) == 0 || deref(doc.Content[0]).ShortTag() == "!!null" {
-			continue
-		}
-		docs = append(docs, doc.Content[0])
-	}
+	return importFiles(files, false, "CustomResourceDefinition", (*importer).document)
 }
 
 // holdsCRD says whether n is a CustomResourceDefinition, or a List holding
@@ -145,9 +74,6 @@ func (im *importer) crd(n *yaml.Node) error {
 		if !schemaName.MatchString(name) {
 			return fmt.Errorf("%s: %s has a version %q that cannot name a schema", im.file, label, version)
 		}
-		if prev, ok := im.declaredIn[name]; ok {
-			return fmt.Errorf("%s: %s and %s both name a schema %s", im.file, label, prev, name)
-		}
 		root := get(get(v, "schema"), "openAPIV3Schema")
 		if root == nil {
 			return fmt.Errorf("%s: version %s of %s has no schema.openAPIV3Schema", im.file, version, label)
@@ -156,7 +82,9 @@ func (im *importer) crd(n *yaml.Node) error {
 		if err != nil {
 			return err
 		}
-		im.declaredIn[name] = label + " in " + im.file
+		if err := im.declare(name, label); err != nil {
+			return err
+		}
 		im.schemas = append(im.schemas, decl{name: name, typ: t})
 	}
 	return nil

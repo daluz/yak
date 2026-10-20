@@ -26,18 +26,26 @@ func newSchemaImportCommand() *cobra.Command {
 	var output, format string
 	cmd := &cobra.Command{
 		Use:   "import FILE...",
-		Short: "Translate Kubernetes CustomResourceDefinitions into a library of schemas",
-		Long: "Translate every served version of the CustomResourceDefinitions in each\n" +
-			"FILE into a schema of one .yakl library, named for its kind and version,\n" +
-			"such as WidgetV1. \"-\" reads standard input, and a List of them, as kubectl\n" +
-			"writes, is read as well. A schema fills in the apiVersion and kind of the\n" +
-			"object, and takes any metadata.\n\n" +
-			"Types, enums, defaults, required fields and the limits on numbers,\n" +
-			"strings, sequences and mappings are imported. Every keyword that is not,\n" +
-			"such as x-kubernetes-validations or format, is left out with a warning,\n" +
-			"and so is every document that is not a CustomResourceDefinition.\n\n" +
+		Short: "Translate CRDs, JSON Schemas or OpenAPI documents into a library of schemas",
+		Long: "Translate the schemas each FILE declares into one .yakl library. \"-\"\n" +
+			"reads standard input.\n\n" +
+			"crd: every served version of a Kubernetes CustomResourceDefinition, or of\n" +
+			"each one a List holds, as kubectl writes, becomes a schema named for its\n" +
+			"kind and version, such as WidgetV1. It fills in the apiVersion and kind\n" +
+			"of the object, and takes any metadata.\n\n" +
+			"jsonschema: a JSON Schema document, draft-04 to 2020-12, becomes a schema\n" +
+			"named for its title, or else its file, and each of its $defs and\n" +
+			"definitions a schema named for its key.\n\n" +
+			"openapi: each schema under the components.schemas of an OpenAPI v3\n" +
+			"document becomes a schema named for its key.\n\n" +
+			"Types, enums, defaults, required fields, the limits on numbers, strings,\n" +
+			"sequences and mappings, and the $refs, allOf, anyOf and oneOf of JSON\n" +
+			"Schema and OpenAPI are imported. Every keyword that is not, such as\n" +
+			"x-kubernetes-validations or format, is left out with a warning.\n\n" +
 			"--format names what the files hold. Without it, a file holding a\n" +
-			"CustomResourceDefinition is read as crd, and any other is an error.",
+			"CustomResourceDefinition is read as crd, one with an \"openapi: 3.x\" as\n" +
+			"openapi, one whose $schema is a json-schema.org one as jsonschema, and\n" +
+			"any other is an error.",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			files := make([]schemaimport.File, len(args))

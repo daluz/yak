@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/service.schema.json",
+  "title": "Service Config",
+  "type": "object",
+  "required": ["name", "ports"],
+  "properties": {
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$", "maxLength": 63},
+    "kind": {"const": "Service"},
+    "replicas": {"type": "integer", "exclusiveMinimum": 0, "default": 1},
+    "owner": {"type": ["string", "null"], "format": "email"},
+    "ports": {"type": "array", "items": {"$ref": "#/$defs/Port"}, "minItems": 1},
+    "labels": {"type": "object", "additionalProperties": {"type": "string"}},
+    "probe": {"oneOf": [{"$ref": "#/$defs/HttpProbe"}, {"$ref": "#/$defs/ExecProbe"}]},
+    "timeout": {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "string", "pattern": "^[0-9]+s$"}]},
+    "tree": {"$ref": "#/$defs/Node"},
+    "legacy": false,
+    "pair": {"type": "array", "prefixItems": [{"type": "string"}, {"type": "integer"}]}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Port": {
+      "type": "object",
+      "required": ["number"],
+      "properties": {
+        "number": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "protocol": {"enum": ["TCP", "UDP"], "default": "TCP"}
+      }
+    },
+    "Probe": {
+      "type": "object",
+      "properties": {
+        "periodSeconds": {"type": "integer"}
+      }
+    },
+    "HttpProbe": {
+      "allOf": [{"$ref": "#/$defs/Probe"}],
+      "required": ["path", "periodSeconds"],
+      "properties": {"path": {"type": "string"}}
+    },
+    "ExecProbe": {
+      "allOf": [
+        {"$ref": "#/$defs/Probe"},
+        {"properties": {"command": {"type": "array", "items": {"type": "string"}}}, "required": ["command"]}
+      ]
+    },
+    "Node": {
+      "type": "object",
+      "properties": {
+        "value": {"type": "number"},
+        "children": {"type": "array", "items": {"$ref": "#/$defs/Node"}},
+        "parent": {"$ref": "other.json#/Node"}
+      }
+    }
+  }
+}

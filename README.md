@@ -102,7 +102,8 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
 - **Schemas.** `schema Port = {name: string, protocol: "TCP" | "UDP" = "TCP"}`
   declares a type, and `!Port {name: "http"}` checks a value against it and
   fills in its defaults. `yak schema import` writes the schemas of Kubernetes
-  CustomResourceDefinitions as a library.
+  CustomResourceDefinitions, JSON Schema and OpenAPI v3 documents as a
+  library.
 - **Strict by default.** The same template and context always render the same
   output: `std.random` is refused and `std.files` cannot leave the template's
   directory unless `--strict=false` is given.

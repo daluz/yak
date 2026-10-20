@@ -1,0 +1,5 @@
+openapi-petstore.yaml: Pet: "discriminator" is not imported
+openapi-petstore.yaml: Pet.id: "format" is not imported
+openapi-petstore.yaml: Dog: its additionalProperties is not imported, since the keys of the schemas it merges are
+openapi-petstore.yaml: Nicknamed.nickname: it is required, which is not imported, since no schema it merges declares it
+openapi-petstore.yaml: AnyPet: its oneOf is imported as an anyOf, which lets a value match more than one alternative

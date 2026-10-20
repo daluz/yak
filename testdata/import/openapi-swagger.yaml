@@ -1,0 +1,4 @@
+swagger: "2.0"
+info: {title: Old, version: 1.0.0}
+definitions:
+  Thing: {type: object}

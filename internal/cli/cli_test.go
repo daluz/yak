@@ -186,9 +186,9 @@ func TestSchemaImportFormat(t *testing.T) {
 		args []string
 		want string
 	}{
-		{nil, "deploy.yaml: cannot tell its format; give --format (crd)"},
+		{nil, "deploy.yaml: cannot tell its format; give --format (crd, jsonschema, openapi)"},
 		{[]string{"--format", "crd"}, "found no CustomResourceDefinition in " + deploy},
-		{[]string{"--format", "xml"}, `unknown input format "xml"; known formats: crd`},
+		{[]string{"--format", "xml"}, `unknown input format "xml"; known formats: crd, jsonschema, openapi`},
 	} {
 		_, err := run(t, append([]string{"schema", "import", deploy}, tc.args...)...)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

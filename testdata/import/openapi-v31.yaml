@@ -1,0 +1,13 @@
+openapi: 3.1.0
+info: {title: Widgets, version: 1.0.0}
+components:
+  schemas:
+    Widget:
+      type: object
+      required: [id]
+      properties:
+        id: {type: string}
+        size: {type: [integer, "null"], exclusiveMaximum: 100}
+        color: {$ref: "#/components/schemas/Color", description: The widget's color.}
+    Color:
+      enum: [red, green, blue]
