@@ -10,11 +10,14 @@ import (
 	"github.com/daluz/yak/internal/token"
 )
 
-// parseExpr parses an expression. A conditional binds looser than every
-// operator, so it is recognised before anything else.
+// parseExpr parses an expression. A conditional or a match binds looser than
+// every operator, so it is recognised before anything else.
 func (p *parser) parseExpr() (ast.Node, error) {
-	if p.atKeyword(token.KeywordIf) {
+	switch {
+	case p.atKeyword(token.KeywordIf):
 		return p.parseIf()
+	case p.atKeyword(token.KeywordMatch):
+		return p.parseMatch()
 	}
 	return p.parseCoalesce()
 }
@@ -185,6 +188,104 @@ func (p *parser) parseIf() (ast.Node, error) {
 		}
 	}
 	return n, nil
+}
+
+// parseMatch parses "match x case T then y ... else z". Like a conditional,
+// its values are full expressions, so a trailing "else" belongs to the
+// innermost match that is still open.
+func (p *parser) parseMatch() (ast.Node, error) {
+	kw := p.next()
+	x, err := p.parseCoalesce()
+	if err != nil {
+		return nil, err
+	}
+	n := &ast.Match{Base: ast.At(kw.Pos), X: x}
+	for p.atKeyword(token.KeywordCase) {
+		c, err := p.parseCase()
+		if err != nil {
+			return nil, err
+		}
+		n.Cases = append(n.Cases, c)
+	}
+	if len(n.Cases) == 0 {
+		return nil, p.errorf(p.cur().Pos, "expected %q after the value of a %q, found %s", "case", "match", p.cur())
+	}
+	if p.atKeyword(token.KeywordElse) {
+		p.next()
+		if n.Else, err = p.parseExpr(); err != nil {
+			return nil, err
+		}
+	}
+	return n, nil
+}
+
+// parseCase parses "case T as name then value", whose "as name" may be left
+// out. The items of a tuple T may bind names of their own.
+func (p *parser) parseCase() (*ast.Case, error) {
+	kw := p.next()
+	p.binding = true
+	typ, err := p.parseType()
+	p.binding = false
+	if err != nil {
+		return nil, err
+	}
+	c := &ast.Case{Base: ast.At(kw.Pos), Type: typ}
+	names := []token.Token{}
+	if p.atKeyword(token.KeywordAs) {
+		p.next()
+		name, err := p.parseName("case")
+		if err != nil {
+			return nil, err
+		}
+		c.Name = name.Lit
+		names = append(names, name)
+	}
+	if err := p.checkCaseNames(typ, names); err != nil {
+		return nil, err
+	}
+	if !p.atKeyword(token.KeywordThen) {
+		return nil, p.errorf(p.cur().Pos, "expected %q after the type of a %q, found %s", "then", "case", p.cur())
+	}
+	p.next()
+	if c.Value, err = p.parseExpr(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// checkCaseNames rejects a case that binds a name twice, among the names the
+// items of typ bind and names.
+func (p *parser) checkCaseNames(typ ast.Node, names []token.Token) error {
+	seen := map[string]bool{}
+	var walk func(ast.Node) error
+	walk = func(t ast.Node) error {
+		switch t := t.(type) {
+		case *ast.TypeBind:
+			if seen[t.Name] {
+				return p.errorf(t.Pos(), "%q is bound twice in one case", t.Name)
+			}
+			seen[t.Name] = true
+			return walk(t.Type)
+		case *ast.TypeCheck:
+			return walk(t.Type)
+		case *ast.TypeTuple:
+			for _, item := range t.Items {
+				if err := walk(item); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	if err := walk(typ); err != nil {
+		return err
+	}
+	for _, name := range names {
+		if seen[name.Lit] {
+			return p.errorf(name.Pos, "%q is bound twice in one case", name.Lit)
+		}
+	}
+	return nil
 }
 
 // parseLoop parses a "for pattern in source" clause of a comprehension,
@@ -437,6 +538,8 @@ func (p *parser) parseIdent() (ast.Node, error) {
 		// An "if" is looser than every operator, so one written where an
 		// operand belongs has to say which way it groups.
 		return nil, p.errorf(t.Pos, "an %q cannot be used as an operand here; wrap it in parentheses", "if")
+	case token.KeywordMatch:
+		return nil, p.errorf(t.Pos, "a %q cannot be used as an operand here; wrap it in parentheses", "match")
 	case token.KeywordNot:
 		// A "not" is looser than every comparison and every arithmetic
 		// operator, so it cannot stand on the right of one unwrapped.

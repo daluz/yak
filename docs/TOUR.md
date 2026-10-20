@@ -1415,8 +1415,8 @@ A sequence of another length is an error, as when a line
 yak: endpoints.yak:4:19: schema "Endpoint" expects 2 items, found 3
 ```
 
-A tuple holds two types or more, so `[int]` is an error that points to
-`seq[int]`.
+A tuple may hold a single type: `[int]` takes exactly one integer, while
+`seq[int]` takes any number of them.
 
 ### Defaults, checks and optional fields
 
@@ -1560,6 +1560,44 @@ web:
 The nested `metadata` is checked against `Metadata` and gets its defaults
 too. [The spec](SPEC.md#schemas) has every type and the exact rules of when
 a value is checked.
+
+### Matching on types
+
+`match` picks a value by the type of another. Each `case` names a type, and
+the first one the value matches gives the answer. `as` names what was
+matched, and so may each item of a tuple:
+
+```yaml
+schema Service =
+  name: str
+  port: int = 80
+
+let target(t) = match t
+  case str as host then "\(host):80"
+  case [str as host, int as port] then "\(host):\(port)"
+  case Service as svc then "\(svc.name).svc:\(svc.port)"
+  else "unknown"
+
+targets:
+  - target("web.example.com")
+  - target(["db.example.com", 5432])
+  - target({name: "api"})
+  - target(42)
+```
+
+renders as:
+
+```yaml
+targets:
+  - web.example.com:80
+  - db.example.com:5432
+  - api.svc:80
+  - unknown
+```
+
+`svc` holds the service with its default port filled in. A case matches only
+if every field and item fits, so it never picks a case that would fail later.
+Without an `else`, a value that no case matches gives `null`.
 
 ## 20. Packages
 

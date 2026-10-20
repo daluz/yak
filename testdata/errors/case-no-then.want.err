@@ -1,0 +1,1 @@
+case-no-then.yak:1:32: expected "then" after the type of a "case", found string

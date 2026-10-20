@@ -1,0 +1,2 @@
+size: match 7
+  case int if (n) => n then "counted"

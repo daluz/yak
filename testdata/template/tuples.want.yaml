@@ -5,6 +5,8 @@ fallback:
   - backup.example.com
   - 443
   - tls
+local:
+  - localhost
 route:
   name: api
   backends:

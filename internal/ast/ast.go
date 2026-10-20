@@ -223,6 +223,32 @@ type TypeTuple struct {
 	Items []Node
 }
 
+// TypeBind is "T as name", an item of a tuple type in a case, which binds
+// name to the item it matches.
+type TypeBind struct {
+	Base
+	Type Node
+	Name string
+}
+
+// Match is "match x case T then y ... else z": the value of the first case
+// whose type x matches, of Else when none does, or null without an Else.
+type Match struct {
+	Base
+	X     Node
+	Cases []*Case
+	Else  Node
+}
+
+// Case is one "case T as name then value" of a Match. Name is empty when the
+// case binds nothing to the whole value.
+type Case struct {
+	Base
+	Type  Node
+	Name  string
+	Value Node
+}
+
 // TypeMapping is a mapping type, written as a block or in braces.
 type TypeMapping struct {
 	Base

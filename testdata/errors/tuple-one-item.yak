@@ -1,0 +1,3 @@
+schema Ports = [int]
+
+ports: !Ports [80, 443]

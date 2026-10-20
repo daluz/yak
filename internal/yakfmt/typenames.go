@@ -61,6 +61,10 @@ func respell(tree *ast.Stream, toks []token.Token, names TypeNames) map[token.Po
 			bound[n.Name] = true
 		case *ast.Pattern:
 			bound[n.Name] = true
+		case *ast.Case:
+			bound[n.Name] = true
+		case *ast.TypeBind:
+			bound[n.Name] = true
 		}
 	})
 

@@ -1,0 +1,2 @@
+pair: match ["web", 443]
+  case [str as a, int] as a then a

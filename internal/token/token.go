@@ -250,14 +250,19 @@ const (
 // Keywords that mean something only where a value is expected. They are not
 // reserved, so "for" and "else" remain usable as mapping keys.
 const (
-	KeywordIf   = "if"
-	KeywordThen = "then"
-	KeywordElse = "else"
-	KeywordFor  = "for"
-	KeywordIn   = "in"
-	KeywordAnd  = "and"
-	KeywordOr   = "or"
-	KeywordNot  = "not"
+	KeywordIf    = "if"
+	KeywordThen  = "then"
+	KeywordElse  = "else"
+	KeywordFor   = "for"
+	KeywordIn    = "in"
+	KeywordAnd   = "and"
+	KeywordOr    = "or"
+	KeywordNot   = "not"
+	KeywordMatch = "match"
+	KeywordCase  = "case"
+	// KeywordAs follows a type in a case, so unlike the others it may
+	// still name a binding.
+	KeywordAs = "as"
 )
 
 // IsReserved reports whether name is a reserved word, which names no binding,
@@ -275,7 +280,8 @@ func IsReserved(name string) bool {
 // reading such a name back would be read as the keyword instead.
 func IsKeyword(name string) bool {
 	switch name {
-	case KeywordIf, KeywordThen, KeywordElse, KeywordFor, KeywordIn, KeywordAnd, KeywordOr, KeywordNot:
+	case KeywordIf, KeywordThen, KeywordElse, KeywordFor, KeywordIn, KeywordAnd, KeywordOr, KeywordNot,
+		KeywordMatch, KeywordCase:
 		return true
 	}
 	return false

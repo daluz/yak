@@ -53,6 +53,7 @@ made explicit, and a small expression language is added on top.
     - [Boolean operators](#boolean-operators)
     - [Precedence](#precedence)
 - [Conditionals](#conditionals)
+- [Pattern matching](#pattern-matching)
 - [Comprehensions](#comprehensions)
 - [Context](#context)
 - [Comments](#comments)
@@ -917,9 +918,9 @@ So `seq[int]` is `sequence[integer]`. The `[` is written against the name.
 A diagnostic names a type by its full name, as `type` does, whichever name
 the schema wrote.
 
-A tuple type, written in brackets, holds two types or more, and may span
-lines and end in a comma as a flow sequence does. `[T]` on its own is an
-error, so that it is never mistaken for `sequence[T]`:
+A tuple type, written in brackets, holds one type or more, and may span
+lines and end in a comma as a flow sequence does. `[T]` is a sequence of
+exactly one `T`, unlike `sequence[T]`:
 
 ```yaml
 schema Endpoint = [str, int]
@@ -1302,6 +1303,47 @@ banner:
   else "not for production use"
 ```
 
+## Pattern matching
+
+`match x` followed by `case T then y` clauses answers the value of the first
+case whose [type](#types) `x` matches. An `else` answers when none does, and
+without one a value that no case matches gives `null`, as an `if` without
+`else` does. The cases after the one taken, and their values, are never
+evaluated:
+
+```yaml
+let describe(v) = match v
+  case int if (n) => n < 0 then "negative"
+  case int | float then "number"
+  case str as s then "text: \(s)"
+  case [str as host, int as port] then "\(host):\(port)"
+  case seq[str] as names then "\(size(names)) names"
+  case {host: str} then "endpoint \(v.host)"
+  case null then "nothing"
+  else "something else"
+```
+
+`as name` after the type of a case binds the value it matched, with any
+defaults the type fills in, for the value of the case to read. The items of
+a tuple a case matches may bind names the same way, at any depth, as
+`[[str as a, str as b], int] as all` does. A name may be bound once in a case,
+and a tuple whose items bind names cannot be one alternative of a union.
+`as` binds nothing anywhere else, so a schema writing it is an error.
+
+A case matches only if the whole value fits its type: every field and item
+that the type checks is checked when the case is tried, rather than when it is
+read as a [tag](#when-values-are-checked) leaves it, so `{port: "http"}` passes
+over `case {port: int}` to the next case. A mapping type written in a case
+accepts the keys it does not declare, as an [open schema](#open-schemas)
+does; a schema it names keeps its own rules. `yak render --skip-schema-checks`
+does not change which case is taken.
+
+Like a conditional, a match binds looser than every operator, so as an
+operand it needs parentheses, and `case` and `else` continue it on the lines
+below. An `else` belongs to the innermost match still open, so it may hold
+another match. `match` and `case` are keywords: they cannot name a binding,
+but stay usable as keys.
+
 ## Comprehensions
 
 A flow collection whose single element is followed by `for name in source`
@@ -1498,7 +1540,8 @@ schema      := "schema" "*"? (target "=" type | "{" (target "=" type)+ "}")
 target      := identifier | "$" | "$$"
 type        := typeAtom ("|" typeAtom)* ("if" value)?
 typeAtom    := schemaName | literal | ("sequence" | "seq") "[" type "]" | tuple | typeMapping
-tuple       := "[" type ("," type)+ ","? "]"
+tuple       := "[" item ("," item)* ","? "]"
+item        := type ("as" identifier)?            -- "as" only in a case
 schemaName  := identifier ("." identifier)?
 typeMapping := "{" (member ("," member)*)? "}" | member+  -- aligned on one column
 member      := (identifier | string) (":" | ":?") type ("=" value)?
@@ -1507,8 +1550,9 @@ tag         := "!" schemaName value
 params      := "(" (param ("," param)* ","?)? ")"
 param       := (identifier | patterns) ("=" value)?
 lambda      := params "=>" value
-value       := conditional | coalesce
+value       := conditional | match | coalesce
 conditional := "if" coalesce "then" value ("else" value)?
+match       := "match" coalesce ("case" type ("as" identifier)? "then" value)+ ("else" value)?
 coalesce    := or
 or          := and ("or" and)*
 and         := not ("and" not)*

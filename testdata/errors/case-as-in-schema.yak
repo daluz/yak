@@ -1,0 +1,3 @@
+schema Endpoint = [str as host, int]
+
+primary: !Endpoint ["web", 443]

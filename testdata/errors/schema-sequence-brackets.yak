@@ -1,3 +1,0 @@
-schema Ports = [integer]
-
-ports: !Ports [80]

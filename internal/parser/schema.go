@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"slices"
+
 	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/token"
 )
@@ -242,12 +244,18 @@ func (p *parser) parseTypeMemberValue(member *ast.TypeMember) error {
 // parseType parses a type: alternatives separated by "|", and the "if" of
 // a check that the value has to pass as well.
 func (p *parser) parseType() (ast.Node, error) {
+	binding := p.binding
+	defer func() { p.binding = binding }()
 	first, err := p.parseTypeAtom()
 	if err != nil {
 		return nil, err
 	}
+	p.binding = false
 	typ := first
 	if p.at(token.Pipe) && p.sameLine() {
+		if binds(first) {
+			return nil, p.errorf(p.cur().Pos, "a tuple whose items bind names cannot be one alternative of a union")
+		}
 		union := &ast.TypeUnion{Base: ast.At(first.Pos()), Alts: []ast.Node{first}}
 		for p.at(token.Pipe) && p.sameLine() {
 			p.next()
@@ -274,6 +282,9 @@ func (p *parser) parseType() (ast.Node, error) {
 // sequence type, a tuple type or a mapping type in braces.
 func (p *parser) parseTypeAtom() (ast.Node, error) {
 	t := p.cur()
+	if t.Kind != token.LBracket {
+		p.binding = false
+	}
 	switch t.Kind {
 	case token.Ident:
 		switch t.Lit {
@@ -336,8 +347,8 @@ func (p *parser) parseTypeAtom() (ast.Node, error) {
 	return nil, p.errorf(t.Pos, "expected a type, found %s", t)
 }
 
-// parseTupleType parses "[A, B, ...]". A tuple of fewer than two items is
-// refused, so that "[T]" is never read as a sequence of T.
+// parseTupleType parses "[A, B, ...]", which holds one item or more. In a
+// case, an item may be followed by "as name".
 func (p *parser) parseTupleType() (ast.Node, error) {
 	open := p.next()
 	tuple := &ast.TypeTuple{Base: ast.At(open.Pos)}
@@ -353,12 +364,36 @@ func (p *parser) parseTupleType() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		if p.atKeyword(token.KeywordAs) {
+			if !p.binding {
+				return nil, p.errorf(p.cur().Pos, "only a case and the items of the tuple it matches bind names with %q", "as")
+			}
+			p.next()
+			name, err := p.parseName("case")
+			if err != nil {
+				return nil, err
+			}
+			item = &ast.TypeBind{Base: ast.At(item.Pos()), Type: item, Name: name.Lit}
+		}
 		tuple.Items = append(tuple.Items, item)
 	}
-	if len(tuple.Items) < 2 {
-		return nil, p.errorf(open.Pos, "a tuple type holds two items or more, and a sequence of any length is written %q", "sequence[T]")
+	if len(tuple.Items) == 0 {
+		return nil, p.errorf(open.Pos, "a tuple type holds one item or more, and a sequence of any length is written %q", "sequence[T]")
 	}
 	return tuple, nil
+}
+
+// binds reports whether the items of a tuple t is, at any depth, bind a name.
+func binds(t ast.Node) bool {
+	switch t := t.(type) {
+	case *ast.TypeBind:
+		return true
+	case *ast.TypeCheck:
+		return binds(t.Type)
+	case *ast.TypeTuple:
+		return slices.ContainsFunc(t.Items, binds)
+	}
+	return false
 }
 
 // parseSchemaPath parses "Name" or "module.Name", the way a type and a tag

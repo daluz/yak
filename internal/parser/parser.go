@@ -43,6 +43,9 @@ type parser struct {
 	// nested counts the values being parsed inside one another, so a block
 	// can tell whether it is the one a document holds.
 	nested int
+	// binding says that the items of a tuple type being parsed may bind
+	// names with "as", as they may in the type of a case.
+	binding bool
 
 	comments *commentSet
 }

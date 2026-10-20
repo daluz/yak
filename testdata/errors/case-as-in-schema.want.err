@@ -1,0 +1,1 @@
+case-as-in-schema.yak:1:24: only a case and the items of the tuple it matches bind names with "as"

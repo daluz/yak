@@ -138,6 +138,10 @@ func (e *Env) moduleSchema(module, name string, pos token.Pos) (*schema, error) 
 type site struct {
 	of, path string
 	pos      token.Pos
+	// pending collects the checks left for when a value is read, for a
+	// case to run them all before it decides that it matches. It is nil
+	// everywhere else.
+	pending *[]*Thunk
 }
 
 func (w site) String() string {
@@ -156,12 +160,12 @@ func (w site) field(name string, pos token.Pos) site {
 	if w.path != "" {
 		path = w.path + "." + name
 	}
-	return site{of: w.of, path: path, pos: w.at(pos)}
+	return site{of: w.of, path: path, pos: w.at(pos), pending: w.pending}
 }
 
 // item is the site of the item at index i.
 func (w site) item(i int, pos token.Pos) site {
-	return site{of: w.of, path: fmt.Sprintf("%s[%d]", w.path, i), pos: w.at(pos)}
+	return site{of: w.of, path: fmt.Sprintf("%s[%d]", w.path, i), pos: w.at(pos), pending: w.pending}
 }
 
 // at answers pos, or where the enclosing value was written when pos is not
@@ -250,7 +254,11 @@ func (s *schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 			case !ok:
 				return nil, mismatch(at, "sequence", v)
 			}
-			return nil, misfit(deepMisfit, at.pos, "%s expects %d items, found %d", at, len(t.Items), arr.Len())
+			want := fmt.Sprintf("%d items", len(t.Items))
+			if len(t.Items) == 1 {
+				want = "1 item"
+			}
+			return nil, misfit(deepMisfit, at.pos, "%s expects %s, found %d", at, want, arr.Len())
 		}
 		items := make([]*Elem, arr.Len())
 		for i, e := range arr.Items() {
@@ -259,6 +267,8 @@ func (s *schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 		return NewArray(items), nil
 	case *ast.TypeMapping:
 		return s.checkMapping(v, t, at, fresh)
+	case *ast.TypeBind:
+		return s.check(v, t.Type, at, fresh)
 	case *ast.TypeUnion:
 		if skip {
 			// The alternative still decides which defaults are filled in,
@@ -269,7 +279,7 @@ func (s *schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 		}
 		var deep error
 		for _, alt := range t.Alts {
-			r, err := s.check(v, alt, at, fresh)
+			r, err := s.settle(v, alt, at, fresh)
 			if err == nil {
 				return r, nil
 			}
@@ -318,7 +328,7 @@ func (s *schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 // lazy answers a thunk that checks the value of t against typ when it is
 // first read. An optional field may be null whatever its type.
 func (s *schema) lazy(t *Thunk, typ ast.Node, at site, optional bool) *Thunk {
-	return &Thunk{env: s.env, pos: at.pos, fn: func() (Value, error) {
+	checked := &Thunk{env: s.env, pos: at.pos, fn: func() (Value, error) {
 		v, err := t.Value()
 		if err != nil {
 			return nil, err
@@ -328,6 +338,28 @@ func (s *schema) lazy(t *Thunk, typ ast.Node, at site, optional bool) *Thunk {
 		}
 		return s.check(v, typ, at, false)
 	}}
+	if at.pending != nil {
+		*at.pending = append(*at.pending, checked)
+	}
+	return checked
+}
+
+// settle checks v against t as check does. When at collects pending checks,
+// it runs every one the check leaves before answering, so that a misfit
+// anywhere in v is reported now.
+func (s *schema) settle(v Value, t ast.Node, at site, fresh bool) (Value, error) {
+	if at.pending == nil {
+		return s.check(v, t, at, fresh)
+	}
+	var pending []*Thunk
+	at.pending = &pending
+	r, err := s.check(v, t, at, fresh)
+	for err == nil && len(pending) > 0 {
+		next := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		_, err = next.Value()
+	}
+	return r, err
 }
 
 // typeField is one field of a mapping type, along with the schema that wrote
@@ -558,6 +590,8 @@ func describe(t ast.Node) string {
 		return strings.Join(alts, " or ")
 	case *ast.TypeCheck:
 		return describe(t.Type)
+	case *ast.TypeBind:
+		return describe(t.Type)
 	}
 	return "a type"
 }
@@ -647,6 +681,16 @@ func checkNames(n ast.Node, env *Env) error {
 		return checkAll(env, n.X, n.Y)
 	case *ast.If:
 		return checkAll(env, n.Cond, n.Then, n.Else)
+	case *ast.Match:
+		for _, c := range n.Cases {
+			if err := caseSchema(c, env).checkType(c.Type); err != nil {
+				return err
+			}
+			if err := checkNames(c.Value, env); err != nil {
+				return err
+			}
+		}
+		return checkAll(env, n.X, n.Else)
 	case *ast.SeqComp:
 		return checkAll(env, append(loopNodes(n.Loops), n.Item)...)
 	case *ast.MapComp:
@@ -707,6 +751,8 @@ func (s *schema) checkType(t ast.Node) error {
 				return err
 			}
 		}
+	case *ast.TypeBind:
+		return s.checkType(t.Type)
 	case *ast.TypeUnion:
 		for _, alt := range t.Alts {
 			if err := s.checkType(alt); err != nil {

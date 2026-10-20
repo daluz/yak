@@ -3,7 +3,7 @@
 schema Endpoint = [str, int]
 
 ## A union of tuples picks the one whose length the value has.
-schema Address = [str, int] | [str, int, str]
+schema Address = [str] | [str, int] | [str, int, str]
 
 schema Route =
   name: str
@@ -16,6 +16,8 @@ schema Route =
 
 primary: !Endpoint ["web.example.com", 443]
 fallback: !Address ["backup.example.com", 443, "tls"]
+## A tuple of one type takes exactly one item.
+local: !Address ["localhost"]
 route: !Route
   name: "api"
   backends: [["a.example.com", 80], ["b.example.com", 8080]]

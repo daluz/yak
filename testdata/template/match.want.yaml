@@ -1,0 +1,18 @@
+described:
+  negative: negative
+  number: number
+  text: 'text: hi'
+  host: host web
+  endpoint: web:443
+  nested: a-b of 2
+  names: 3 names
+  service: web runs 1
+  open: endpoint db
+  nothing: nothing
+  other: something else
+ports:
+  numbered: numbered
+  named: named
+size: medium
+match: 1
+case: 2

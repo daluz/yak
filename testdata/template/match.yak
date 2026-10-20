@@ -1,0 +1,57 @@
+schema Service =
+  name: str
+  replicas: int = 1
+
+## The first case whose type the value matches gives the answer.
+let describe(v) = match v
+  case int if (n) => n < 0 then "negative"
+  case int | float then "number"
+  case str as s then "text: \(s)"
+  case [str as host] then "host \(host)"
+  case [str as host, int as port] then "\(host):\(port)"
+  case [[str as a, str as b], int] as all then "\(a)-\(b) of \(size(all))"
+  case seq[str] as names then "\(size(names)) names"
+  case Service as svc then "\(svc.name) runs \(svc.replicas)"
+  case {host: str, port: int} then "endpoint \(v.host)"
+  case null then "nothing"
+  else "something else"
+
+described:
+  negative: describe(-3)
+  number: describe(2.5)
+  text: describe("hi")
+  host: describe(["web"])
+  endpoint: describe(["web", 443])
+  nested: describe([["a", "b"], 1])
+  names: describe(["a", "b", "c"])
+  ## A schema fills in its defaults before the case reads them.
+  service: describe({name: "web"})
+  ## A mapping type written in a case takes keys it does not declare.
+  open: describe({host: "db", port: 5432, tls: true})
+  nothing: describe(null)
+  other: describe(true)
+
+## A case matches only if every field fits, so a port that is a string
+## moves on to the next case.
+let port(v) = match v
+  case {port: int} then "numbered"
+  case {port: str} then "named"
+ports:
+  numbered: port({port: 80})
+  named: port({port: "http"})
+
+## Without an "else", a value that no case matches gives null.
+tier:? match "dev"
+  case "prod" then "gold"
+  case "staging" | "qa" then "silver"
+
+## An "else" may hold another match.
+size: match 7
+  case int if (n) => n > 10 then "large"
+  else match 7
+    case int if (n) => n > 5 then "medium"
+    else "small"
+
+## "match" and "case" stay usable as keys.
+match: 1
+case: 2

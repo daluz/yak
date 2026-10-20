@@ -347,6 +347,8 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 		return evalBinary(node, env)
 	case *ast.If:
 		return evalIf(node, env)
+	case *ast.Match:
+		return evalMatch(node, env)
 	case *ast.SeqComp:
 		return evalSeqComp(node, env)
 	case *ast.MapComp:
