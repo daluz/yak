@@ -1,0 +1,48 @@
+env: prod
+services:
+  web:
+    name: web
+    ports:
+      - name: http
+        number: 8080
+        protocol: TCP
+    url: http://web.svc
+    replicas: 2
+    host: web.svc
+    labels: {}
+  api:
+    name: api
+    replicas: 3
+    labels:
+      tier: back
+    host: api.svc
+    ports: []
+  worker:
+    name: worker
+    replicas: 2
+    host: worker.svc
+    ports: []
+    labels: {}
+ports:
+  - name: dns
+    number: 53
+    protocol: UDP
+deployment:
+  name: web
+  image: nginx:1.27
+  replicas: 1
+loose:
+  name: loose
+  team: platform
+  replicas: 2
+  host: loose.svc
+  ports: []
+  labels: {}
+tiers:
+  - gold
+  - silver
+pair:
+  - 1
+  - 2
+anything:
+  any: key

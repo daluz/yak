@@ -1,0 +1,4 @@
+schema Port =
+  number: integer if (n) => n > 0 and n < 65536
+
+port: !Port {number: 70000}

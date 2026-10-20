@@ -1,1 +1,1 @@
-tag.yak:1:7: tags are not supported in yak yet; they will arrive with schemas
+tag.yak:1:7: YAML's "!!" tags are not supported in yak; a schema is applied with a single "!", as in "!Name"

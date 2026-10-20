@@ -1,0 +1,3 @@
+schema Port = {protocol: "TCP" | "UDP"}
+
+port: !Port {protocol: "SCTP"}

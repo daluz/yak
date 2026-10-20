@@ -1,6 +1,7 @@
-# "$yak" describes the run rather than the document. The path is whatever was
-# handed to the tool, which here is the path the tests glob with, and the
-# context files are listed in the order they were given.
+# "$filepath" and "$contextpaths" describe the run rather than the document.
+# The path is whatever was handed to the tool, which here is the path the
+# tests glob with, and the context files are listed in the order they were
+# given.
 path: ../../testdata/template/meta.yak
 contexts:
   - ../../testdata/template/meta.ctx1.yaml

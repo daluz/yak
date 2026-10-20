@@ -40,7 +40,7 @@ type Document struct {
 // or in flow form with braces.
 type Mapping struct {
 	Base
-	// Binds holds the "let" and "import" bindings written among the entries. They cover
+	// Binds holds the "let", "import" and "schema" statements written among the entries. They cover
 	// the whole mapping, wherever in it they appear, and they can see the
 	// mapping itself, so a binding may refer to a field with ".name".
 	Binds   []*Binding
@@ -48,8 +48,9 @@ type Mapping struct {
 	Flow    bool
 }
 
-// Binding is one "name = value" pair introduced by "let", or one module
-// introduced by "import", whose Value is then an *Import. A binding written
+// Binding is one "name = value" pair introduced by "let", one module
+// introduced by "import", whose Value is then an *Import, or one schema
+// introduced by "schema", whose Value is then a *Schema. A binding written
 // as "[a, b] = value" has a Pattern instead of a Name.
 type Binding struct {
 	Base
@@ -140,6 +141,100 @@ func (p *Param) Label() string {
 type Import struct {
 	Base
 	Path []string
+}
+
+// The names a schema binding takes when it constrains the document or the
+// context rather than naming a schema. Neither can be written as a name, so
+// neither collides with one.
+const (
+	SchemaRoot    = "$"
+	SchemaContext = "$$"
+)
+
+// BuiltinTypes are the types every schema can name. Each one but "any" is the
+// name the "type" built-in answers for the values it matches; "null" is the
+// literal type of the null value. None of them can name a schema.
+var BuiltinTypes = []string{"any", "boolean", "integer", "float", "string", "sequence", "mapping", "function"}
+
+// Schema is the value of a binding introduced by "schema": the type that the
+// binding's name stands for, or that the document or the context has to
+// match when the name is SchemaRoot or SchemaContext.
+type Schema struct {
+	Base
+	// Open records the "schema*" form, whose mappings accept keys they do
+	// not declare.
+	Open bool
+	Type Node
+}
+
+// TypeRef names a type: one of the BuiltinTypes or a schema in scope, or,
+// with Module set, a schema that the module imported under that name
+// declares.
+type TypeRef struct {
+	Base
+	Module string
+	Name   string
+}
+
+// TypeLiteral is the type of one value only, written as the literal Value: a
+// string without interpolations, a number, a boolean or null.
+type TypeLiteral struct {
+	Base
+	Value Node
+}
+
+// TypeSequence is "[Item]", a sequence whose every item is of type Item.
+type TypeSequence struct {
+	Base
+	Item Node
+}
+
+// TypeMapping is a mapping type, written as a block or in braces.
+type TypeMapping struct {
+	Base
+	Members []*TypeMember
+}
+
+// TypeMember is one line of a TypeMapping: a field, the "(K): V" that types
+// every key the mapping does not declare, or the "<<" that merges in the
+// members of another mapping type.
+type TypeMember struct {
+	Base
+	// Name is the field's name, and empty for a key type and a merge.
+	Name string
+	// Key is the type of the keys a "(K): V" member covers.
+	Key Node
+	// Merge records a "<<" member, whose Type is the mapping type it merges.
+	Merge bool
+	// Optional records a field written with ":?", which may be left out or
+	// be null.
+	Optional bool
+	Type     Node
+	// Default is what a field that is left out takes instead, or nil.
+	Default Node
+}
+
+// TypeUnion is "A | B", which a value matches by matching any alternative.
+type TypeUnion struct {
+	Base
+	Alts []Node
+}
+
+// TypeCheck is "T if pred": a value of type T that the function pred
+// answers true for.
+type TypeCheck struct {
+	Base
+	Type Node
+	Pred Node
+}
+
+// Tag is "!Name value", which checks value against the schema Name and
+// fills in the defaults it declares. Module is set for "!module.Name".
+type Tag struct {
+	Base
+	Module string
+	Name   string
+	X      Node
 }
 
 // Let scopes bindings over a body that is not a mapping. Bindings written
@@ -255,9 +350,8 @@ type Null struct{ Base }
 type Self struct {
 	Base
 	Up int
-	// Src is how the reference was written, either a run of dots or
-	// "$self". A reference that reaches past the outermost mapping is
-	// reported with the spelling it was written in.
+	// Src is the run of dots the reference was written with. A reference
+	// that reaches past the outermost mapping is reported with it.
 	Src string
 }
 
@@ -265,13 +359,22 @@ type Self struct {
 // document.
 type Root struct{ Base }
 
-// Context is "$context" or its "$$" shorthand: the merged context data.
+// Context is "$context", "$ctx" or their "$$" shorthand: the merged context
+// data.
 type Context struct{ Base }
 
 // Yak is "$yak", a mapping that describes the run rather than the document:
-// the version rendering it, the template's path, and the context files it
-// was given.
+// the version rendering it, the output format and whether it is strict.
 type Yak struct{ Base }
+
+// FilePath is "$filepath", the path of the file the document was read from.
+type FilePath struct{ Base }
+
+// ContextPaths is "$contextpaths", the context files the run was given.
+type ContextPaths struct{ Base }
+
+// Workdir is "$workdir", the directory yak was invoked from.
+type Workdir struct{ Base }
 
 // Field is an "x.name" access.
 type Field struct {

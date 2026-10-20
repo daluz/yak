@@ -1,2 +1,0 @@
-let defaults = {tag: "1.25"}
-container: defaults << {tag: $super.tag + "-patched"}

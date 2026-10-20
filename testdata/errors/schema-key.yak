@@ -1,0 +1,4 @@
+schema Lower = string if (s) => s == "a" or s == "b"
+schema Names = {(Lower): string}
+
+names: !Names {a: "x", B: "y"}

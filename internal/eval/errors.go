@@ -15,6 +15,9 @@ type Error struct {
 	Trace []token.Pos
 	// TraceTitle introduces the trace; it defaults to "referenced from".
 	TraceTitle string
+	// misfit is set for a value that does not match a schema, and says how
+	// far from matching it was.
+	misfit int
 }
 
 func (e *Error) Error() string {

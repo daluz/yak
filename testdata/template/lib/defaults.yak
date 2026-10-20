@@ -2,4 +2,4 @@ image: "nginx"
 tag: "1.27"
 replicas:: 2
 env: $$.env
-file: $yak.filepath
+file: $filepath

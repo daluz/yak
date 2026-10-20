@@ -56,6 +56,12 @@ func dump(n ast.Node) string {
 		return "context"
 	case *ast.Yak:
 		return "yak"
+	case *ast.FilePath:
+		return "filepath"
+	case *ast.ContextPaths:
+		return "contextpaths"
+	case *ast.Workdir:
+		return "workdir"
 	case *ast.Field:
 		return dump(t.X) + optional(t.Optional) + "." + t.Name
 	case *ast.Index:
@@ -248,14 +254,15 @@ func TestParseReferences(t *testing.T) {
 		{"root field", "a: $.b\n", `{"a":root.b}`},
 		{"root long", "a: $root\n", `{"a":root}`},
 		{"root long field", "a: $root.b\n", `{"a":root.b}`},
-		{"self long", "a: $self\n", `{"a":self+0}`},
-		{"self long field", "a: $self.b\n", `{"a":self+0.b}`},
 		{"context long", "a: $context.b\n", `{"a":context.b}`},
 		{"context short", "a: $$.b\n", `{"a":context.b}`},
+		{"context ctx", "a: $ctx.b\n", `{"a":context.b}`},
 		{"yak", "a: $yak\n", `{"a":yak}`},
 		{"yak field", "a: $yak.version\n", `{"a":yak.version}`},
-		{"yak index", "a: $yak.contextpaths[0]\n", `{"a":yak.contextpaths[0]}`},
-		{"yak in an interpolation", `a: "\($yak.filepath)"`, `{"a":concat(yak.filepath)}`},
+		{"filepath", "a: $filepath\n", `{"a":filepath}`},
+		{"contextpaths index", "a: $contextpaths[0]\n", `{"a":contextpaths[0]}`},
+		{"workdir", "a: $workdir\n", `{"a":workdir}`},
+		{"filepath in an interpolation", `a: "\($filepath)"`, `{"a":concat(filepath)}`},
 		{"index", "a: $.b[0]\n", `{"a":root.b[0]}`},
 		{"string index", `a: $.b["c"]`, `{"a":root.b["c"]}`},
 		{"chained index", "a: $.b[0].c\n", `{"a":root.b[0].c}`},
@@ -629,6 +636,8 @@ func TestParseComments(t *testing.T) {
 		{"above a let block", "# c\nlet {\n  x = 1\n}\na: x\n", `let x head # c`},
 		{"beside a binding in a block", "let {\n  x = 1 # c\n  y = 2\n}\na: x\n", `let x line # c`},
 		{"above a binding in a block", "a:\n  # c\n  let x = 1\n  b: x\n", `let x head # c`},
+		{"inside a schema", "schema A =\n  # c\n  b: string # d\na: 1\n", ""},
+		{"below a schema", "schema A =\n  b: string\n# c\na: 1\n", `"a" head # c`},
 
 		{"marked for the template", "## c\na: 1\n", ""},
 		{"marked beside an entry", "a: 1 ## c\n", ""},
@@ -673,7 +682,25 @@ func TestParseErrors(t *testing.T) {
 		{"import alias naming a keyword", "import null = a\nb: 1\n", "cannot name a module"},
 		{"empty import block", "import {}\na: 1\n", `the "import" block must declare at least one binding`},
 		{"unseparated imports", "import { a = x b = y }\nc: 1\n", "between bindings"},
-		{"schema keyword", "a: schema\n", `"schema" is not implemented yet`},
+		{"schema as a value", "a: schema\n", `a "schema" is a statement of its own, not a value`},
+		{"schema without a value", "a:\n  schema A = string\n", `a "schema" must be followed by a value`},
+		{"schema without an assignment", "schema A: string\na: 1\n", `expected "=" after the name of a schema`},
+		{"schema without a type", "schema A =\na: 1\n", `expected a type after "="`},
+		{"schema named after a type", "schema string = integer\na: 1\n", `"string" is a built-in type and cannot name a schema`},
+		{"schema named after a keyword", "schema if = integer\na: 1\n", `"if" is a keyword and cannot name a schema`},
+		{"spaced star", "schema *A = integer\na: 1\n", `an open schema is written "schema*"`},
+		{"schema declared twice", "schema A = string\nschema A = integer\na: 1\n", `schema "A" is declared twice in this block`},
+		{"schema and binding share a name", "schema A = string\nlet A = 1\na: 1\n", `"A" names both a schema and a binding`},
+		{"root schema twice", "schema $ = mapping\nschema { $ = mapping }\na: 1\n", `the document is given a schema twice`},
+		{"nested root schema", "a:\n  schema $$ = mapping\n  b: 1\n", `"schema $$" can only be declared at the top of a document`},
+		{"hidden schema field", "schema A =\n  b:: string\na: 1\n", "a schema has no hidden fields"},
+		{"optional key type", "schema A = {(string):? integer}\na: 1\n", `only a field can be optional`},
+		{"default of a merge", "schema A = {<<: B = {}}\na: 1\n", "only a field can have a default"},
+		{"interpolated type", `schema A = "\(x)"` + "\na: 1\n", "a string written as a type cannot interpolate"},
+		{"unclosed sequence type", "schema A = [string\na: 1\n", `expected "]" to close a sequence type`},
+		{"junk after a type", "schema A = string string\na: 1\n", `unexpected "string" after a type`},
+		{"three-part schema name", "a: !a.b.c 1\n", `a schema is named "Name", or "module.Name"`},
+		{"tag without a value", "a: [!A]\n", `expected a value after "!A"`},
 		{"reserved key", "let: 1\n", "reserved word"},
 		{"let without a body", "a:\n  let x = 1\n", "must be followed by a value"},
 		{"let without a name", "let = 1\na: 1\n", "expected the name of a binding"},
@@ -701,8 +728,8 @@ func TestParseErrors(t *testing.T) {
 		{"unterminated flow mapping", "a: {b: 1\n", "unterminated flow mapping"},
 		{"dots in postfix", "a: $.b..c\n", "may only begin a reference"},
 		{"dangling dot", "a: $. b\n", "expected a field name"},
-		{"unknown builtin variable", "a: $ctx\n", "unknown builtin variable"},
-		{"super", "a: $super.b\n", `"$super" is not implemented yet`},
+		{"unknown builtin variable", "a: $cwd\n", "unknown builtin variable"},
+		{"self is only a dot", "a: $self.b\n", `unknown builtin variable "$self"`},
 		{"empty interpolation", `a: "\()"`, "empty string interpolation"},
 		{"junk in interpolation", `a: "\(.b .c)"`, "unexpected"},
 		{"double bang is still a tag", "a: !!true\n", "tags are not supported"},

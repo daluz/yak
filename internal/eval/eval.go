@@ -15,10 +15,17 @@ import (
 // its session with the document that imported it.
 type docState struct {
 	root *Thunk
-	// yak is the mapping "$yak" answers. It describes the run and the file
-	// the document was read from.
-	yak     Value
+	// yak is the mapping "$yak" answers.
+	yak Value
+	// run describes the run, with FilePath naming the file the document was
+	// read from.
+	run     Run
 	session *Session
+	// module records a document read by an import rather than rendered.
+	module bool
+	// schemas are the ones declared at the top of the document, which are
+	// what a module offers to the files that import it.
+	schemas map[string]*Schema
 }
 
 // Session is the state a document and every module it imports have in common.
@@ -58,12 +65,19 @@ type Env struct {
 	scope *scope
 }
 
-// scope is one frame of let bindings. Frames link outwards, so an inner
-// binding shadows an outer one of the same name.
+// scope is one frame of let bindings, or of the schemas a block declares.
+// Frames link outwards, so an inner binding shadows an outer one of the same
+// name.
 type scope struct {
 	outer *scope
 	binds map[string]*Thunk
+	// schemas are looked up apart from binds, by tags and by types.
+	schemas map[string]*Schema
 }
+
+// atRoot reports whether e is the environment a document's body is
+// evaluated in, before the body adds anything to it.
+func (e *Env) atRoot() bool { return len(e.self) == 0 && e.scope == nil }
 
 func (e *Env) pushSelf(o *Object) *Env {
 	self := make([]*Object, 0, len(e.self)+1)
@@ -81,6 +95,8 @@ type regions struct {
 	// decl holds the position of each binding, so decl[j] opens envs[j+1].
 	// It is empty when one environment covers the whole block.
 	decl []token.Pos
+	// schemas are the ones the block declares, or nil.
+	schemas map[string]*Schema
 }
 
 // at returns the environment a node written at pos reads names in, which is
@@ -108,7 +124,33 @@ func before(a, b token.Pos) bool {
 // is evaluated in the environment above its own line, so a rebinding reads
 // the binding it replaces while a lone one reads itself; a binding that ends
 // up needing itself is reported as a cycle.
+//
+// The schemas among binds share one frame beneath the bindings, so a
+// binding can apply them, and each is read in the region it is declared in,
+// so it can name the bindings around it.
 func (e *Env) pushBindings(binds []*ast.Binding) *regions {
+	var values []*ast.Binding
+	var decls []*ast.Binding
+	for _, b := range binds {
+		if _, ok := b.Value.(*ast.Schema); ok {
+			decls = append(decls, b)
+		} else {
+			values = append(values, b)
+		}
+	}
+	if len(decls) == 0 {
+		return e.pushValues(values)
+	}
+	schemas := make(map[string]*Schema, len(decls))
+	r := (&Env{doc: e.doc, self: e.self, scope: &scope{outer: e.scope, schemas: schemas}}).pushValues(values)
+	for _, b := range decls {
+		schemas[b.Name] = &Schema{name: b.Name, decl: b.Value.(*ast.Schema), env: r.at(b.Pos())}
+	}
+	r.schemas = schemas
+	return r
+}
+
+func (e *Env) pushValues(binds []*ast.Binding) *regions {
 	if len(binds) == 0 {
 		return &regions{envs: []*Env{e}}
 	}
@@ -183,13 +225,16 @@ func (e *Env) bindingNames() []string {
 	return names
 }
 
-// Run describes the rendering itself, which the language reads as "$yak".
+// Run describes the rendering itself, which the language reads as "$yak",
+// "$filepath", "$contextpaths" and "$workdir".
 type Run struct {
 	// FilePath is the template as the command line named it. Input read
 	// from standard input is called "<stdin>", as it is in diagnostics.
 	FilePath string
 	// ContextPaths are the context files in the order they were given.
 	ContextPaths []string
+	// Workdir is the absolute path of the directory yak was invoked from.
+	Workdir string
 	// Format is the canonical name of the output format, never an alias.
 	Format string
 	// NonStrict turns strict mode off, admitting the built-in modules whose
@@ -204,14 +249,8 @@ func (r Run) Strict() bool { return !r.NonStrict }
 
 // yakMapping builds the mapping "$yak" answers.
 func yakMapping(run Run) *Object {
-	paths := make([]*Elem, len(run.ContextPaths))
-	for i, p := range run.ContextPaths {
-		paths[i] = Item(String(p))
-	}
 	o := NewObject()
 	o.Set("version", false, Done(String(version.Current)))
-	o.Set("filepath", false, Done(String(run.FilePath)))
-	o.Set("contextpaths", false, Done(NewArray(paths)))
 	o.Set("format", false, Done(String(run.Format)))
 	o.Set("strict", false, Done(Bool(run.Strict())))
 	return o
@@ -229,16 +268,21 @@ func Document(doc *ast.Document, context Value, run Run, mods Modules) (Value, e
 	for _, b := range mods.Root() {
 		s.builtins[b.Name] = b
 	}
-	return s.Document(doc, run.FilePath).Value()
+	return s.document(doc, run.FilePath, false).Value()
 }
 
-// Document answers the root of doc, read from file, which is evaluated in the
-// session the first time it is read. "$yak" describes the run as it does for
-// the template, except that it names file as the one being read.
+// Document answers the root of doc, a module read from file, which is
+// evaluated in the session the first time it is read. "$yak" describes the
+// run as it does for the template, except that it names file as the one
+// being read.
 func (s *Session) Document(doc *ast.Document, file string) *Thunk {
+	return s.document(doc, file, true)
+}
+
+func (s *Session) document(doc *ast.Document, file string, module bool) *Thunk {
 	run := s.run
 	run.FilePath = file
-	ds := &docState{yak: yakMapping(run), session: s}
+	ds := &docState{yak: yakMapping(run), run: run, session: s, module: module}
 	ds.root = &Thunk{node: doc.Body, env: &Env{doc: ds}, pos: doc.Pos()}
 	return ds.root
 }
@@ -267,6 +311,16 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 		return env.doc.session.context, nil
 	case *ast.Yak:
 		return env.doc.yak, nil
+	case *ast.FilePath:
+		return String(env.doc.run.FilePath), nil
+	case *ast.ContextPaths:
+		paths := make([]*Elem, len(env.doc.run.ContextPaths))
+		for i, p := range env.doc.run.ContextPaths {
+			paths[i] = Item(String(p))
+		}
+		return NewArray(paths), nil
+	case *ast.Workdir:
+		return String(env.doc.run.Workdir), nil
 	case *ast.Field:
 		return evalField(node, env)
 	case *ast.Index:
@@ -287,6 +341,8 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 		return evalLet(node, env)
 	case *ast.Import:
 		return evalImport(node, env)
+	case *ast.Tag:
+		return evalTag(node, env)
 	case *ast.Function:
 		return &Function{decl: node, env: env}, nil
 	case *ast.Call:
@@ -312,6 +368,12 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 	// read a field with ".name" just as an entry can. An entry reads them
 	// as of its own line, which is all a rebinding changes.
 	binds := env.pushSelf(obj).pushBindings(node.Binds)
+	root := env.atRoot()
+	if root {
+		if err := env.doc.declare(binds.schemas); err != nil {
+			return nil, err
+		}
+	}
 
 	slots := make([]*Field, len(node.Entries))
 	for i, e := range node.Entries {
@@ -365,6 +427,9 @@ func evalMapping(node *ast.Mapping, env *Env) (Value, error) {
 			return nil, err
 		}
 		added += n
+	}
+	if s := binds.schemas[ast.SchemaRoot]; root && s != nil {
+		return s.apply(obj, node.Pos(), true)
 	}
 	return obj, nil
 }
@@ -594,7 +659,22 @@ func evalSelf(node *ast.Self, env *Env) (Value, error) {
 // evalLet evaluates a body that is not a mapping. The body sits below every
 // binding of the block, so it reads the last of each.
 func evalLet(node *ast.Let, env *Env) (Value, error) {
-	return evalNode(node.Body, env.pushBindings(node.Binds).last())
+	binds := env.pushBindings(node.Binds)
+	root := env.atRoot()
+	if root {
+		if err := env.doc.declare(binds.schemas); err != nil {
+			return nil, err
+		}
+	}
+	v, err := evalNode(node.Body, binds.last())
+	if err != nil {
+		return nil, err
+	}
+	if s := binds.schemas[ast.SchemaRoot]; root && s != nil {
+		_, fresh := node.Body.(*ast.Mapping)
+		return s.apply(v, node.Body.Pos(), fresh)
+	}
+	return v, nil
 }
 
 // yamlBooleans are the extra boolean spellings YAML accepts and yak does not.

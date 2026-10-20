@@ -39,6 +39,9 @@ type parser struct {
 	// prevEnd is where the most recently consumed token ended, used to
 	// require that references are written without internal whitespace.
 	prevEnd token.Pos
+	// nested counts the values being parsed inside one another, so a block
+	// can tell whether it is the one a document holds.
+	nested int
 
 	comments *commentSet
 }
@@ -212,12 +215,18 @@ func (p *parser) parseLetScope(col int, bare bool) (ast.Node, error) {
 		}
 		binds = append(binds, declared...)
 	}
+	if err := checkStatements(binds); err != nil {
+		return nil, err
+	}
 	if bare && p.atDocBoundary() {
 		return &ast.Let{Base: ast.At(pos), Binds: binds, Body: &ast.Null{Base: ast.At(pos)}}, nil
 	}
 	if p.atDocBoundary() || p.cur().Col() < col {
-		if what == token.KeywordImport {
+		switch what {
+		case token.KeywordImport:
 			return nil, p.errorf(pos, "an %q must be followed by a value in the same block", what)
+		case token.KeywordSchema:
+			return nil, p.errorf(pos, "a %q must be followed by a value in the same block", what)
 		}
 		return nil, p.errorf(pos, "a %q binding must be followed by a value in the same block", what)
 	}
@@ -230,6 +239,9 @@ func (p *parser) parseLetScope(col int, bare bool) (ast.Node, error) {
 			return nil, err
 		}
 		m.Binds = append(binds, m.Binds...)
+		if err := checkStatements(m.Binds); err != nil {
+			return nil, err
+		}
 		return m, nil
 	}
 	body, err := p.parseBlockNode()
@@ -237,6 +249,48 @@ func (p *parser) parseLetScope(col int, bare bool) (ast.Node, error) {
 		return nil, err
 	}
 	return &ast.Let{Base: ast.At(pos), Binds: binds, Body: body}, nil
+}
+
+// checkStatements rejects a block that declares a schema twice, or that
+// gives a schema the name of one of its bindings: the two are looked up
+// apart, but a reader should never have to ask which one a name means.
+func checkStatements(binds []*ast.Binding) error {
+	schemas := map[string]bool{}
+	for _, b := range binds {
+		if _, ok := b.Value.(*ast.Schema); !ok {
+			continue
+		}
+		if schemas[b.Name] {
+			switch b.Name {
+			case ast.SchemaRoot:
+				return &Error{Pos: b.Pos(), Msg: `the document is given a schema twice: "schema $" appears more than once`}
+			case ast.SchemaContext:
+				return &Error{Pos: b.Pos(), Msg: `the context is given a schema twice: "schema $$" appears more than once`}
+			}
+			return &Error{Pos: b.Pos(), Msg: fmt.Sprintf("schema %q is declared twice in this block", b.Name)}
+		}
+		schemas[b.Name] = true
+	}
+	for _, b := range binds {
+		if _, ok := b.Value.(*ast.Schema); ok {
+			continue
+		}
+		var err error
+		note := func(name string, pos token.Pos) {
+			if schemas[name] && err == nil {
+				err = &Error{Pos: pos, Msg: fmt.Sprintf("%q names both a schema and a binding in this block", name)}
+			}
+		}
+		if b.Pattern == nil {
+			note(b.Name, b.Pos())
+		} else {
+			b.Pattern.Walk(func(name *ast.Pattern, _ []int) { note(name.Name, name.Pos()) })
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (p *parser) parseBlockMapping(col int) (*ast.Mapping, error) {
@@ -269,7 +323,7 @@ func (p *parser) parseBlockMapping(col int) (*ast.Mapping, error) {
 		}
 		m.Entries = append(m.Entries, entry)
 	}
-	return m, nil
+	return m, checkStatements(m.Binds)
 }
 
 func (p *parser) parseMappingEntry(col int) (*ast.Entry, error) {
@@ -320,11 +374,18 @@ func (p *parser) parseEntryHead() (*ast.Entry, error) {
 // parseEntryValue parses the value that follows a mapping key, which is either
 // on the same line as the colon or in a more indented block below it.
 func (p *parser) parseEntryValue(parentCol int, colon token.Token) (ast.Node, error) {
+	p.nested++
+	defer func() { p.nested-- }()
 	if p.atDocBoundary() {
 		return &ast.Null{Base: ast.At(colon.Pos)}, nil
 	}
 	t := p.cur()
 	if t.Line() == colon.Line() {
+		if t.Kind == token.Bang {
+			return p.parseBlockTag(func(name token.Token) (ast.Node, error) {
+				return p.parseEntryValue(parentCol, name)
+			})
+		}
 		v, err := p.parseExpr()
 		if err != nil {
 			return nil, err
@@ -343,18 +404,22 @@ func (p *parser) parseEntryValue(parentCol int, colon token.Token) (ast.Node, er
 	return &ast.Null{Base: ast.At(colon.Pos)}, nil
 }
 
-// atStatement reports whether a let or import statement starts at the
-// current token. Both keywords are reserved, so they can never be anything
-// else here.
+// atStatement reports whether a let, import or schema statement starts at
+// the current token. The keywords are reserved, so they can never be
+// anything else here.
 func (p *parser) atStatement() bool {
 	if !p.at(token.Ident) {
 		return false
 	}
-	return p.cur().Lit == token.KeywordLet || p.cur().Lit == token.KeywordImport
+	switch p.cur().Lit {
+	case token.KeywordLet, token.KeywordImport, token.KeywordSchema:
+		return true
+	}
+	return false
 }
 
-// parseStatement parses one "let name = value" binding or one
-// "import module", or a braced block of either.
+// parseStatement parses one "let name = value" binding, one
+// "import module" or one "schema Name = type", or a braced block of them.
 //
 // The comments written on a binding are claimed by the binding itself rather
 // than left for whatever follows it, since a binding renders nothing of its
@@ -367,8 +432,11 @@ func (p *parser) parseStatement(col int) ([]*ast.Binding, error) {
 	if p.cur().Kind.IsSeparator() {
 		return nil, p.errorf(kw.Pos, "%q is a reserved word and must be quoted to be used as a key", kw.Lit)
 	}
-	if kw.Lit == token.KeywordImport {
+	switch kw.Lit {
+	case token.KeywordImport:
 		return p.parseImport(start, head)
+	case token.KeywordSchema:
+		return p.parseSchema(start, head, col)
 	}
 	if p.at(token.LBrace) {
 		return p.parseBlock(token.KeywordLet, head, p.parseBlockBinding)
@@ -764,6 +832,8 @@ func (p *parser) parseBlockSequence(col int) (ast.Node, error) {
 }
 
 func (p *parser) parseSequenceItem(dash token.Token) (ast.Node, error) {
+	p.nested++
+	defer func() { p.nested-- }()
 	if p.atDocBoundary() {
 		return &ast.Null{Base: ast.At(dash.Pos)}, nil
 	}
@@ -771,6 +841,14 @@ func (p *parser) parseSequenceItem(dash token.Token) (ast.Node, error) {
 	if t.Line() == dash.Line() {
 		if t.Col() <= dash.Col() {
 			return nil, p.errorf(t.Pos, "unexpected %s after %q", t, "-")
+		}
+		if t.Kind == token.Bang {
+			return p.parseBlockTag(func(token.Token) (ast.Node, error) {
+				if p.atDocBoundary() || p.cur().Col() <= dash.Col() {
+					return &ast.Null{Base: ast.At(dash.Pos)}, nil
+				}
+				return p.parseBlockNode()
+			})
 		}
 		return p.parseBlockNode()
 	}

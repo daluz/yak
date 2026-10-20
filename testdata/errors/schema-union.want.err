@@ -1,0 +1,1 @@
+schema-union.yak:3:24: field "protocol" of schema "Port" expects "TCP" or "UDP", found "SCTP"

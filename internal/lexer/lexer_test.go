@@ -322,6 +322,12 @@ func TestOperatorTokens(t *testing.T) {
 		{"a chomping indicator is not an operator", "a: |+\n  text\n", []token.Kind{
 			token.Ident, token.Colon, token.String, token.EOF,
 		}},
+		{"a bar after an operand separates a union", `a: "x" | "y" | null` + "\n", []token.Kind{
+			token.Ident, token.Colon, token.String, token.Pipe, token.String, token.Pipe, token.Ident, token.EOF,
+		}},
+		{"a tag", "a: !k8s.Port {}\n", []token.Kind{
+			token.Ident, token.Colon, token.Bang, token.Ident, token.Dots, token.Ident, token.LBrace, token.RBrace, token.EOF,
+		}},
 	}
 
 	for _, tc := range tests {
@@ -424,7 +430,8 @@ func TestLexErrors(t *testing.T) {
 		{"anchor", "a: &x 1\n", "anchors and aliases are not supported"},
 		{"symbolic and", "a: b && c\n", `"&&" is written "and"`},
 		{"symbolic or", "a: b || c\n", `"||" is written "or"`},
-		{"symbolic not", "a: !b\n", `"!" is written "not"`},
+		{"symbolic not", "a: ! b\n", `"!" is written "not"`},
+		{"symbolic not of a group", "a: !(b)\n", `"!" is written "not"`},
 		{"tag", "a: !!str 1\n", "tags are not supported"},
 		{"explicit key", "? a\n", "explicit key indicators"},
 		{"directive", "%YAML 1.2\n", "directives"},

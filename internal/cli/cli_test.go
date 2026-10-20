@@ -183,6 +183,26 @@ func TestRenderFormatFlag(t *testing.T) {
 	}
 }
 
+// TestWorkdirIsWhereYakRuns checks that "$workdir" is the directory yak was
+// invoked from, not the template's.
+func TestWorkdirIsWhereYakRuns(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	write(t, dir, "sub/app.yak", "workdir: $workdir\n")
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := run(t, "render", "sub/app.yak")
+	if err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	if want := "workdir: " + wd + "\n"; out != want {
+		t.Errorf("stdout = %q, want %q", out, want)
+	}
+}
+
 // TestYakFormatIsCanonical checks that "$yak.format" names the format rather
 // than the spelling that chose it.
 func TestYakFormatIsCanonical(t *testing.T) {

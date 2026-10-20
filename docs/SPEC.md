@@ -16,7 +16,7 @@ made explicit, and a small expression language is added on top.
     - [Strings must be quoted](#strings-must-be-quoted)
     - [Every string interpolates](#every-string-interpolates)
     - [Only `true` and `false` are booleans](#only-true-and-false-are-booleans)
-    - [Anchors and tags are gone](#anchors-and-tags-are-gone)
+    - [Anchors and YAML's tags are gone](#anchors-and-yamls-tags-are-gone)
     - [Keys](#keys)
     - [Hidden fields](#hidden-fields)
     - [Optional fields](#optional-fields)
@@ -37,6 +37,15 @@ made explicit, and a small expression language is added on top.
     - [Packages](#packages)
     - [Resolution](#resolution)
     - [Remote packages](#remote-packages)
+- [Schemas](#schemas)
+    - [Declaring a schema](#declaring-a-schema)
+    - [Types](#types)
+    - [Mapping types](#mapping-types)
+    - [Open schemas](#open-schemas)
+    - [Tags](#tags)
+    - [The document and the context](#the-document-and-the-context)
+    - [When values are checked](#when-values-are-checked)
+    - [Schemas in modules](#schemas-in-modules)
 - [Standard library](#standard-library)
 - [Missing values](#missing-values)
 - [Operators](#operators)
@@ -171,11 +180,12 @@ in it, `r"..."` for text with a `'`, and a raw block scalar for both.
 `yes`, `no`, `on`, `off`, `y` and `n` are errors that say to use
 `true`/`false` or add quotes.
 
-### Anchors and tags are gone
+### Anchors and YAML's tags are gone
 
 `&anchor`, `*alias` and `!!tag` are rejected. References and `let` bindings
-replace anchors; tags will return with schemas. A lone `!` is an error that
-points to `not`. YAML's `<<` survives as [the merge key](#the-merge-key), and
+replace anchors. A `!` written against a name is a [tag](#tags), which
+checks a value against a schema; any other `!` is an error that points to
+`not`. YAML's `<<` survives as [the merge key](#the-merge-key), and
 merges any mapping an expression can produce.
 
 ### Keys
@@ -289,14 +299,16 @@ key.
 
 | Syntax | Long form | Meaning |
 | --- | --- | --- |
-| `.` | `$self` | The enclosing mapping. |
+| `.` | | The enclosing mapping. |
 | `.name` | | The `name` field of the enclosing mapping. |
 | `..` / `..name` | | The parent mapping, and its fields. |
 | `...` / `...name` | | The grandparent, and so on for each added dot. |
 | `$` | `$root` | The root of the current document. |
 | `$.name` | | The `name` field of that root. |
-| `$$` | `$context` | The merged [context](#context) data. |
-| | `$yak` | [Runtime information](#builtin-variables) rather than the document. |
+| `$$` | `$context`, `$ctx` | The merged [context](#context) data. |
+
+Further [builtin variables](#builtin-variables) describe the run rather than
+the document.
 
 Sequences do not count as a level, so `..` always names the nearest enclosing
 mapping:
@@ -322,37 +334,41 @@ d: $.nested.deeper.name
 
 A name with a leading `$` is a builtin variable; every other name is a field,
 a binding or a parameter. A long form and its sigil are interchangeable, so
-`$self.name` is `.name`. Of the dot references only `.` has a long form, and
-`$yak` has no sigil. `$super` is reserved and is a "not implemented yet"
-error; any other `$name` is an error listing the variables that exist.
+`$root.name` is `$.name`. The dot references have no long form, since what
+they name depends on where they are written. Any other `$name` is an error
+listing the variables that exist.
 
-`$yak` describes the rendering rather than the document:
-
-| Field | Meaning |
-| --- | --- |
-| `$yak.version` | The version of yak doing the rendering. |
-| `$yak.filepath` | The template's path, exactly as it was given to the tool. |
-| `$yak.contextpaths` | The context files, in the order they were given. |
-| `$yak.strict` | `true` in [strict mode](#strict-mode), `false` when it is turned off. |
-| `$yak.format` | The [output format](CLI.md#output-formats) being rendered, by its name and never an alias. |
+| Variable | Shorthand | Meaning |
+| --- | --- | --- |
+| `$root` | `$` | The root of the current document. |
+| `$context`, `$ctx` | `$$` | The merged [context](#context) data. |
+| `$filepath` | | The path of the file being read, exactly as it was given to the tool. |
+| `$contextpaths` | | The context files, in the order they were given. |
+| `$workdir` | | The absolute path of the directory yak was invoked from. |
+| `$yak` | | A mapping that describes the rendering, with the fields below. |
+| `$yak.version` | | The version of yak doing the rendering. |
+| `$yak.strict` | | `true` in [strict mode](#strict-mode), `false` when it is turned off. |
+| `$yak.format` | | The [output format](CLI.md#output-formats) being rendered, by its name and never an alias. |
 
 ```yaml
-# rendering: yak render deploy/app.yak -c base.yaml -c prod.yaml
-a: $yak.filepath            # "deploy/app.yak"
-b: $yak.contextpaths[0]     # "base.yaml"
-c: "built by yak \($yak.version)"
-d: $yak.strict              # true
-e: $yak.format              # "yaml"
+# rendering from /work: yak render deploy/app.yak -c base.yaml -c prod.yaml
+a: $filepath                # "deploy/app.yak"
+b: $contextpaths[0]         # "base.yaml"
+c: $workdir                 # "/work"
+d: "built by yak \($yak.version)"
+e: $yak.strict              # true
+f: $yak.format              # "yaml"
 ```
 
-`filepath` is the path as written, not resolved, matching what diagnostics
-say; a template read from standard input is `<stdin>`. `contextpaths` is empty,
-never absent, when no context file is given. Every document sees the same
-`$yak`, and an unstamped build reports its `version` as `dev`. `format` is
-the name however the format was chosen, so `-f hujson` and an output file
-ending in `.json5` both give `jwcc`, and `.yml` gives `yaml`. Output that
-includes these fields depends on where the template is and which yak rendered
-it.
+`$filepath` is the path as written, not resolved, matching what diagnostics
+say; a template read from standard input is `<stdin>`. `$contextpaths` is
+empty, never absent, when no context file is given. `$workdir` is where yak
+was run, not where the template is. Every document sees the same values, and
+an unstamped build reports its `version` as `dev`. `format` is the name
+however the format was chosen, so `-f hujson` and an output file ending in
+`.json5` both give `jwcc`, and `.yml` gives `yaml`. Output that includes
+these values depends on where the template is, where yak was run and which
+yak rendered it.
 
 ### Evaluation order
 
@@ -380,8 +396,8 @@ A statement is not an expression. It stands on its own in its block, renders
 nothing, and what it declares is visible to that block and everything nested
 inside it. The keywords are reserved: written as a value they are an error,
 and as a key they need quotes, as in `"schema": 1`. `import` is described in
-[Modules and Packages](#modules-and-packages); `schema` is planned in [ROADMAP.md](ROADMAP.md) and is a
-"not implemented yet" error today.
+[Modules and Packages](#modules-and-packages), and `schema` in
+[Schemas](#schemas).
 
 ## Let bindings
 
@@ -704,7 +720,7 @@ read is never loaded. When the last segment of a path cannot name a binding,
 write `name = path`.
 
 A module holds exactly one document, evaluated against the importer's context,
-so `$$` reads the same data in both while `$yak.filepath` names the module's
+so `$$` reads the same data in both while `$filepath` names the module's
 own file. A module is loaded once per document however often it is imported,
 and modules may import each other in a cycle as long as no value depends on
 itself.
@@ -810,6 +826,203 @@ that `yak package build` writes: a manifest of artifact type
 `application/vnd.yak.package.layer.v1.tar+gzip`, holding the package's files
 but for hidden ones and its `vendor/`. Its `yak.lock` travels with it, so a
 package that depends on it vendors the same dependencies it was built with.
+
+## Schemas
+
+A schema describes the values something may hold, and the defaults a mapping
+takes for the fields it leaves out. `schema` declares one, and a tag, `!Name`,
+checks a value against it:
+
+```yaml
+schema Port =
+  name: string
+  number: integer if (n) => n > 0 and n < 65536
+  protocol: "TCP" | "UDP" = "TCP"
+
+ports:
+  - !Port {name: "http", number: 8080}
+```
+
+renders as:
+
+```yaml
+ports:
+  - name: http
+    number: 8080
+    protocol: TCP
+```
+
+### Declaring a schema
+
+`schema Name = type` names a type. The type follows the `=` on the same line,
+or is a [mapping type](#mapping-types) indented below it, as a binding's
+value can be. Several schemas can share a `schema { ... }` block, one per line
+or separated by commas, as bindings share a `let` one; a type in the block is
+written on its line or in braces:
+
+```yaml
+schema Tier = "gold" | "silver"
+schema {
+  Ports = [Port]
+  Labels = {(string): string}
+}
+```
+
+Two more targets take a schema in place of a name. `schema $ = type` checks
+the document, and `schema $$ = type` checks the [context](#context); see [The
+document and the context](#the-document-and-the-context). Either may only be
+declared at the top of a document, once.
+
+Schemas are looked up apart from bindings: a tag and a type name a schema,
+and every other name a binding. A block cannot declare one name as both, nor
+declare a schema twice. A schema covers its block and everything nested in
+it, as a binding does, and the schemas of a block may name each other in any
+order. Its types, defaults and checks read the names in scope where it is
+declared. The built-in types cannot name a schema, nor can a keyword.
+
+### Types
+
+| Type | Matches |
+| --- | --- |
+| `any` | Every value. |
+| `boolean`, `integer`, `float`, `string`, `sequence`, `mapping`, `function` | A value whose [`type`](STDLIB.md#conversions) is that name. |
+| `null`, `true`, `"text"`, `8080`, `0.5` | That value alone, compared as `==` compares it. |
+| `[T]` | A sequence whose every item is a `T`. |
+| A [mapping type](#mapping-types) | A mapping with the fields it declares. |
+| `Name`, `module.Name` | What the schema `Name` matches. |
+| `A \| B` | What any alternative matches; the first that does decides. |
+| `T if f` | A `T` that the function `f` answers `true` for. |
+
+An integer is not a float, so a field that takes either is written
+`integer | float`. A union is written on one line, since a `|` where a value
+begins opens a [block scalar](#strings-must-be-quoted). The function of a
+check is called with the value and has to answer a boolean.
+
+### Mapping types
+
+A mapping type is written as a block or in braces. Each of its members is a
+field, the type of the keys it does not declare, or a merge:
+
+```yaml
+schema Service =
+  name: string                      # required
+  replicas: integer = 1             # left out, it is 1
+  host: string = "\(.name).svc"     # a default can read the mapping
+  selector:? mapping                # may be left out, or be null
+  (string): string                  # every other key holds a string
+```
+
+```yaml
+schema Deployment =
+  <<: Service
+  image: string
+```
+
+A field with neither a `?` nor a default is required. A default is checked
+against the field's type, and is evaluated in the scope of the schema with
+`.` naming the mapping being checked, so it can read the other fields. The
+fields a mapping takes a default for follow the ones it wrote, in the order
+the schema declares them.
+
+A field written `:?` whose value is null counts as left out, so it takes the
+default:
+
+```yaml
+web: !Service
+  name: "web"
+  replicas:? $$?.replicas     # 1 when the context has none
+```
+
+A key the type does not declare is an error, unless a `(K): V` member covers
+it: the key is then checked against `K` and its value against `V`. Entries
+written `::` are left alone. `<<: Other` brings in the members of another
+mapping type where it is written, and a member below it overrides one of the
+same name, as with [the merge key](#the-merge-key).
+
+### Open schemas
+
+`schema*` declares an open schema. Every mapping type it writes accepts the
+keys that neither a field nor a `(K): V` member covers, and passes them
+through unchecked; a schema it names keeps its own rules. The `*` is written against the keyword, and
+`schema* { ... }` makes every schema in its block open. Openness belongs to the
+declaration, so an open variant of a closed schema merges it:
+
+```yaml
+schema* LooseService =
+  <<: Service
+```
+
+### Tags
+
+`!Name value` checks `value` against the schema `Name`, and `!module.Name`
+against one that an imported module declares. A tag goes wherever a value
+does, and one that ends its line applies to the block below it:
+
+```yaml
+web: !Service
+  name: "web"
+api: !Service {name: "api", replicas: 3}
+ports: [!Port {name: "http", number: 80}]
+```
+
+A tag takes the whole expression after it, so `!Service a << b` checks the
+merge of `a` and `b`, and `(!Service a) << b` checks `a` alone.
+
+A tag answers its value with the defaults filled in. A mapping written right
+after the tag is that value, so its own entries read the defaults with `.`.
+Any other mapping is copied, and the one it was read from keeps no defaults:
+
+```yaml
+let base = {name: "web"}
+web: !Service base     # base has no "replicas"; web does
+```
+
+A tag that names a function is an error saying to call it instead, and a
+name that is no schema is an error that points to `not` in case a negation
+was meant.
+
+### The document and the context
+
+`schema $ = type` checks the document as it is evaluated, so `$.name` reads
+the defaults it fills in. `schema $$ = type` checks the context before
+anything reads it, and the whole of it rather than as it is read, since the
+context is data rather than expressions. Every reader of `$$` sees the
+defaults it fills in, the modules the template imports included. A context
+file carries no positions, so an error about one points at the schema.
+
+```yaml
+schema* $$ =
+  env: "dev" | "prod"
+  replicas: integer = 1
+```
+
+Only the template being rendered may declare `schema $$`; a module that does
+is an error, since what it filled in would change what the template reads.
+
+### When values are checked
+
+Checking is lazy, as evaluation is. The shape of a tagged mapping is checked
+when it is first read: the fields it needs, the keys it may hold, and the
+defaults it takes, for which its `:?` entries are evaluated. Each field and
+each item is checked when it is read. Rendering reads every field, so what
+reaches the output is always checked, while a binding that nothing reads is
+never checked. Two tagged mappings may therefore read each other's fields.
+
+A union picks the first alternative that the value's shape matches, even if
+one of its fields fails later.
+
+### Schemas in modules
+
+The schemas declared at the top of a module are the ones a file importing it
+can name, as `module.Name` with the name the import binds. Naming one loads
+the module. A module that declares no such schema is an error, and so is a
+name that is not an import.
+
+```yaml
+import k8s = acme.k8s
+
+web: !k8s.Deployment {name: "web", image: "nginx"}
+```
 
 ## Standard library
 
@@ -1097,9 +1310,9 @@ comprehension is built; the element stays lazy.
 
 ## Context
 
-`$context`, or `$$`, is a mapping of data supplied from outside the template.
-It is shared by every document, and the paths it came from are
-[`$yak.contextpaths`](#builtin-variables).
+`$context`, `$ctx` or `$$` is a mapping of data supplied from outside the
+template. It is shared by every document, and the paths it came from are
+[`$contextpaths`](#builtin-variables).
 
 Context data is plain YAML or JSON, not yak: a `\(` in a context string is a
 `\(`, and an unquoted scalar is the string YAML reads it as. Several sources
@@ -1221,7 +1434,7 @@ node        := statement* (blockMapping | blockSequence | value)
 blockMapping:= (statement | key sep value)+       -- aligned on one column
 blockSequence := ("-" node)+                      -- aligned on one column
 sep         := ":" | "::" | ":?"
-statement   := let | import
+statement   := let | import | schema
 let         := "let" binding | "let" "{" binding+ "}"
 binding     := identifier params? "=" value
              | (patterns | pattern ("," pattern)+) "=" value
@@ -1229,6 +1442,15 @@ pattern     := identifier | "_" | patterns
 patterns    := "[" pattern ("," pattern)* "]"
 import      := "import" module | "import" "{" module+ "}"
 module      := (identifier "=")? identifier ("." identifier)*
+schema      := "schema" "*"? (target "=" type | "{" (target "=" type)+ "}")
+target      := identifier | "$" | "$$"
+type        := typeAtom ("|" typeAtom)* ("if" value)?
+typeAtom    := schemaName | literal | "[" type "]" | typeMapping
+schemaName  := identifier ("." identifier)?
+typeMapping := "{" (member ("," member)*)? "}" | member+  -- aligned on one column
+member      := (identifier | string) (":" | ":?") type ("=" value)?
+             | "(" type ")" ":" type | "<<" ":" type
+tag         := "!" schemaName value
 params      := "(" (param ("," param)* ","?)? ")"
 param       := (identifier | patterns) ("=" value)?
 lambda      := params "=>" value
@@ -1240,7 +1462,7 @@ and         := not ("and" not)*
 not         := "not" not | binary
 binary      := unary (op unary)*                  -- see the precedence list
 unary       := "-"* operand
-operand     := literal | reference | flowSeq | flowMap | lambda | "(" value ")"
+operand     := literal | reference | flowSeq | flowMap | lambda | tag | "(" value ")"
 flowSeq     := "[" ((value loop) | (value ("," value)*)? ","?) "]"
 flowMap     := "{" ((entry loop) | (entry ("," entry)*)?) "}"
 entry       := (key | "<<") sep value
@@ -1252,5 +1474,6 @@ postfix     := "?"? ("." identifier | "[" value "]") | args
 args        := "(" (arg ("," arg)* ","?)? ")"
 arg         := (identifier "=")? value
 dots        := "." | ".." | "..."  ...
-builtin     := "$" | "$$" | "$root" | "$self" | "$context" | "$yak"
+builtin     := "$" | "$$" | "$root" | "$context" | "$ctx" | "$yak"
+             | "$filepath" | "$contextpaths" | "$workdir"
 ```

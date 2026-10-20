@@ -76,10 +76,12 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
   tags return with schemas.
 - **Relative references.** `.name` is a sibling, `..name` the parent's,
   `...name` the grandparent's, `$.name` the document root's, and `$$.name` the
-  context's. `$self`, `$root` and `$context` are long forms of `.`, `$` and
+  context's. `$root` and `$context` (or `$ctx`) are long forms of `$` and
   `$$`.
-- **Runtime information.** `$yak` holds the yak `version`, the template's
-  `filepath`, the `contextpaths` and whether the run is `strict`.
+- **Runtime information.** `$filepath` is the template's path,
+  `$contextpaths` the context files and `$workdir` the directory yak ran in;
+  `$yak` holds the yak `version`, the output `format` and whether the run is
+  `strict`.
 - **Hidden fields.** `::` instead of `:` keeps a value available to
   references but out of the output; `:?` drops an entry only when its value is
   null.

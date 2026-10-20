@@ -38,7 +38,7 @@ func newRenderCommand() *cobra.Command {
 			"directory skips libraries, and rendering one directly is an error.\n\n" +
 			"Context files may be YAML or JSON. They are merged in the order given,\n" +
 			"with later files taking precedence, and are available to the template as\n" +
-			"$context (or $$).\n\n" +
+			"$context, $ctx or $$.\n\n" +
 			"The output format defaults to YAML. A template named for a format, such\n" +
 			"as app.toml.yak, writes that format; naming an output file with a known\n" +
 			"extension takes precedence over the template's name, and --format over\n" +

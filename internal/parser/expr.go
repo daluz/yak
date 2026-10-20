@@ -367,6 +367,9 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		// belongs is an alias rather than an operator.
 		return nil, p.errorf(t.Pos, "anchors and aliases are not supported in yak; use a let binding instead")
 
+	case token.Bang:
+		return p.parseTag()
+
 	default:
 		return nil, p.errorf(t.Pos, "expected a value, found %s", t)
 	}
@@ -414,12 +417,6 @@ func (p *parser) parseLambda() (ast.Node, error) {
 	return fn, nil
 }
 
-// unsupportedKeywords maps the statement keywords that are planned but not
-// yet implemented to the message shown when they are used.
-var unsupportedKeywords = map[string]string{
-	token.KeywordSchema: `"schema" is not implemented yet`,
-}
-
 func (p *parser) parseIdent() (ast.Node, error) {
 	t := p.next()
 	switch t.Lit {
@@ -433,6 +430,9 @@ func (p *parser) parseIdent() (ast.Node, error) {
 		return nil, p.errorf(t.Pos, "a %q binding is a statement of its own, not a value", "let")
 	case token.KeywordImport:
 		return nil, p.errorf(t.Pos, "an %q is a statement of its own, not a value", "import")
+	case token.KeywordSchema:
+		return nil, p.errorf(t.Pos, "a %q is a statement of its own, not a value; a value is checked against one with %q",
+			"schema", "!Name")
 	case token.KeywordIf:
 		// An "if" is looser than every operator, so one written where an
 		// operand belongs has to say which way it groups.
@@ -441,9 +441,6 @@ func (p *parser) parseIdent() (ast.Node, error) {
 		// A "not" is looser than every comparison and every arithmetic
 		// operator, so it cannot stand on the right of one unwrapped.
 		return nil, p.errorf(t.Pos, "a %q cannot be used as an operand here; wrap it in parentheses", "not")
-	}
-	if msg, ok := unsupportedKeywords[t.Lit]; ok {
-		return nil, p.errorf(t.Pos, "%s", msg)
 	}
 	if t.Lit == ast.Wildcard {
 		return nil, p.errorf(t.Pos, "%q discards a value and cannot be read", t.Lit)
@@ -458,25 +455,27 @@ func (p *parser) parseIdent() (ast.Node, error) {
 
 // builtinVariables names every "$name" variable, so that a misspelled one is
 // answered with the list of the real ones.
-const builtinVariables = `"$root", "$self", "$context", "$yak"`
+const builtinVariables = `"$root", "$context", "$ctx", "$yak", "$filepath", "$contextpaths", "$workdir"`
 
-// parseBuiltin parses a "$name" variable. Three of them are a sigil written
-// out in full and mean exactly what the sigil does, so "$root" is "$",
-// "$self" is "." and "$context" is "$$". "$yak" describes the run rather
-// than the document.
+// parseBuiltin parses a "$name" variable. Some of them are a sigil written
+// out in full and mean exactly what the sigil does, so "$root" is "$" and
+// "$context" and "$ctx" are "$$". The rest describe the run rather than the
+// document.
 func (p *parser) parseBuiltin() (ast.Node, error) {
 	t := p.next()
 	switch t.Lit {
 	case "root":
 		return &ast.Root{Base: ast.At(t.Pos)}, nil
-	case "self":
-		return &ast.Self{Base: ast.At(t.Pos), Src: "$self"}, nil
-	case "context":
+	case "context", "ctx":
 		return &ast.Context{Base: ast.At(t.Pos)}, nil
 	case "yak":
 		return &ast.Yak{Base: ast.At(t.Pos)}, nil
-	case "super":
-		return nil, p.errorf(t.Pos, "%q is not implemented yet", "$super")
+	case "filepath":
+		return &ast.FilePath{Base: ast.At(t.Pos)}, nil
+	case "contextpaths":
+		return &ast.ContextPaths{Base: ast.At(t.Pos)}, nil
+	case "workdir":
+		return &ast.Workdir{Base: ast.At(t.Pos)}, nil
 	}
 	return nil, p.errorf(t.Pos, "unknown builtin variable %q; the ones that exist are %s",
 		"$"+t.Lit, builtinVariables)

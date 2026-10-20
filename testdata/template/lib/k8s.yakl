@@ -1,0 +1,11 @@
+## A library of schemas. The ones declared at the top of a module are what
+## a file importing it can tag with.
+let positive = (n) => n > 0
+
+schema Base =
+  name: string
+  replicas: integer if positive = 1
+
+schema Deployment =
+  <<: Base
+  image: string

@@ -74,6 +74,12 @@ const (
 	// Question is the "?" of an optional access, always followed directly by
 	// "." or "[".
 	Question
+	// Bang is the "!" of a tag, always followed directly by the name of the
+	// schema it applies.
+	Bang
+	// Pipe separates the alternatives of a union type. A "|" written where
+	// a value begins opens a block scalar instead.
+	Pipe
 	// Not, And, Or, In and NotIn are written as words. They lex as
 	// identifiers, and the parser reads one as an operator where an operator
 	// may stand. NotIn is the two words "not in".
@@ -118,6 +124,8 @@ var spelling = map[Kind]string{
 	Arrow:         "=>",
 	Coalesce:      "??",
 	Question:      "?",
+	Bang:          "!",
+	Pipe:          "|",
 	Not:           KeywordNot,
 	And:           KeywordAnd,
 	Or:            KeywordOr,

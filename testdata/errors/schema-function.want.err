@@ -1,0 +1,1 @@
+schema-function.yak:3:7: "upper" is a function, not a schema; call it as upper(...)

@@ -24,8 +24,9 @@ For the precise rules, [SPEC.md](SPEC.md) defines the language and
 - [16. Comments](#16-comments)
 - [17. Several documents](#17-several-documents)
 - [18. Modules and the standard library](#18-modules-and-the-standard-library)
-- [19. Output formats](#19-output-formats)
-- [20. Putting it together](#20-putting-it-together)
+- [19. Schemas](#19-schemas)
+- [20. Output formats](#20-output-formats)
+- [21. Putting it together](#21-putting-it-together)
 
 ## 1. Your first template
 
@@ -296,13 +297,13 @@ name: "web"
 A value that ends up depending on itself is reported as a circular reference,
 along with the positions that form the cycle.
 
-`.` and `$` can also be spelled `$self` and `$root`.
+`$` can also be spelled `$root`.
 
 ## 6. The context
 
 Data from outside the template, such as an environment name or a list of
 ports, is the *context*. It is given with `-c` as YAML or JSON files, and read
-with `$$` (or `$context` in full).
+with `$$` (or `$context`, or `$ctx`, in full).
 
 Save this as `prod.yaml`:
 
@@ -1300,15 +1301,204 @@ not the template, and a template can read it as `$yak.strict`.
 
 ### Information about the rendering
 
-`$yak` describes the rendering rather than the document, which is enough for
-a provenance note:
+`$filepath`, `$contextpaths`, `$workdir` and `$yak` describe the rendering
+rather than the document, which is enough for a provenance note:
 
 ```yaml
-note: "rendered from \($yak.filepath) by yak \($yak.version)"
-contexts: $yak.contextpaths
+note: "rendered from \($filepath) by yak \($yak.version)"
+contexts: $contextpaths
 ```
 
-## 19. Output formats
+[The spec](SPEC.md#builtin-variables) lists every builtin variable.
+
+## 19. Schemas
+
+A schema says what a value may hold, and fills in the fields a mapping leaves
+out. `schema` declares one, and a tag, `!Name`, checks a value against it:
+
+```yaml
+schema Port =
+  name: string
+  number: integer
+  protocol: "TCP" | "UDP" = "TCP"
+
+ports:
+  - !Port {name: "http", number: 8080}
+  - !Port {name: "dns", number: 53, protocol: "UDP"}
+```
+
+renders as:
+
+```yaml
+ports:
+  - name: http
+    number: 8080
+    protocol: TCP
+  - name: dns
+    number: 53
+    protocol: UDP
+```
+
+`"TCP" | "UDP"` takes either string, and `= "TCP"` is the default for a port
+that leaves it out. A value that does not fit is an error at the value, as
+when the first port is written `{name: "https", number: "443"}`:
+
+```console
+$ yak render ports.yak
+yak: ports.yak:7:35: field "number" of schema "Port" expects integer, found "443"
+```
+
+So is a field the schema does not declare, which catches a misspelling such
+as `{name: "ssh", numbr: 22}`:
+
+```console
+yak: ports.yak:7:32: schema "Port" has no field "numbr"; it declares "name", "number", "protocol"
+```
+
+### Defaults, checks and optional fields
+
+A default can read the mapping it fills in through `.`, `if` adds a check to
+a type, `(string): string` types the keys of a mapping that declares none,
+and `:?` marks a field that may be left out:
+
+```yaml
+let positive = (n) => n > 0
+
+schema Service =
+  name: string
+  replicas: integer if positive = 1
+  host: string = "\(.name).svc.cluster.local"
+  labels: {(string): string} = {}
+  selector:? mapping
+
+web: !Service
+  name: "web"
+  replicas: 3
+api: !Service {name: "api", labels: {team: "platform"}}
+```
+
+renders as:
+
+```yaml
+web:
+  name: web
+  replicas: 3
+  host: web.svc.cluster.local
+  labels: {}
+api:
+  name: api
+  labels:
+    team: platform
+  replicas: 1
+  host: api.svc.cluster.local
+```
+
+The defaults follow the fields that were written. A tag that ends its line
+applies to the block below it, as `web` shows.
+
+### Open schemas
+
+A schema is closed: every key needs a field. `schema*` declares an open one,
+which lets other keys through. `<<` merges another schema's fields in, and a
+`schema { ... }` block declares several at once:
+
+```yaml
+schema {
+  Tier = "gold" | "silver"
+  Service = {name: string, tier: Tier = "silver"}
+}
+schema* LooseService =
+  <<: Service
+
+strict: !Service {name: "web", tier: "gold"}
+loose: !LooseService {name: "batch", schedule: "@daily"}
+```
+
+renders as:
+
+```yaml
+strict:
+  name: web
+  tier: gold
+loose:
+  name: batch
+  schedule: '@daily'
+  tier: silver
+```
+
+### Checking the context
+
+`schema $$` checks the context before anything reads it, and the defaults it
+fills in are what `$$` answers everywhere. An open one leaves room for the
+fields it does not mention:
+
+```yaml
+schema* $$ =
+  env: "dev" | "prod"
+  replicas: integer = 1
+
+env: $$.env
+replicas: $$.replicas
+```
+
+With a context of `{env: prod}` that renders as:
+
+```yaml
+env: prod
+replicas: 1
+```
+
+and a context file that gets it wrong is reported against the schema:
+
+```console
+$ yak render app.yak -c qa.yaml
+yak: app.yak:1:9: field "env" of the context expects "dev" or "prod", found "qa"
+```
+
+`schema $` checks the document itself the same way.
+
+### Schemas from a module
+
+The schemas at the top of a module are there for whoever imports it. Save
+this as `lib/k8s.yakl`:
+
+```yaml
+schema Metadata =
+  name: string
+  labels: {(string): string} = {}
+
+schema Deployment =
+  metadata: Metadata
+  image: string
+  replicas: integer = 1
+```
+
+and tag with the module's name in front:
+
+```yaml
+import lib.k8s
+
+web: !k8s.Deployment
+  metadata: {name: "web"}
+  image: "nginx:1.27"
+```
+
+which renders as:
+
+```yaml
+web:
+  metadata:
+    name: web
+    labels: {}
+  image: nginx:1.27
+  replicas: 1
+```
+
+The nested `metadata` is checked against `Metadata` and gets its defaults
+too. [The spec](SPEC.md#schemas) has every type and the exact rules of when
+a value is checked.
+
+## 20. Output formats
 
 The same template can render JSON, JSONC, KYAML, TOML and more. `-f` picks
 one, or else the name of the output file or the template does:
@@ -1359,7 +1549,7 @@ A format that cannot hold what the template produced refuses it: JSON takes
 only one document, and TOML has no `null`. [CLI.md](CLI.md#output-formats)
 lists every format and the flags for writing output to files.
 
-## 20. Putting it together
+## 21. Putting it together
 
 Here is a Deployment and a Service for Kubernetes, rendered from two layered
 context files. The base file, `base.yaml`, describes the application:

@@ -1,0 +1,2 @@
+schema $$ = {env: string}
+value:: 1

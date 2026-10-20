@@ -245,6 +245,10 @@ func (l *lexer) scanToken() error {
 		return l.errorf(start, "%q is written %q in yak", "||", token.KeywordOr)
 	case c == '&' && l.peekAt(1) == '&':
 		return l.errorf(start, "%q is written %q in yak", "&&", token.KeywordAnd)
+	case c == '|' && l.afterOperand():
+		l.advance()
+		l.emit(token.Token{Kind: token.Pipe, Lit: "|", Pos: start})
+		return nil
 	case c == '|':
 		if !l.block {
 			return l.errorf(start, "unexpected %q", string(c))
@@ -259,7 +263,12 @@ func (l *lexer) scanToken() error {
 	case c == '&':
 		return l.errorf(start, "anchors and aliases are not supported in yak; use a let binding instead")
 	case c == '!' && l.peekAt(1) == '!':
-		return l.errorf(start, "tags are not supported in yak yet; they will arrive with schemas")
+		return l.errorf(start, "YAML's %q tags are not supported in yak; a schema is applied with a single %q, as in %q",
+			"!!", "!", "!Name")
+	case c == '!' && isIdentStart(l.peekAt(1)):
+		l.advance()
+		l.emit(token.Token{Kind: token.Bang, Lit: "!", Pos: start})
+		return nil
 	case c == '!' && l.peekAt(1) != '=':
 		return l.errorf(start, "%q is written %q in yak", "!", token.KeywordNot)
 	case c == '%' && l.block && l.col == 1:
@@ -300,6 +309,20 @@ func (l *lexer) scanDots(start token.Pos) error {
 	}
 	l.emit(token.Token{Kind: token.Dots, Lit: strings.Repeat(".", n), Pos: start})
 	return nil
+}
+
+// afterOperand reports whether the current position follows an operand on
+// the same line, which is where a "|" separates the alternatives of a union.
+// Anywhere else a "|" begins a value, and so opens a block scalar.
+func (l *lexer) afterOperand() bool {
+	if l.bol || len(l.toks) == 0 {
+		return false
+	}
+	switch l.toks[len(l.toks)-1].Kind {
+	case token.Ident, token.String, token.Int, token.Float, token.RBracket, token.RBrace, token.RParen:
+		return true
+	}
+	return false
 }
 
 // blockScalarHeader reports whether the ">" at the current position opens a

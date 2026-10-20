@@ -1,0 +1,63 @@
+import lib.k8s
+
+## The context is checked before anything reads it, and its defaults are
+## filled in. It is open, so "owner" is allowed without being declared.
+schema* $$ =
+  env: "dev" | "prod"
+  replicas: integer = 2
+
+## The document itself has to match this.
+schema $ =
+  env: string
+  services: {(string): LooseService}
+  ports: [Port]
+  deployment: k8s.Deployment
+  loose: LooseService
+  tiers: [Tier]
+  pair: Pair
+  anything: Anything
+
+schema Protocol = "TCP" | "UDP"
+
+schema Port =
+  name: string
+  number: integer if (n) => n > 0 and n < 65536
+  protocol: Protocol = "TCP"
+
+schema Service =
+  name: string
+  replicas: integer = $$.replicas
+  host: string = "\(.name).svc"
+  ports: [Port] = []
+  labels: {(string): string} = {}
+  selector:? mapping
+
+schema* LooseService =
+  <<: Service
+
+schema { Tier = "gold" | "silver", Pair = [integer] }
+schema* { Anything = {} }
+
+env: $$.env
+services:
+  ## An open schema keeps "url", which reads the default "host" is given.
+  web: !LooseService
+    name: "web"
+    ports:
+      - !Port {name: "http", number: 8080}
+    url: "http://\(.host)"
+  api: !Service {name: "api", replicas: 3, labels: {tier: "back"}}
+  ## The context has no "workers", so the field is null and takes the default.
+  worker: !Service
+    name: "worker"
+    replicas:? $$?.workers
+ports:
+  - !Port
+    name: "dns"
+    number: 53
+    protocol: "UDP"
+deployment: !k8s.Deployment {name: "web", image: "nginx:1.27"}
+loose: !LooseService {name: "loose", team: $$.owner}
+tiers: ["gold", "silver"]
+pair: [1, 2]
+anything: !Anything {any: "key"}

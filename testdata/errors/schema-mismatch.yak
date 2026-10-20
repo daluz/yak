@@ -1,0 +1,3 @@
+schema Port = {name: string, number: integer}
+
+port: !Port {name: "http", number: "80"}

@@ -1,0 +1,1 @@
+schema-missing-field.yak:3:13: schema "Port" needs a field "number"

@@ -8,8 +8,7 @@ nested:
   name: inner
   self: inner
   parent: root
-  # "$self" and "$root" are "." and "$" written out in full.
-  self-long: inner
+  # "$root" is "$" written out in full.
   root-long: root
   deeper:
     name: deepest
@@ -23,6 +22,7 @@ absolute:
   by-name: deepest
 context:
   long-form: staging
+  ctx-form: staging
   short-form: staging
   nested: us-east-1a
   by-string-index: us-east-1a

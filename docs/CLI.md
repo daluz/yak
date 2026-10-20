@@ -56,7 +56,7 @@ $ yak render FILE.yak|DIR|REMOTE [-c context.yaml|context.json]... [-f FORMAT]
 The one argument is the template to render, a directory of them, or a
 [remote package](#rendering-a-remote-package). `-`
 reads a template from standard input; it is then called `<stdin>` by
-diagnostics and `$yak.filepath`, and `std.files` reads relative to the
+diagnostics and `$filepath`, and `std.files` reads relative to the
 current directory. A `.yakl` file is a [library](SPEC.md#modules-and-packages), which can
 be imported but not rendered, so naming one is an error.
 
@@ -228,7 +228,8 @@ those modules and lets `std.files` read any path.
 
 ### Context files
 
-`-c` supplies the data a template reads as `$context`, or `$$` for short.
+`-c` supplies the data a template reads as `$context` or `$ctx`, or `$$` for
+short.
 Repeating it merges the files left to right: mappings merge key by key, and a
 sequence or a scalar from a later file replaces what came before.
 
@@ -246,7 +247,7 @@ region: $$?.region ?? "us-east-1"
 ```
 
 A template reads the paths as
-[`$yak.contextpaths`](SPEC.md#builtin-variables), in the order given.
+[`$contextpaths`](SPEC.md#builtin-variables), in the order given.
 
 Context files are plain YAML or JSON, not yak, so they may use anchors and
 unquoted strings, and nothing in them interpolates. Each must hold a mapping

@@ -64,6 +64,18 @@ func (c *commentSet) line(start, end int) string {
 	return out
 }
 
+// drop claims every comment written inside the tokens from start to end,
+// for a construct that renders nothing and is never read back. A whole-line
+// comment pointing at end is written above what follows, and is left for it.
+func (c *commentSet) drop(start, end int) {
+	for n := range c.all {
+		cm := &c.all[n]
+		if cm.Next > start && (cm.Next < end || (cm.Next == end && !cm.OwnLine)) {
+			c.claimed[n] = true
+		}
+	}
+}
+
 // rendered reports the text a comment contributes to the output. A "## "
 // comment contributes nothing: it is a note about the template.
 func rendered(text string) (string, bool) {
