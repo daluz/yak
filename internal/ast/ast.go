@@ -2,6 +2,7 @@
 package ast
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/daluz/yak/internal/token"
@@ -174,6 +175,11 @@ type TypeRef struct {
 	Base
 	Module string
 	Name   string
+}
+
+// Builtin reports whether r names one of the BuiltinTypes.
+func (r *TypeRef) Builtin() bool {
+	return r.Module == "" && slices.Contains(BuiltinTypes, r.Name)
 }
 
 // TypeLiteral is the type of one value only, written as the literal Value: a

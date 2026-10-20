@@ -171,16 +171,15 @@ func (im *importer) root(path, apiVersion, kind string, n *yaml.Node) (*typ, err
 	if t.mapping == nil {
 		return nil, fmt.Errorf("%s: the openAPIV3Schema of %s is not an object", im.file, path)
 	}
-	envelope := []field{
+	fields := []field{
 		{name: "apiVersion", t: literal(quote(apiVersion)), def: quote(apiVersion)},
 		{name: "kind", t: literal(quote(kind)), def: quote(kind)},
 		{name: "metadata", optional: true, t: builtin("mapping")},
 	}
-	t.mapping.fields = append(envelope, t.mapping.fields...)
+	t.mapping.fields = append(fields, t.mapping.fields...)
 	return t, nil
 }
 
-// envelope says whether a field of the root is one root declares itself.
-func envelope(name string) bool {
-	return name == "apiVersion" || name == "kind" || name == "metadata"
-}
+// envelope holds the fields every Kubernetes object has, which root declares
+// itself and an embedded resource takes.
+var envelope = []string{"apiVersion", "kind", "metadata"}

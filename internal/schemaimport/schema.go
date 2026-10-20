@@ -176,7 +176,7 @@ func (im *importer) object(n *yaml.Node, path string, root bool) *mapping {
 	for i := 0; i < len(props.Content); i += 2 {
 		name, schema := props.Content[i].Value, props.Content[i+1]
 		at := path + "." + name
-		if root && envelope(name) {
+		if root && slices.Contains(envelope, name) {
 			if name == "metadata" && len(deref(schema).Content) > 0 && !onlyKeys(schema, "type", "description") {
 				im.warn(at, "its schema is not imported, since every object takes the same metadata")
 			}
@@ -194,7 +194,7 @@ func (im *importer) object(n *yaml.Node, path string, root bool) *mapping {
 	}
 	if embedded {
 		var meta []field
-		for _, name := range []string{"apiVersion", "kind", "metadata"} {
+		for _, name := range envelope {
 			if !slices.ContainsFunc(m.fields, func(f field) bool { return f.name == name }) {
 				t := builtin("string")
 				if name == "metadata" {

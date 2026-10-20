@@ -832,11 +832,3 @@ func TestRegistryCommandsTakePlainHTTP(t *testing.T) {
 		}
 	}
 }
-
-func TestBuildAndValidateAreNotRegisteredYet(t *testing.T) {
-	for _, name := range []string{"build", "validate"} {
-		if _, err := run(t, name); err == nil {
-			t.Errorf("%q succeeded, but it is not implemented yet", name)
-		}
-	}
-}

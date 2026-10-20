@@ -2,7 +2,6 @@ package eval
 
 import (
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -201,7 +200,7 @@ func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 	skip := session.skipping()
 	switch t := t.(type) {
 	case *ast.TypeRef:
-		if t.Module == "" && slices.Contains(ast.BuiltinTypes, t.Name) {
+		if t.Builtin() {
 			if skip || t.Name == "any" || v.TypeName() == t.Name {
 				return v, nil
 			}
@@ -252,15 +251,7 @@ func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 			// so it is picked as it would be, and only a value that fits
 			// none goes through as it is.
 			session.choosing++
-			pick := slices.IndexFunc(t.Alts, func(alt ast.Node) bool {
-				_, err := s.check(v, alt, at, false)
-				return err == nil
-			})
-			session.choosing--
-			if pick < 0 {
-				return v, nil
-			}
-			return s.check(v, t.Alts[pick], at, fresh)
+			defer func() { session.choosing-- }()
 		}
 		var deep error
 		for _, alt := range t.Alts {
@@ -268,11 +259,17 @@ func (s *Schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 			if err == nil {
 				return r, nil
 			}
+			if skip {
+				continue
+			}
 			if e, ok := err.(*Error); !ok || e.misfit == 0 {
 				return nil, err
 			} else if e.misfit == deepMisfit && deep == nil {
 				deep = err
 			}
+		}
+		if skip {
+			return v, nil
 		}
 		if deep != nil {
 			return nil, deep
@@ -492,7 +489,7 @@ func (s *Schema) mappingType(t ast.Node) (*Schema, *ast.TypeMapping, error) {
 		case *ast.TypeMapping:
 			return s, tt, nil
 		case *ast.TypeRef:
-			if tt.Module != "" || !slices.Contains(ast.BuiltinTypes, tt.Name) {
+			if !tt.Builtin() {
 				target, err := s.env.findSchema(tt.Module, tt.Name, tt.Pos(), false)
 				if err != nil {
 					return nil, nil, err
@@ -510,7 +507,7 @@ func (s *Schema) mappingType(t ast.Node) (*Schema, *ast.TypeMapping, error) {
 func describe(t ast.Node) string {
 	switch t := t.(type) {
 	case *ast.TypeRef:
-		if t.Module == "" && slices.Contains(ast.BuiltinTypes, t.Name) {
+		if t.Builtin() {
 			return t.Name
 		}
 		if t.Module != "" {
@@ -668,7 +665,7 @@ func checkBindings(binds []*ast.Binding, r *regions) error {
 func (s *Schema) checkType(t ast.Node) error {
 	switch t := t.(type) {
 	case *ast.TypeRef:
-		if t.Module == "" && slices.Contains(ast.BuiltinTypes, t.Name) {
+		if t.Builtin() {
 			return nil
 		}
 		_, err := s.env.findSchema(t.Module, t.Name, t.Pos(), false)

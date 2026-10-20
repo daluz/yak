@@ -97,6 +97,120 @@ $ yak render git+https://github.com/acme/deploy.git//web@v2 --output-dir build
 $ yak render oci://ghcr.io/acme/web:1.4.0 --output-dir build
 ```
 
+### Strict mode
+
+Rendering is strict unless `--strict=false` is given, so the same template and
+context always render the same output. Strict mode refuses modules that answer
+differently on every rendering, such as `std.random`, and confines
+`std.files` to the directory of the file that calls it. Turning it off admits
+those modules and lets `std.files` read any path.
+[SPEC.md](SPEC.md#strict-mode) has the details.
+
+### Context files
+
+`-c` supplies the data a template reads as `$context` or `$ctx`, or `$$` for
+short.
+Repeating it merges the files left to right: mappings merge key by key, and a
+sequence or a scalar from a later file replaces what came before.
+
+```console
+$ yak render app.yak -c base.yaml -c prod.yaml
+```
+
+With `base.yaml` holding `{replicas: 1, env: staging}` and `prod.yaml` holding
+`{env: prod}`, the template sees both keys and the later `env`:
+
+```yaml
+replicas: $$.replicas       # 1, from base.yaml
+env: $$.env                 # "prod", from prod.yaml
+region: $$?.region ?? "us-east-1"
+```
+
+A template reads the paths as
+[`$contextpaths`](SPEC.md#builtin-variables), in the order given.
+
+Context files are plain YAML or JSON, not yak, so they may use anchors and
+unquoted strings, and nothing in them interpolates. Each must hold a mapping
+at the top level. Several YAML documents, or several JSON values, in one file
+merge in order as separate files do.
+
+A `.json` file is read by the JSON parser, which accepts all of JSON,
+including escapes such as `\/` that YAML rejects. Any other file is read as
+YAML, which accepts most JSON too.
+
+### Where the output goes
+
+The rendered output goes to standard output unless `-o` names a file to write.
+
+`-O` names the output file after the template, replacing its extensions with
+that of the format written: `app.toml.yak` yields `app.toml`, `app.yak` yields
+`app.yaml`, and `-f json` on `app.toml.yak` yields `app.json`. `-O` with a
+template read from standard input is an error.
+
+`--output-dir` puts the output file in a directory, creating it if missing. It
+needs `-o` or `-O`, and refuses an absolute output path. With `-O` only the
+template's file name is kept, so
+`yak render deploy/app.toml.yak -O --output-dir build` writes
+`build/app.toml`.
+
+```console
+$ yak render app.yak -c production.yaml -f kyaml
+$ yak render app.yak -o rendered.json            # the extension chooses JSON
+$ yak render app.toml.yak -O                     # writes app.toml
+$ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
+```
+
+Output is held until every document has rendered, so a failure never leaves a
+half-written file.
+
+### Output formats
+
+`-f` selects the format. Without it the output file's extension does, and
+failing that the extension the template's name carries ahead of `.yak`, so
+`app.toml.yak` writes TOML. A template reads the chosen format as
+[`$yak.format`](SPEC.md#builtin-variables), which is always the name in the
+first column below, never one of the others it is known as.
+
+| Format  | Also known as                 | Documents | Comments |
+| ------- | ----------------------------- | --------- | -------- |
+| `yaml`  | `yml`                         | many      | yes      |
+| `kyaml` |                               | many      | yes      |
+| `json`  |                               | one       | no       |
+| `jsonc` |                               | one       | `//`     |
+| `jwcc`  | `jsoncc`, `hujson`, `json5`   | one       | `//`     |
+| `jsonl` | `ndjson`                      | many      | no       |
+| `toml`  |                               | one       | yes      |
+
+Key order, hidden fields and the all-or-nothing rule are the same in every
+format, and comments reach every format that can hold them.
+
+`kyaml` is the Kubernetes dialect of YAML from KEP-5295: flow style
+throughout, every string value double-quoted, keys bare unless they could be
+misread, trailing commas, and a `---` header on every document. Any YAML
+parser reads it. Unlike `kubectl`, yak keeps keys in source order rather than
+sorting them.
+
+`jsonc` is JSON with comments, and `jwcc` ("JSON with commas and comments")
+adds trailing commas. `json5` is an alias of `jwcc` because everything yak
+writes reads as JSON5. `jsonl` writes one compact document per line, which is
+how a stream of documents comes out as JSON. The single-document formats are
+an error, rather than picking one, when a template produced several.
+
+TOML cannot hold everything yak can say:
+
+- A document must be a mapping, and there can only be one of them.
+- There is no null. A null value is an error naming the key it was found
+  at; `??` supplies something else, and `:?` drops the key instead.
+- Sub-tables must follow the plain keys of their table, so keys come out
+  grouped by whether they open a table, in source order within each group.
+
+### Null documents
+
+A document that evaluates to `null`, because it holds only bindings, nothing
+at all, or a body written as `null`, is left out unless
+`--keep-null-documents` is given. If every document is dropped, the
+single-document formats report the empty output as an error.
+
 ## `yak package`
 
 `yak package`, or `yak pkg`, manages the package the current directory is in:
@@ -219,120 +333,6 @@ $ yak package build
 $ yak package push oci://ghcr.io/acme/web    # pushes ghcr.io/acme/web:1.4.0
 ```
 
-### Strict mode
-
-Rendering is strict unless `--strict=false` is given, so the same template and
-context always render the same output. Strict mode refuses modules that answer
-differently on every rendering, such as `std.random`, and confines
-`std.files` to the directory of the file that calls it. Turning it off admits
-those modules and lets `std.files` read any path.
-[SPEC.md](SPEC.md#strict-mode) has the details.
-
-### Context files
-
-`-c` supplies the data a template reads as `$context` or `$ctx`, or `$$` for
-short.
-Repeating it merges the files left to right: mappings merge key by key, and a
-sequence or a scalar from a later file replaces what came before.
-
-```console
-$ yak render app.yak -c base.yaml -c prod.yaml
-```
-
-With `base.yaml` holding `{replicas: 1, env: staging}` and `prod.yaml` holding
-`{env: prod}`, the template sees both keys and the later `env`:
-
-```yaml
-replicas: $$.replicas       # 1, from base.yaml
-env: $$.env                 # "prod", from prod.yaml
-region: $$?.region ?? "us-east-1"
-```
-
-A template reads the paths as
-[`$contextpaths`](SPEC.md#builtin-variables), in the order given.
-
-Context files are plain YAML or JSON, not yak, so they may use anchors and
-unquoted strings, and nothing in them interpolates. Each must hold a mapping
-at the top level. Several YAML documents, or several JSON values, in one file
-merge in order as separate files do.
-
-A `.json` file is read by the JSON parser, which accepts all of JSON,
-including escapes such as `\/` that YAML rejects. Any other file is read as
-YAML, which accepts most JSON too.
-
-### Where the output goes
-
-The rendered output goes to standard output unless `-o` names a file to write.
-
-`-O` names the output file after the template, replacing its extensions with
-that of the format written: `app.toml.yak` yields `app.toml`, `app.yak` yields
-`app.yaml`, and `-f json` on `app.toml.yak` yields `app.json`. `-O` with a
-template read from standard input is an error.
-
-`--output-dir` puts the output file in a directory, creating it if missing. It
-needs `-o` or `-O`, and refuses an absolute output path. With `-O` only the
-template's file name is kept, so
-`yak render deploy/app.toml.yak -O --output-dir build` writes
-`build/app.toml`.
-
-```console
-$ yak render app.yak -c production.yaml -f kyaml
-$ yak render app.yak -o rendered.json            # the extension chooses JSON
-$ yak render app.toml.yak -O                     # writes app.toml
-$ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
-```
-
-Output is held until every document has rendered, so a failure never leaves a
-half-written file.
-
-### Output formats
-
-`-f` selects the format. Without it the output file's extension does, and
-failing that the extension the template's name carries ahead of `.yak`, so
-`app.toml.yak` writes TOML. A template reads the chosen format as
-[`$yak.format`](SPEC.md#builtin-variables), which is always the name in the
-first column below, never one of the others it is known as.
-
-| Format  | Also known as                 | Documents | Comments |
-| ------- | ----------------------------- | --------- | -------- |
-| `yaml`  | `yml`                         | many      | yes      |
-| `kyaml` |                               | many      | yes      |
-| `json`  |                               | one       | no       |
-| `jsonc` |                               | one       | `//`     |
-| `jwcc`  | `jsoncc`, `hujson`, `json5`   | one       | `//`     |
-| `jsonl` | `ndjson`                      | many      | no       |
-| `toml`  |                               | one       | yes      |
-
-Key order, hidden fields and the all-or-nothing rule are the same in every
-format, and comments reach every format that can hold them.
-
-`kyaml` is the Kubernetes dialect of YAML from KEP-5295: flow style
-throughout, every string value double-quoted, keys bare unless they could be
-misread, trailing commas, and a `---` header on every document. Any YAML
-parser reads it. Unlike `kubectl`, yak keeps keys in source order rather than
-sorting them.
-
-`jsonc` is JSON with comments, and `jwcc` ("JSON with commas and comments")
-adds trailing commas. `json5` is an alias of `jwcc` because everything yak
-writes reads as JSON5. `jsonl` writes one compact document per line, which is
-how a stream of documents comes out as JSON. The single-document formats are
-an error, rather than picking one, when a template produced several.
-
-TOML cannot hold everything yak can say:
-
-- A document must be a mapping, and there can only be one of them.
-- There is no null. A null value is an error naming the key it was found
-  at; `??` supplies something else, and `:?` drops the key instead.
-- Sub-tables must follow the plain keys of their table, so keys come out
-  grouped by whether they open a table, in source order within each group.
-
-### Null documents
-
-A document that evaluates to `null`, because it holds only bindings, nothing
-at all, or a body written as `null`, is left out unless
-`--keep-null-documents` is given. If every document is dropped, the
-single-document formats report the empty output as an error.
-
 ## `yak schema check`
 
 ```console
@@ -363,16 +363,16 @@ $ yak schema import FILE.yaml|-... [-o FILE] [--format FORMAT]
 | `-o`, `--output FILE` | Write the library to this file instead of standard output. |
 | `--format FORMAT` | What the files hold. `crd`, Kubernetes CustomResourceDefinitions, is the one format so far. |
 
-Without `--format`, each file is detected: one holding a
-CustomResourceDefinition, alone or in a `List`, is `crd`, and a file that is
-none of the formats is an error asking for `--format`. Every file of one
-import is in the same format, since they make one library.
-
 Translates the Kubernetes CustomResourceDefinitions in each file into one
 `.yakl` library, which a template [imports](SPEC.md#schemas-in-modules) to tag
 its objects. `-` reads standard input, a file may hold several documents, and
 a `List` of definitions, as `kubectl get crd -o yaml` writes, is read as well.
 Only `apiextensions.k8s.io/v1` definitions are read.
+
+Without `--format`, each file is detected: one holding a
+CustomResourceDefinition, alone or in a `List`, is `crd`, and a file that is
+none of the formats is an error asking for `--format`. Every file of one
+import is in the same format, since they make one library.
 
 Every served version becomes a schema named for its kind and version, so a
 `Widget` served as `v1` and `v1beta1` gives `WidgetV1` and `WidgetV1beta1`;

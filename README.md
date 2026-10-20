@@ -45,17 +45,6 @@ $ yak render FILE.yak [-c context.yaml|context.json]... [-f FORMAT]
                         [-o FILE | -O] [--output-dir DIR]
 ```
 
-Context files, YAML or JSON, merge in order with later files winning, and the
-template reads them as `$context` or `$$`. `-` reads the template from
-standard input. Output goes to standard output, to the file `-o` names, or
-with `-O` to a file named after the template: `app.toml.yak` yields
-`app.toml`. `--output-dir` puts that file in another directory.
-
-`-f` picks the output format; without it the output file's name decides, and
-failing that the template's, so `app.toml.yak` writes TOML. The formats are
-`yaml`, `kyaml`, `json`, `jsonc`, `jwcc`, `jsonl` and `toml`, and comments
-reach every one that can hold them.
-
 ```console
 $ yak render app.yak -c production.yaml -f kyaml
 $ yak render app.yak -o rendered.json            # the extension chooses JSON
@@ -72,8 +61,8 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
   so `"{{ .Values.name }}"` passes through untouched. `\\(` writes a literal
   `\(`, and an `r` prefix turns interpolation off: `r"hello \(literal)"`.
 - **Only `true` and `false` are booleans.** No `yes`, `no`, `on`, or `off`.
-- **No anchors and no tags.** References and `let` bindings replace anchors;
-  tags return with schemas.
+- **No anchors, and tags are schemas.** References and `let` bindings
+  replace anchors, and a tag checks a value against a schema.
 - **Relative references.** `.name` is a sibling, `..name` the parent's,
   `...name` the grandparent's, `$.name` the document root's, and `$$.name` the
   context's. `$root` and `$context` (or `$ctx`) are long forms of `$` and
@@ -110,6 +99,10 @@ $ yak render app.toml.yak -O --output-dir build  # writes build/app.toml
   such as `std.strings`, `std.json`, `std.regex`, `std.files` and
   `std.gotemplate` cover the rest:
   `gotemplate.render(files.read("nginx.conf.tmpl"), {name: $$.name})`.
+- **Schemas.** `schema Port = {name: string, protocol: "TCP" | "UDP" = "TCP"}`
+  declares a type, and `!Port {name: "http"}` checks a value against it and
+  fills in its defaults. `yak schema import` writes the schemas of Kubernetes
+  CustomResourceDefinitions as a library.
 - **Strict by default.** The same template and context always render the same
   output: `std.random` is refused and `std.files` cannot leave the template's
   directory unless `--strict=false` is given.
@@ -123,8 +116,8 @@ lists the standard library, and [docs/CLI.md](docs/CLI.md) documents the tool.
 
 ## Status
 
-The `render`, `package`, `schema check` and `schema import` commands and everything above are
-implemented. The `fmt` command is planned; see
+The `render`, `package`, `schema check` and `schema import` commands and
+everything above are implemented. The `fmt` command is planned; see
 [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Development

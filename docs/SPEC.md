@@ -1,9 +1,8 @@
 # The yak language
 
 This describes the language as it exists today. Planned features are listed in
-[ROADMAP.md](ROADMAP.md); the keywords reserved for them produce an explicit
-"not implemented yet" error rather than a parse failure. The command line tool
-is documented in [CLI.md](CLI.md).
+[ROADMAP.md](ROADMAP.md), and the command line tool is documented in
+[CLI.md](CLI.md).
 
 yak is a restricted dialect of YAML: what YAML does ambiguously is removed or
 made explicit, and a small expression language is added on top.
@@ -1013,10 +1012,8 @@ one of its fields fails later.
 
 `yak render --skip-schema-checks` lets every value through, so a schema only
 fills in defaults; a union still picks its alternative as above, and a value
-that fits none is left as it is. `yak schema check` checks the schemas
-themselves without rendering: see [CLI.md](CLI.md#yak-schema-check).
-`yak schema import` writes the schemas of Kubernetes CustomResourceDefinitions
-as a library: see [CLI.md](CLI.md#yak-schema-import).
+that fits none is left as it is. [CLI.md](CLI.md#yak-schema-check) describes
+the commands that check schemas without rendering and import them.
 
 ### Schemas in modules
 

@@ -222,7 +222,7 @@ func renderDir(dir string, req renderRequest, output string, automatic bool, out
 	if !automatic && outputDir == "" {
 		return fmt.Errorf("the directory %s writes one file per template; give --output-dir or --automatic-output", dir)
 	}
-	templates, err := templatesIn(dir)
+	templates, err := sourcesIn(dir, engine.ExtTemplate)
 	if err != nil {
 		return err
 	}
@@ -290,12 +290,6 @@ func renderRemote(ref string, req renderRequest, output string, automatic bool, 
 		return fmt.Errorf("%s names no directory of its repository", ref)
 	}
 	return renderDir(dir, req, "", false, outputDir)
-}
-
-// templatesIn lists the templates beneath dir, leaving out libraries,
-// whatever is hidden and the vendor directory of a package.
-func templatesIn(dir string) ([]string, error) {
-	return sourcesIn(dir, engine.ExtTemplate)
 }
 
 // sourcesIn lists the files beneath dir that end in one of exts, leaving out

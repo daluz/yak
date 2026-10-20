@@ -1,59 +1,20 @@
 # Roadmap
 
-Done so far: the restricted YAML parser, string interpolation, relative
-references, hidden fields, context files, the `render` command, `let`
-bindings, functions named and anonymous, the `size`, `empty`, `nempty`,
-`prune` and `render` built-ins and those on sequences and mappings, the `std.strings`,
-`std.json`, `std.yaml`, `std.base64`, `std.hash`, `std.regex`, `std.math`,
-`std.path`, `std.files`, `std.gotemplate` and `std.random` modules, strict
-mode, the
-`??` and
-`?.` operators, arithmetic, comparison and boolean operators, the `<<` merge
-in both of its forms,
-`if`/`then`/`else`, sequence and mapping comprehensions, `import` of local
-modules and `.yakl` libraries, packages defined by `yak.pkg` with local,
-git and OCI dependencies, the `package` command with `init`, `add`, `remove`,
-`sync`, `build` and `push`, `yak.lock`, rendering a directory or a remote
-package, the YAML, KYAML,
-JSON, TOML and line-delimited output formats, and schemas with the tags that
-apply them. What follows is the planned order of the remaining work.
+Everything [SPEC.md](SPEC.md), [STDLIB.md](STDLIB.md) and [CLI.md](CLI.md)
+describe is implemented. What follows is the planned order of the remaining
+work.
 
-## 1. Standard library modules
+## 1. `fmt`
 
-The built-ins are in: `eval.Builtin` is a value that `evalCall` accepts beside
-`*eval.Function`, it goes through the same `matchArguments` that a user
-function does, and `evalIdent` finds one only after every binding in scope, so
-a `let` shadows it. Built-ins are grouped into built-in modules under
-`internal/stdlib`, each of which hands a `module.BuiltinModule` to
-`module.Register` from its `init`. The root module, in `root.go`, has no path,
-so its members are bare names; `size`, `empty`, `nempty`, `prune` and `render` live
-there, and
-`seqs.go` and `maps.go` register the operations on sequences and mappings into
-it as well.
+`yak fmt` formats yak files following best practices. It slots into
+`internal/cli` beside `render`, and can reuse `internal/engine`.
 
-The rest of the library is namespaced rather than bare, so that adding a
-function cannot take a name a template is already using. Each module is a
-built-in module registered under a dotted path beginning with `std`, which
-`import std.name` binds as a mapping of its built-ins; the `std` segment is
-one that no file or `yak.pkg` can take. Each module has a file of its own,
-and names that take more than one word are camelCase. A built-in that takes a function calls it with `eval.Call`.
+## 2. More `schema import` formats
 
-What remains is formatting.
-
-## 2. Remaining commands
-
-`render`, `package`, `schema check` and `schema import` are in; [CLI.md](CLI.md)
-documents them.
-
-- `schema import` reads Kubernetes CustomResourceDefinitions. JSON Schema and
-  OpenAPI v3 documents are to follow, each as a value of `--format` that
-  `schemaimport.Detect` recognizes; `internal/schemaimport` translates an
-  OpenAPI schema node already, and `crd.go` is what is CRD-specific.
-
-- `fmt` formats yak files following best practices.
-
-It slots into `internal/cli` beside `render`, and can reuse
-`internal/engine`.
+`schema import` reads Kubernetes CustomResourceDefinitions. JSON Schema and
+OpenAPI v3 documents are to follow, each as a value of `--format` that
+`schemaimport.Detect` recognizes; `internal/schemaimport` translates an
+OpenAPI schema node already, and `crd.go` is what is CRD-specific.
 
 ## Smaller items
 
