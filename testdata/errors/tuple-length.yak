@@ -1,0 +1,3 @@
+schema Endpoint = [str, int]
+
+primary: !Endpoint ["web.example.com", 443, "extra"]

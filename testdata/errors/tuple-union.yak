@@ -1,0 +1,3 @@
+schema Address = [str, int] | null
+
+v: !Address ["a", 1, 2]

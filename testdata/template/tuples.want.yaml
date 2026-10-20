@@ -1,0 +1,20 @@
+primary:
+  - web.example.com
+  - 443
+fallback:
+  - backup.example.com
+  - 443
+  - tls
+route:
+  name: api
+  backends:
+    - - a.example.com
+      - 80
+    - - b.example.com
+      - 8080
+  weights:
+    - 3
+    - 1
+  span:
+    - 0
+    - 10

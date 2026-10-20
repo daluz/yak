@@ -1,0 +1,22 @@
+## A tuple type takes a sequence of exactly as many items, each of its own
+## type.
+schema Endpoint = [str, int]
+
+## A union of tuples picks the one whose length the value has.
+schema Address = [str, int] | [str, int, str]
+
+schema Route =
+  name: str
+  backends: seq[Endpoint]
+  weights:? [
+    int,
+    int,
+  ]
+  span: [int, int] = [0, 10]
+
+primary: !Endpoint ["web.example.com", 443]
+fallback: !Address ["backup.example.com", 443, "tls"]
+route: !Route
+  name: "api"
+  backends: [["a.example.com", 80], ["b.example.com", 8080]]
+  weights: [3, 1]

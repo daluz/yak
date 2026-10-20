@@ -241,6 +241,22 @@ func (s *schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 			items[i] = &Elem{Comments: e.Comments, Value: s.lazy(e.Value, t.Item, at.item(i, e.Value.pos), false)}
 		}
 		return NewArray(items), nil
+	case *ast.TypeTuple:
+		arr, ok := v.(*Array)
+		if !ok || arr.Len() != len(t.Items) {
+			switch {
+			case skip:
+				return v, nil
+			case !ok:
+				return nil, mismatch(at, "sequence", v)
+			}
+			return nil, misfit(deepMisfit, at.pos, "%s expects %d items, found %d", at, len(t.Items), arr.Len())
+		}
+		items := make([]*Elem, arr.Len())
+		for i, e := range arr.Items() {
+			items[i] = &Elem{Comments: e.Comments, Value: s.lazy(e.Value, t.Items[i], at.item(i, e.Value.pos), false)}
+		}
+		return NewArray(items), nil
 	case *ast.TypeMapping:
 		return s.checkMapping(v, t, at, fresh)
 	case *ast.TypeUnion:
@@ -526,6 +542,12 @@ func describe(t ast.Node) string {
 		return "null"
 	case *ast.TypeSequence:
 		return "sequence"
+	case *ast.TypeTuple:
+		items := make([]string, len(t.Items))
+		for i, item := range t.Items {
+			items[i] = describe(item)
+		}
+		return "[" + strings.Join(items, ", ") + "]"
 	case *ast.TypeMapping:
 		return "mapping"
 	case *ast.TypeUnion:
@@ -679,6 +701,12 @@ func (s *schema) checkType(t ast.Node) error {
 		return err
 	case *ast.TypeSequence:
 		return s.checkType(t.Item)
+	case *ast.TypeTuple:
+		for _, item := range t.Items {
+			if err := s.checkType(item); err != nil {
+				return err
+			}
+		}
 	case *ast.TypeUnion:
 		for _, alt := range t.Alts {
 			if err := s.checkType(alt); err != nil {

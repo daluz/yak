@@ -896,6 +896,7 @@ can a keyword.
 | `boolean`, `integer`, `float`, `string`, `sequence`, `mapping`, `function` | A value whose [`type`](STDLIB.md#conversions) is that name. |
 | `null`, `true`, `"text"`, `8080`, `0.5` | That value alone, compared as `==` compares it. |
 | `sequence[T]` | A sequence whose every item is a `T`. |
+| `[A, B, ...]` | A sequence of exactly that many items: an `A`, then a `B`, and so on. |
 | A [mapping type](#mapping-types) | A mapping with the fields it declares. |
 | `Name`, `module.Name` | What the schema `Name` matches. |
 | `A \| B` | What any alternative matches; the first that does decides. |
@@ -912,9 +913,19 @@ Most built-in types have a short name that means the same:
 | `mapping` | `map` |
 | `function` | `func` |
 
-So `seq[int]` is `sequence[integer]`. The `[` is written against the name,
-and `[T]` on its own is an error. A diagnostic names a type by its full name,
-as `type` does, whichever name the schema wrote.
+So `seq[int]` is `sequence[integer]`. The `[` is written against the name.
+A diagnostic names a type by its full name, as `type` does, whichever name
+the schema wrote.
+
+A tuple type, written in brackets, holds two types or more, and may span
+lines and end in a comma as a flow sequence does. `[T]` on its own is an
+error, so that it is never mistaken for `sequence[T]`:
+
+```yaml
+schema Endpoint = [str, int]
+
+primary: !Endpoint ["web.example.com", 443]
+```
 
 An integer is not a float, so a field that takes either is written
 `integer | float`. A union is written on one line, since a `|` where a value
@@ -1026,7 +1037,8 @@ is an error, since what it filled in would change what the template reads.
 
 Checking is lazy, as evaluation is. The shape of a tagged mapping is checked
 when it is first read: the fields it needs, the keys it may hold, and the
-defaults it takes, for which its `:?` entries are evaluated. Each field and
+defaults it takes, for which its `:?` entries are evaluated. The length of
+a sequence that a tuple type checks is part of its shape. Each field and
 each item is checked when it is read. Rendering reads every field, so what
 reaches the output is always checked, while a binding that nothing reads is
 never checked. Two tagged mappings may therefore read each other's fields.
@@ -1485,7 +1497,8 @@ module      := (identifier "=")? identifier ("." identifier)*
 schema      := "schema" "*"? (target "=" type | "{" (target "=" type)+ "}")
 target      := identifier | "$" | "$$"
 type        := typeAtom ("|" typeAtom)* ("if" value)?
-typeAtom    := schemaName | literal | ("sequence" | "seq") "[" type "]" | typeMapping
+typeAtom    := schemaName | literal | ("sequence" | "seq") "[" type "]" | tuple | typeMapping
+tuple       := "[" type ("," type)+ ","? "]"
 schemaName  := identifier ("." identifier)?
 typeMapping := "{" (member ("," member)*)? "}" | member+  -- aligned on one column
 member      := (identifier | string) (":" | ":?") type ("=" value)?

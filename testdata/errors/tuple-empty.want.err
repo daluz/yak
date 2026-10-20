@@ -1,0 +1,1 @@
+tuple-empty.yak:1:18: a tuple type holds two items or more, and a sequence of any length is written "sequence[T]"

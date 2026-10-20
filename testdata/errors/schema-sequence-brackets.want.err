@@ -1,1 +1,1 @@
-schema-sequence-brackets.yak:1:16: a sequence type is written "sequence[T]"
+schema-sequence-brackets.yak:1:16: a tuple type holds two items or more, and a sequence of any length is written "sequence[T]"

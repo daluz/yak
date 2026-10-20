@@ -216,6 +216,13 @@ type TypeSequence struct {
 	Item Node
 }
 
+// TypeTuple is "[A, B, ...]", a sequence of exactly as many items as Items
+// holds, each of the type in its place.
+type TypeTuple struct {
+	Base
+	Items []Node
+}
+
 // TypeMapping is a mapping type, written as a block or in braces.
 type TypeMapping struct {
 	Base

@@ -650,6 +650,7 @@ var (
 	flowSeqList = list{closer: token.RBracket, name: "flow sequence", in: "flow sequence"}
 	flowMapList = list{closer: token.RBrace, name: "flow mapping", in: "flow mapping"}
 	typeMapList = list{closer: token.RBrace, name: "mapping type", in: "a mapping type"}
+	tupleList   = list{closer: token.RBracket, name: "tuple type", in: "a tuple type"}
 )
 
 // nextInList moves to the next item of the list l that open opened, and

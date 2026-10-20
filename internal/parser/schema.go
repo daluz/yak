@@ -271,7 +271,7 @@ func (p *parser) parseType() (ast.Node, error) {
 }
 
 // parseTypeAtom parses a type that is not a union: a name, a literal, a
-// sequence type or a mapping type in braces.
+// sequence type, a tuple type or a mapping type in braces.
 func (p *parser) parseTypeAtom() (ast.Node, error) {
 	t := p.cur()
 	switch t.Kind {
@@ -329,11 +329,36 @@ func (p *parser) parseTypeAtom() (ast.Node, error) {
 		}
 		return &ast.TypeLiteral{Base: ast.At(t.Pos), Value: v}, nil
 	case token.LBracket:
-		return nil, p.errorf(t.Pos, "a sequence type is written %q", "sequence[T]")
+		return p.parseTupleType()
 	case token.LBrace:
 		return p.parseFlowTypeMapping()
 	}
 	return nil, p.errorf(t.Pos, "expected a type, found %s", t)
+}
+
+// parseTupleType parses "[A, B, ...]". A tuple of fewer than two items is
+// refused, so that "[T]" is never read as a sequence of T.
+func (p *parser) parseTupleType() (ast.Node, error) {
+	open := p.next()
+	tuple := &ast.TypeTuple{Base: ast.At(open.Pos)}
+	for {
+		more, err := p.nextInList(open, tupleList, len(tuple.Items) == 0)
+		if err != nil {
+			return nil, err
+		}
+		if !more {
+			break
+		}
+		item, err := p.parseType()
+		if err != nil {
+			return nil, err
+		}
+		tuple.Items = append(tuple.Items, item)
+	}
+	if len(tuple.Items) < 2 {
+		return nil, p.errorf(open.Pos, "a tuple type holds two items or more, and a sequence of any length is written %q", "sequence[T]")
+	}
+	return tuple, nil
 }
 
 // parseSchemaPath parses "Name" or "module.Name", the way a type and a tag

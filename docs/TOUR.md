@@ -1391,6 +1391,33 @@ written `"443"` is reported as:
 yak: listener.yak:5:29: field "ports[1]" of schema "Listener" expects integer, found "443"
 ```
 
+A tuple type, in brackets, takes a sequence of exactly as many items, each of
+its own type:
+
+```yaml
+schema Endpoint = [str, int]
+
+primary: !Endpoint ["web.example.com", 443]
+```
+
+renders as:
+
+```yaml
+primary:
+  - web.example.com
+  - 443
+```
+
+A sequence of another length is an error, as when a line
+`backup: !Endpoint ["backup.example.com", 443, "tls"]` is added:
+
+```console
+yak: endpoints.yak:4:19: schema "Endpoint" expects 2 items, found 3
+```
+
+A tuple holds two types or more, so `[int]` is an error that points to
+`seq[int]`.
+
 ### Defaults, checks and optional fields
 
 A default can read the mapping it fills in through `.`, `if` adds a check to
