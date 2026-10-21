@@ -42,8 +42,10 @@ func newRenderCommand() *cobra.Command {
 			"directory skips libraries, and rendering one directly is an error.\n\n" +
 			"Context files may be YAML or JSON. They are merged in the order given,\n" +
 			"with later files taking precedence, and are available to the template as\n" +
-			"$context, $ctx or $$. The files a package lists as package.context in its\n" +
-			"yak.pkg merge first, unless --skip-default-context is given.\n\n" +
+			"$context, $ctx or $$. When the template's yak.pkg names a context file as\n" +
+			"package.context, that template is evaluated against them and what it\n" +
+			"renders is the context instead, unless --skip-package-context is given.\n" +
+			"Rendering a directory leaves the context file out.\n\n" +
 			"The output format defaults to YAML. A template named for a format, such\n" +
 			"as app.toml.yak, writes that format; naming an output file with a known\n" +
 			"extension takes precedence over the template's name, and --format over\n" +
@@ -96,8 +98,8 @@ func newRenderCommand() *cobra.Command {
 
 	cmd.Flags().StringArrayVarP(&contexts, "context", "c", nil,
 		"YAML or JSON file to merge into $context (repeatable; later files win)")
-	cmd.Flags().BoolVar(&skipCtx, "skip-default-context", false,
-		"leave out the default context files the template's package lists")
+	cmd.Flags().BoolVar(&skipCtx, "skip-package-context", false,
+		"read the context files as they are, without the context file of the template's package")
 	cmd.Flags().StringVarP(&output, "output", "o", "",
 		"write the rendered output to this file instead of standard output")
 	cmd.Flags().BoolVarP(&automatic, "automatic-output", "O", false,
@@ -210,7 +212,7 @@ func (r renderRequest) render(template string, opts render.Options) ([]byte, err
 	err := engine.Template(engine.TemplateRequest{
 		Path:               template,
 		ContextPaths:       r.contexts,
-		SkipDefaultContext: r.skipCtx,
+		SkipPackageContext: r.skipCtx,
 		Out:                &buf,
 		Options:            opts,
 		NonStrict:          r.nonStrict,
@@ -230,6 +232,10 @@ func renderDir(dir string, req renderRequest, output string, automatic bool, out
 		return fmt.Errorf("the directory %s writes one file per template; give --output-dir or --automatic-output", dir)
 	}
 	templates, err := sourcesIn(dir, module.Ext)
+	if err != nil {
+		return err
+	}
+	templates, err = withoutContextFiles(templates)
 	if err != nil {
 		return err
 	}
@@ -297,6 +303,22 @@ func renderRemote(ref string, req renderRequest, output string, automatic bool, 
 		return fmt.Errorf("%s names no directory of its repository", ref)
 	}
 	return renderDir(dir, req, "", false, outputDir)
+}
+
+// withoutContextFiles leaves out the templates that are their package's
+// context file, which answers the context rather than an output.
+func withoutContextFiles(templates []string) ([]string, error) {
+	var kept []string
+	for _, t := range templates {
+		pkg, err := module.FindPackage(filepath.Dir(t))
+		if err != nil {
+			return nil, err
+		}
+		if pkg == nil || !pkg.IsContext(t) {
+			kept = append(kept, t)
+		}
+	}
+	return kept, nil
 }
 
 // sourcesIn lists the files beneath dir that end in one of exts, leaving out

@@ -467,23 +467,14 @@ func TestRootIsPerDocument(t *testing.T) {
 // whatever the build stamped in, so the test reads it rather than naming one.
 func TestYakDescribesTheRun(t *testing.T) {
 	var buf bytes.Buffer
-	run := eval.Run{FilePath: "deploy/app.yak", ContextPaths: []string{"base.yaml", "prod.yaml"}, Workdir: "/work", NonStrict: true}
-	src := []byte("path: $filepath\nversion: $yak.version\ncontexts: $contextpaths\nworkdir: $workdir\nstrict: $yak.strict\nformat: $yak.format\n")
+	run := eval.Run{FilePath: "deploy/app.yak", Workdir: "/work", NonStrict: true}
+	src := []byte("path: $filepath\nversion: $yak.version\nworkdir: $workdir\nstrict: $yak.strict\nformat: $yak.format\n")
 	if err := engine.Render(run, src, nil, &buf, render.DefaultOptions()); err != nil {
 		t.Fatalf("rendering: %v", err)
 	}
-	want := "path: deploy/app.yak\nversion: " + version.Current + "\ncontexts:\n  - base.yaml\n  - prod.yaml\nworkdir: /work\nstrict: false\nformat: yaml\n"
+	want := "path: deploy/app.yak\nversion: " + version.Current + "\nworkdir: /work\nstrict: false\nformat: yaml\n"
 	if buf.String() != want {
 		t.Errorf("rendered:\n%s\nwant:\n%s", buf.String(), want)
-	}
-}
-
-// TestYakContextPathsAreEmptyWithoutAny checks that a run given no context
-// files still answers a sequence, so a template may walk it unconditionally.
-func TestYakContextPathsAreEmptyWithoutAny(t *testing.T) {
-	got := mustRender(t, "n: size($contextpaths)\n", "")
-	if want := "n: 0\n"; got != want {
-		t.Errorf("rendered %q, want %q", got, want)
 	}
 }
 

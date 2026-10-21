@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -22,11 +23,11 @@ type TemplateRequest struct {
 	// Path is the template to render, or "-" to read standard input.
 	Path string
 	// ContextPaths are merged in order, with later files taking precedence,
-	// after the default context of the template's package.
+	// into the context the template's package context file reads.
 	ContextPaths []string
-	// SkipDefaultContext leaves out the default context of the template's
-	// package.
-	SkipDefaultContext bool
+	// SkipPackageContext hands the template the merged context files
+	// without evaluating its package's context file.
+	SkipPackageContext bool
 	Out                io.Writer
 	// Options selects the output format and its indentation. The zero
 	// value renders YAML at the default indent.
@@ -47,17 +48,7 @@ func Template(req TemplateRequest) error {
 	if err != nil {
 		return err
 	}
-	paths := req.ContextPaths
-	if !req.SkipDefaultContext {
-		pkg, err := module.FindPackage(filepath.Dir(name))
-		if err != nil {
-			return err
-		}
-		if pkg != nil {
-			paths = append(pkg.ContextPaths(), paths...)
-		}
-	}
-	context, err := ctxfile.Load(paths)
+	context, err := ctxfile.Load(req.ContextPaths)
 	if err != nil {
 		return err
 	}
@@ -65,9 +56,35 @@ func Template(req TemplateRequest) error {
 	if err != nil {
 		return fmt.Errorf("finding the working directory: %w", err)
 	}
-	run := eval.Run{FilePath: name, ContextPaths: paths, Workdir: workdir, NonStrict: req.NonStrict,
-		SkipChecks: req.SkipChecks}
+	run := eval.Run{FilePath: name, Workdir: workdir, NonStrict: req.NonStrict, SkipChecks: req.SkipChecks}
+	if !req.SkipPackageContext {
+		pkg, err := module.FindPackage(filepath.Dir(name))
+		if err != nil {
+			return err
+		}
+		if pkg != nil && pkg.Context != "" && !pkg.IsContext(name) {
+			if context, err = packageContext(pkg.ContextPath(), context, run); err != nil {
+				return err
+			}
+		}
+	}
 	return Render(run, src, context, req.Out, req.Options)
+}
+
+// packageContext evaluates the context file at path against context and
+// answers what it renders, read back as a context file is, so that a
+// template sees plain data whatever the context file computed.
+func packageContext(path string, context eval.Value, run eval.Run) (eval.Value, error) {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading the package context: %w", err)
+	}
+	run.FilePath = path
+	var buf bytes.Buffer
+	if err := Render(run, src, context, &buf, render.DefaultOptions()); err != nil {
+		return nil, err
+	}
+	return ctxfile.Decode(path, buf.Bytes())
 }
 
 // CheckSchemas checks the schemas a template or a library declares and the
@@ -92,8 +109,8 @@ func CheckSchemas(path string) error {
 
 // Render parses, evaluates and writes a source buffer. It is the seam used by
 // tests and by future commands that already hold their input in memory. The
-// run names the source and is what "$yak", "$filepath", "$contextpaths" and
-// "$workdir" report, along with the format opts selects.
+// run names the source and is what "$yak", "$filepath" and "$workdir"
+// report, along with the format opts selects.
 func Render(run eval.Run, src []byte, context eval.Value, w io.Writer, opts render.Options) error {
 	run.Format = opts.Format.String()
 	stream, err := parser.Parse(run.FilePath, src)

@@ -558,7 +558,7 @@ func (p *parser) parseIdent() (ast.Node, error) {
 
 // builtinVariables names every "$name" variable, so that a misspelled one is
 // answered with the list of the real ones.
-const builtinVariables = `"$root", "$context", "$ctx", "$yak", "$filepath", "$contextpaths", "$workdir"`
+const builtinVariables = `"$root", "$context", "$ctx", "$yak", "$filepath", "$workdir"`
 
 // parseBuiltin parses a "$name" variable. Some of them are a sigil written
 // out in full and mean exactly what the sigil does, so "$root" is "$" and
@@ -575,8 +575,6 @@ func (p *parser) parseBuiltin() (ast.Node, error) {
 		return &ast.Yak{Base: ast.At(t.Pos)}, nil
 	case "filepath":
 		return &ast.FilePath{Base: ast.At(t.Pos)}, nil
-	case "contextpaths":
-		return &ast.ContextPaths{Base: ast.At(t.Pos)}, nil
 	case "workdir":
 		return &ast.Workdir{Base: ast.At(t.Pos)}, nil
 	}

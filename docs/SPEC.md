@@ -343,7 +343,6 @@ listing the variables that exist.
 | `$root` | `$` | The root of the current document. |
 | `$context`, `$ctx` | `$$` | The merged [context](#context) data. |
 | `$filepath` | | The path of the file being read, exactly as it was given to the tool. |
-| `$contextpaths` | | The context files, in the order they were merged. |
 | `$workdir` | | The absolute path of the directory yak was invoked from. |
 | `$yak` | | A mapping that describes the rendering, with the fields below. |
 | `$yak.version` | | The version of yak doing the rendering. |
@@ -353,18 +352,16 @@ listing the variables that exist.
 ```yaml
 # rendering from /work: yak render deploy/app.yak -c base.yaml -c prod.yaml
 a: $filepath                # "deploy/app.yak"
-b: $contextpaths[0]         # "base.yaml"
-c: $workdir                 # "/work"
-d: "built by yak \($yak.version)"
-e: $yak.strict              # true
-f: $yak.format              # "yaml"
+b: $workdir                 # "/work"
+c: "built by yak \($yak.version)"
+d: $yak.strict              # true
+e: $yak.format              # "yaml"
 ```
 
 `$filepath` is the path as written, not resolved, matching what diagnostics
-say; a template read from standard input is `<stdin>`. `$contextpaths` is
-empty, never absent, when no context file is given. `$workdir` is where yak
-was run, not where the template is. Every document sees the same values, and
-an unstamped build reports its `version` as `dev`. `format` is the name
+say; a template read from standard input is `<stdin>`. `$workdir` is where
+yak was run, not where the template is. Every document sees the same values,
+and an unstamped build reports its `version` as `dev`. `format` is the name
 however the format was chosen, so `-f hujson` and an output file ending in
 `.json5` both give `jwcc`, and `.yml` gives `yaml`. Output that includes
 these values depends on where the template is, where yak was run and which
@@ -735,7 +732,7 @@ package:
   name: web                    # required; an identifier
   version: 1.4.0               # optional
   description: The web tier    # optional
-  context: [defaults.yaml]     # optional; the default context
+  context: context.yak         # optional; the package context
 dependencies:
   shared: ../shared            # a package: shared.x.y is ../shared/x/y.yak
   base: third_party/base.yak   # a module: base is third_party/base.yak
@@ -745,12 +742,38 @@ dependencies:
 A file belongs to the package of the nearest `yak.pkg` in its directory or
 above. A file in no package is a module all the same.
 
-`package.context` lists the package's default [context](#context) files,
-relative to `yak.pkg` and beneath it. A template the package holds is
-rendered with them merged first, in the order listed, before the files the
-rendering is given. Only the package of the template being rendered
-contributes them: a module it imports reads the importer's context, whatever
-package the module is in.
+`package.context` names the package's context file, a template relative to
+`yak.pkg` and beneath it. A template the package holds is not rendered
+against the [context](#context) the rendering is given, but against what the
+context file renders when it is evaluated against that context. The context
+file can fill in defaults, pick them by what the context says, compute values
+every template shares, and check the context with a
+[`schema $$`](#the-document-and-the-context):
+
+```yaml
+import { std.files, std.yaml }
+
+schema* $$ =
+  env: "dev" | "prod" = "dev"
+
+let load = (f) => yaml.decode(files.read(f))
+
+<<: load("defaults.yaml")
+<<: if $$.env == "prod" then load("prod.yaml") else {}
+<<: $$
+fullname: "\($$.env)-\(.name)"
+```
+
+What the context file renders is read back as a context file is, so a
+template sees plain data: hidden and `:?` entries are left out, and a function
+is an error. It must be a mapping, and several documents merge in order. The
+context file is evaluated as any template is, so `$filepath` names it and
+`$yak.format` is `yaml`, the format it is read back from. Rendering the context
+file itself renders it against the context it is given.
+
+Only the package of the template being rendered evaluates its context file: a
+module it imports reads the importer's context, whatever package the module is
+in.
 
 ### Resolution
 
@@ -1404,9 +1427,8 @@ comprehension is built; the element stays lazy.
 ## Context
 
 `$context`, `$ctx` or `$$` is a mapping of data supplied from outside the
-template. It is shared by every document, and the paths it came from are
-[`$contextpaths`](#builtin-variables), the default context of the template's
-[package](#packages) first.
+template. It is shared by every document, and when the template's
+[package](#packages) has a context file, it is what that file renders.
 
 Context data is plain YAML or JSON, not yak: a `\(` in a context string is a
 `\(`, and an unquoted scalar is the string YAML reads it as. Several sources
@@ -1572,5 +1594,5 @@ args        := "(" (arg ("," arg)* ","?)? ")"
 arg         := (identifier "=")? value
 dots        := "." | ".." | "..."  ...
 builtin     := "$" | "$$" | "$root" | "$context" | "$ctx" | "$yak"
-             | "$filepath" | "$contextpaths" | "$workdir"
+             | "$filepath" | "$workdir"
 ```

@@ -58,8 +58,6 @@ func dump(n ast.Node) string {
 		return "yak"
 	case *ast.FilePath:
 		return "filepath"
-	case *ast.ContextPaths:
-		return "contextpaths"
 	case *ast.Workdir:
 		return "workdir"
 	case *ast.Field:
@@ -263,7 +261,6 @@ func TestParseReferences(t *testing.T) {
 		{"yak", "a: $yak\n", `{"a":yak}`},
 		{"yak field", "a: $yak.version\n", `{"a":yak.version}`},
 		{"filepath", "a: $filepath\n", `{"a":filepath}`},
-		{"contextpaths index", "a: $contextpaths[0]\n", `{"a":contextpaths[0]}`},
 		{"workdir", "a: $workdir\n", `{"a":workdir}`},
 		{"filepath in an interpolation", `a: "\($filepath)"`, `{"a":concat(filepath)}`},
 		{"index", "a: $.b[0]\n", `{"a":root.b[0]}`},

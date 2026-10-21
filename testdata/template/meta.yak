@@ -1,10 +1,6 @@
-# "$filepath" and "$contextpaths" describe the run rather than the document.
-# The path is whatever was handed to the tool, which here is the path the
-# tests glob with, and the context files are listed in the order they were
-# given.
+# "$filepath" describes the run rather than the document. The path is
+# whatever was handed to the tool, which here is the path the tests glob with.
 path: $filepath
-contexts: $contextpaths
-first-context: $contextpaths[0]
 note: "rendered from \($filepath)"
 # "$yak.version" answers the version the build stamped in, so this golden can
 # only say that there is one. internal/eval checks the string itself.

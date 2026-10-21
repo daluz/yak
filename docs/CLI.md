@@ -30,14 +30,14 @@ for `yak package`.
 $ yak render FILE.yak|DIR|REMOTE [-c context.yaml|context.json]... [-f FORMAT]
                                    [-o FILE | -O] [--output-dir DIR]
                                    [--keep-null-documents] [--strict=false]
-                                   [--skip-schema-checks] [--skip-default-context]
+                                   [--skip-schema-checks] [--skip-package-context]
                                    [--plain-http]
 ```
 
 | Flag | Meaning |
 | --- | --- |
 | `-c`, `--context FILE` | Merge a YAML or JSON file into `$context`. Repeatable. |
-| `--skip-default-context` | Leave out the [default context](#default-context) of the template's package. |
+| `--skip-package-context` | Read the context files as they are, without the [package context](#package-context). |
 | `-f`, `--format NAME` | Write this [output format](#output-formats). |
 | `-o`, `--output FILE` | Write to this file rather than standard output. |
 | `-O`, `--automatic-output` | Write to a file named after the template. |
@@ -120,9 +120,6 @@ env: $$.env                 # "prod", from prod.yaml
 region: $$?.region ?? "us-east-1"
 ```
 
-A template reads the paths as
-[`$contextpaths`](SPEC.md#builtin-variables), in the order given.
-
 Context files are plain YAML or JSON, not yak, so they may use anchors and
 unquoted strings, and nothing in them interpolates. Each must hold a mapping
 at the top level. Several YAML documents, or several JSON values, in one file
@@ -132,22 +129,30 @@ A `.json` file is read by the JSON parser, which accepts all of JSON,
 including escapes such as `\/` that YAML rejects. Any other file is read as
 YAML, which accepts most JSON too.
 
-### Default context
+### Package context
 
-A package can list default context files in its `yak.pkg`, as
-[`package.context`](SPEC.md#packages), relative to `yak.pkg`:
+A package can name a context file in its `yak.pkg`, as
+[`package.context`](SPEC.md#packages): a template, relative to `yak.pkg`,
+that answers the context its templates read.
 
 ```yaml
 package:
   name: web
-  context: [defaults.yaml, regions.json]
+  context: context.yak
 ```
 
 Every template in the package, rendered alone, as part of a directory or
-from a remote package, is rendered with those files merged first, in the
-order listed, so each `-c` file overrides them. `$contextpaths` lists them
-first too. `--skip-default-context` leaves them out, so that only the `-c`
-files are read.
+from a remote package, reads as `$$` what the context file renders when it
+is evaluated against the merged `-c` files. Rendering a directory leaves the
+context file out, since it is no output of its own, and rendering it alone
+shows the context the templates would read:
+
+```console
+$ yak render context.yak -c prod.yaml
+```
+
+`--skip-package-context` hands the templates the merged `-c` files as they
+are.
 
 ### Where the output goes
 

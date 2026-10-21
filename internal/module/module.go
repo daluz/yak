@@ -91,9 +91,9 @@ type Package struct {
 	Path    string
 	Name    string
 	Version string
-	// Context lists the package's default context files as they were
-	// written, relative to the package root.
-	Context []string
+	// Context is the package's context file as it was written, relative to
+	// the package root, or empty when it has none.
+	Context string
 	// Dependencies maps a dotted module path onto the location it was
 	// written as.
 	Dependencies map[string]string
@@ -102,14 +102,26 @@ type Package struct {
 // Root is the directory of the package.
 func (p *Package) Root() string { return filepath.Dir(p.Path) }
 
-// ContextPaths answers the package's default context files, in the order
-// they merge.
-func (p *Package) ContextPaths() []string {
-	paths := make([]string, len(p.Context))
-	for i, c := range p.Context {
-		paths[i] = filepath.Join(p.Root(), filepath.FromSlash(c))
+// ContextPath answers the package's context file, or the empty string when
+// it has none.
+func (p *Package) ContextPath() string {
+	if p.Context == "" {
+		return ""
 	}
-	return paths
+	return filepath.Join(p.Root(), filepath.FromSlash(p.Context))
+}
+
+// IsContext reports whether path names the package's context file.
+func (p *Package) IsContext(path string) bool {
+	if p.Context == "" {
+		return false
+	}
+	want, err := filepath.Abs(p.ContextPath())
+	if err != nil {
+		return false
+	}
+	got, err := filepath.Abs(path)
+	return err == nil && got == want
 }
 
 // FindPackage reads the nearest yak.pkg in dir or above it, and answers nil
@@ -144,10 +156,10 @@ func FindPackage(dir string) (*Package, error) {
 func ParsePackage(path string, src []byte) (*Package, error) {
 	var doc struct {
 		Package struct {
-			Name        string   `yaml:"name"`
-			Version     string   `yaml:"version"`
-			Description string   `yaml:"description"`
-			Context     []string `yaml:"context"`
+			Name        string    `yaml:"name"`
+			Version     string    `yaml:"version"`
+			Description string    `yaml:"description"`
+			Context     yaml.Node `yaml:"context"`
 		} `yaml:"package"`
 		Dependencies map[string]string `yaml:"dependencies"`
 	}
@@ -162,10 +174,9 @@ func ParsePackage(path string, src []byte) (*Package, error) {
 	if !IsName(doc.Package.Name) {
 		return nil, fmt.Errorf("%s: %q cannot name a package; a package name is an identifier", path, doc.Package.Name)
 	}
-	for _, c := range doc.Package.Context {
-		if !filepath.IsLocal(filepath.FromSlash(c)) {
-			return nil, fmt.Errorf("%s: the context file %q is not a path beneath the package root", path, c)
-		}
+	context, err := contextFile(path, &doc.Package.Context)
+	if err != nil {
+		return nil, err
 	}
 	for key, target := range doc.Dependencies {
 		segs := strings.Split(key, ".")
@@ -181,8 +192,29 @@ func ParsePackage(path string, src []byte) (*Package, error) {
 			return nil, fmt.Errorf("%s: %q maps to nothing", path, key)
 		}
 	}
-	return &Package{Path: path, Name: doc.Package.Name, Version: doc.Package.Version, Context: doc.Package.Context,
+	return &Package{Path: path, Name: doc.Package.Name, Version: doc.Package.Version, Context: context,
 		Dependencies: doc.Dependencies}, nil
+}
+
+// contextFile reads package.context from the yak.pkg at path, which names a
+// template beneath the package root.
+func contextFile(path string, n *yaml.Node) (string, error) {
+	switch {
+	case n.Kind == 0:
+		return "", nil
+	case n.Kind == yaml.SequenceNode:
+		return "", fmt.Errorf("%s: package.context names one %s template that answers the context, not a list of context files", path, Ext)
+	case n.Kind != yaml.ScalarNode || n.Tag != "!!str":
+		return "", fmt.Errorf("%s: package.context must name a %s template", path, Ext)
+	}
+	c := n.Value
+	if !filepath.IsLocal(filepath.FromSlash(c)) {
+		return "", fmt.Errorf("%s: the context file %q is not a path beneath the package root", path, c)
+	}
+	if !strings.HasSuffix(c, Ext) {
+		return "", fmt.Errorf("%s: the context file %q is not a %s template", path, c, Ext)
+	}
+	return c, nil
 }
 
 // IsName reports whether s can be written as one segment of an import path,

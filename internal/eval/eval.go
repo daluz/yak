@@ -233,13 +233,11 @@ func (e *Env) bindingNames() []string {
 }
 
 // Run describes the rendering itself, which the language reads as "$yak",
-// "$filepath", "$contextpaths" and "$workdir".
+// "$filepath" and "$workdir".
 type Run struct {
 	// FilePath is the template as the command line named it. Input read
 	// from standard input is called "<stdin>", as it is in diagnostics.
 	FilePath string
-	// ContextPaths are the context files in the order they were given.
-	ContextPaths []string
 	// Workdir is the absolute path of the directory yak was invoked from.
 	Workdir string
 	// Format is the canonical name of the output format, never an alias.
@@ -327,12 +325,6 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 		return env.doc.yak, nil
 	case *ast.FilePath:
 		return String(env.doc.run.FilePath), nil
-	case *ast.ContextPaths:
-		paths := make([]*Elem, len(env.doc.run.ContextPaths))
-		for i, p := range env.doc.run.ContextPaths {
-			paths[i] = Item(String(p))
-		}
-		return NewArray(paths), nil
 	case *ast.Workdir:
 		return String(env.doc.run.Workdir), nil
 	case *ast.Field:

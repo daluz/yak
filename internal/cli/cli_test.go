@@ -706,39 +706,111 @@ func TestRenderDirectorySkipsTheVendorDirectory(t *testing.T) {
 	}
 }
 
-func TestRenderMergesTheDefaultContextFirst(t *testing.T) {
+// contextPackage writes a package whose context file layers defaults.yaml and,
+// for production, prod.yaml beneath the context files the rendering is given.
+func contextPackage(t *testing.T) string {
 	dir := t.TempDir()
-	write(t, dir, "yak.pkg", "package:\n  name: web\n  context: [defaults.yaml, env/base.json]\n")
-	write(t, dir, "defaults.yaml", "name: web\ntier: default\nregion: us\n")
-	write(t, dir, "env/base.json", `{"tier": "base"}`)
-	tmpl := write(t, dir, "deploy/app.yak", "name: $$.name\ntier: $$.tier\nregion: $$.region\n")
-	prod := write(t, t.TempDir(), "prod.yaml", "region: eu\n")
+	write(t, dir, "yak.pkg", "package:\n  name: web\n  context: context.yak\n")
+	write(t, dir, "defaults.yaml", "name: web\nreplicas: 1\nregion: us\n")
+	write(t, dir, "prod.yaml", "replicas: 5\n")
+	write(t, dir, "context.yak", `import { std.files, std.yaml }
+
+let load = (f) => yaml.decode(files.read(f))
+let env = $$?.env ?? "dev"
+
+<<: load("defaults.yaml") << (if env == "prod" then load("prod.yaml") else {}) << $$
+env: env
+fullname: "\(env)-\(.name)"
+secret:: "hidden"
+`)
+	return dir
+}
+
+func TestRenderEvaluatesThePackageContext(t *testing.T) {
+	dir := contextPackage(t)
+	tmpl := write(t, dir, "deploy/app.yak", "name: $$.fullname\nreplicas: $$.replicas\nregion: $$.region\nsecret: \"secret\" in $$\n")
+	prod := write(t, t.TempDir(), "prod.yaml", "env: prod\nregion: eu\n")
 
 	out, err := run(t, "render", tmpl, "-c", prod)
 	if err != nil {
 		t.Fatalf("render returned error: %v", err)
 	}
-	if want := "name: web\ntier: base\nregion: eu\n"; out != want {
+	if want := "name: prod-web\nreplicas: 5\nregion: eu\nsecret: false\n"; out != want {
 		t.Errorf("stdout = %q, want %q", out, want)
 	}
-	out, err = run(t, "render", tmpl, "-c", prod, "--skip-default-context")
+	out, err = run(t, "render", tmpl, "-c", prod, "--skip-package-context")
 	if err == nil {
-		t.Fatalf("render with --skip-default-context succeeded with %q, want $$.name to be missing", out)
+		t.Fatalf("render with --skip-package-context succeeded with %q, want $$.fullname to be missing", out)
 	}
 }
 
-func TestRenderListsTheDefaultContextInContextPaths(t *testing.T) {
+func TestRenderReadsThePackageContextBackAsData(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "yak.pkg", "package:\n  name: web\n  context: [defaults.yaml]\n")
-	write(t, dir, "defaults.yaml", "")
-	tmpl := write(t, dir, "app.yak", "import std.path\npaths: [path.base(p) for p in $contextpaths]\n")
-	prod := write(t, dir, "prod.yaml", "")
+	write(t, dir, "yak.pkg", "package:\n  name: web\n  context: context.yak\n")
+	write(t, dir, "context.yak", "s: [\"true\", \"1\", \"null\", \"2024-01-01\", \"a\\nb\"]\nf: 1.0\nn: null\n")
+	tmpl := write(t, dir, "app.yak", "import std.json\nv: json.encode($$)\n")
 
-	out, err := run(t, "render", tmpl, "-c", prod)
+	out, err := run(t, "render", tmpl)
 	if err != nil {
 		t.Fatalf("render returned error: %v", err)
 	}
-	if want := "paths:\n  - defaults.yaml\n  - prod.yaml\n"; out != want {
+	if want := "v: '{\"s\":[\"true\",\"1\",\"null\",\"2024-01-01\",\"a\\nb\"],\"f\":1.0,\"n\":null}'\n"; out != want {
+		t.Errorf("stdout = %q, want %q", out, want)
+	}
+}
+
+func TestRenderChecksThePackageContextSchema(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "yak.pkg", "package:\n  name: web\n  context: context.yak\n")
+	write(t, dir, "context.yak", "schema* $$ =\n  env: \"dev\" | \"prod\"\n\n<<: $$\n")
+	tmpl := write(t, dir, "app.yak", "env: $$.env\n")
+	qa := write(t, dir, "qa.yaml", "env: qa\n")
+
+	if _, err := run(t, "render", tmpl, "-c", qa); err == nil || !strings.Contains(err.Error(), "context.yak") {
+		t.Errorf("error = %v, want the context file's schema to refuse env", err)
+	}
+}
+
+func TestRenderRefusesAPackageContextThatIsNoMapping(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "yak.pkg", "package:\n  name: web\n  context: context.yak\n")
+	write(t, dir, "context.yak", "- 1\n")
+	tmpl := write(t, dir, "app.yak", "a: 1\n")
+
+	_, err := run(t, "render", tmpl)
+	if err == nil || !strings.Contains(err.Error(), "must contain a mapping at the top level, found sequence") {
+		t.Errorf("error = %v, want a refusal of the sequence", err)
+	}
+}
+
+func TestRenderDirectoryLeavesOutThePackageContext(t *testing.T) {
+	dir := contextPackage(t)
+	write(t, dir, "app.yak", "name: $$.fullname\n")
+	out := filepath.Join(t.TempDir(), "build")
+
+	if _, err := run(t, "render", dir, "--output-dir", out); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "context.yaml")); err == nil {
+		t.Error("the package context file was rendered as an output")
+	}
+	got, err := os.ReadFile(filepath.Join(out, "app.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "name: dev-web\n"; string(got) != want {
+		t.Errorf("app.yaml = %q, want %q", got, want)
+	}
+}
+
+func TestRenderThePackageContextItself(t *testing.T) {
+	dir := contextPackage(t)
+
+	out, err := run(t, "render", filepath.Join(dir, "context.yak"))
+	if err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	if want := "name: web\nreplicas: 1\nregion: us\nenv: dev\nfullname: dev-web\n"; out != want {
 		t.Errorf("stdout = %q, want %q", out, want)
 	}
 }

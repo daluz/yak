@@ -430,9 +430,6 @@ type Yak struct{ Base }
 // FilePath is "$filepath", the path of the file the document was read from.
 type FilePath struct{ Base }
 
-// ContextPaths is "$contextpaths", the context files the run was given.
-type ContextPaths struct{ Base }
-
 // Workdir is "$workdir", the directory yak was invoked from.
 type Workdir struct{ Base }
 

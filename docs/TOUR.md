@@ -1636,18 +1636,30 @@ leaves the libraries out:
 $ yak render . --output-dir build
 ```
 
-A package can carry the context its templates start from, as a Helm chart
-carries its `values.yaml`. `package.context` lists the files:
+A package can shape the context its templates read, as a Helm chart carries
+its `values.yaml`. `package.context` names a template that is evaluated
+against the `-c` files, and what it renders is the `$$` of every template in
+the package:
 
 ```yaml
 package:
   name: web
-  context: [defaults.yaml]
+  context: context.yak
 ```
 
-With `defaults.yaml` holding `{replicas: 1, env: staging}`, a template
-in the package reads both keys without any `-c`, and a `-c` file overrides
-them:
+`context.yak` is yak like any template, so it can fill in defaults, choose
+them by what the context says, and check the context with a schema once for
+the whole package:
+
+```yaml
+schema* $$ =
+  env: "staging" | "prod" = "staging"
+
+replicas: if $$.env == "prod" then 5 else 1
+<<: $$
+```
+
+A template in the package reads the result:
 
 ```yaml
 replicas: $$.replicas
@@ -1657,11 +1669,13 @@ env: $$.env
 rendered with `-c prod.yaml`, where `prod.yaml` holds `{env: prod}`:
 
 ```yaml
-replicas: 1
+replicas: 5
 env: prod
 ```
 
-`--skip-default-context` renders with the `-c` files alone.
+The `<<: $$` comes last, so a `-c` file can still set `replicas` itself.
+`yak render context.yak -c prod.yaml` shows the context the templates read,
+and `--skip-package-context` renders them with the `-c` files alone.
 
 ## 21. Output formats
 
@@ -1717,12 +1731,11 @@ lists every format and the flags for writing output to files.
 ### Information about the rendering
 
 `$yak.format` is one of the builtin variables that describe the rendering
-rather than the document. `$filepath`, `$contextpaths`, `$workdir` and the
-rest of `$yak` are others, which is enough for a provenance note:
+rather than the document. `$filepath`, `$workdir` and the rest of `$yak` are
+others, which is enough for a provenance note:
 
 ```yaml
 note: "rendered from \($filepath) by yak \($yak.version)"
-contexts: $contextpaths
 ```
 
 [The spec](SPEC.md#builtin-variables) lists every builtin variable.
