@@ -28,6 +28,8 @@ For the precise rules, [SPEC.md](SPEC.md) defines the language and
 - [20. Packages](#20-packages)
 - [21. Output formats](#21-output-formats)
 - [22. Putting it together](#22-putting-it-together)
+- Appendix:
+    - [A1. Yakspec files](#a1-yakspec-files)
 
 ## 1. Your first template
 
@@ -1945,3 +1947,73 @@ refused by the schema before anything renders.
 
 That is the whole language as it stands today. [SPEC.md](SPEC.md) has the
 exact rules for everything shown here.
+
+# Appendix
+
+## A1. Yakspec files
+
+A release often renders several packages, each against its own context and
+into its own place. Rather than a script of `yak render` commands, a spec
+file, named `NAME.yakspec`, says it in one place. `yak spec init` writes
+`release.yakspec` to start from. Next to two packages, `web` and `db`:
+
+```yaml
+import std.env
+
+spec: "yakspec/v1"
+
+context:
+  env: env.get("DEPLOY_ENV", "dev")
+  region: "eu-west-1"
+  replicas: 2
+
+rules:
+  "tests/": null
+
+packages:
+  - source: "web"
+    context:
+      replicas: 4
+    rules:
+      "./": "manifests/"
+      "deploy/app.toml.yak": "config/web.toml"
+  - source: "db"
+```
+
+A spec file is written in yak, so it can read the environment with `std.env`,
+but it belongs to no package and nothing imports it. The top-level `context`
+is what every package renders against, and a package's own `context` merges
+over it, so `web` reads `replicas: 4` and `db` reads `replicas: 2`. A
+`source` is a directory relative to the spec file, or a git or OCI reference
+like the ones `yak add` takes.
+
+`rules` say where the outputs go, beneath `output`, which defaults to
+`build`. A key names a template, a directory ending in `/`, or `./` for the
+whole package, and the longest key that covers a template decides. Its value
+is a file, whose extension chooses the format, a directory ending in `/`, or
+`null` to leave the templates out. A package's own rules apply to it alone,
+and without a rule its outputs go beneath a directory named for the package.
+
+```console
+$ DEPLOY_ENV=prod yak spec render release.yakspec
+```
+
+writes:
+
+```text
+build/manifests/service.yaml
+build/config/web.toml
+build/db/db.yaml
+```
+
+and leaves out `web/tests/`. `build/config/web.toml`, rendered from
+`deploy/app.toml.yak`, is TOML:
+
+```toml
+region = "eu-west-1"
+log_level = "info"
+```
+
+The spec file sets every option itself, such as `format`, `strict` and
+`skipSchemaChecks`, so `yak spec render` takes no flags.
+[CLI.md](CLI.md#yak-spec) lists every key.
