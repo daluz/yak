@@ -60,6 +60,6 @@ has to refuse the template.
 - Ask before assuming when requirements are ambiguous 
 - Only modify files and functions directly involved in the current task
 - Clean-up rounds (inspecting code and docs for fixes and simplifications)
- follow [.agents/skills/cleanup/SKILL.md](.agents/skills/cleanup/SKILL.md).
+ follow [.agents/skills/yak.cleanup/SKILL.md](.agents/skills/yak.cleanup/SKILL.md).
 - After finishing an implementation, always inform if the introduced
   modifications are a breaking change, a new feature or just a fix.
