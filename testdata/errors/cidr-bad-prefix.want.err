@@ -1,0 +1,1 @@
+cidr-bad-prefix.yak:2:15: "host" needs a prefix such as "10.0.0.0/16", found "10.0.0/16"

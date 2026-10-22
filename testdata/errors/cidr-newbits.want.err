@@ -1,0 +1,1 @@
+cidr-newbits.yak:2:32: "subnet" needs newbits from 0 to 8 for 10.0.0.0/24, found 9

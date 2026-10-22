@@ -1,0 +1,62 @@
+import std.cidr
+
+vpc: "10.0.0.0/16"
+v6: "2001:db8::/56"
+
+host:
+  first: cidr.host($.vpc, 1)
+  last: cidr.host($.vpc, -1)
+  fromEnd: cidr.host("10.0.1.0/24", -2)
+  v6: cidr.host($.v6, 255)
+  mapped: cidr.host("::ffff:10.0.0.0/120", 5)
+subnet:
+  first: cidr.subnet($.vpc, 8, 0)
+  third: cidr.subnet($.vpc, 8, 2)
+  last: cidr.subnet($.vpc, 4, -1)
+  v6: cidr.subnet($.v6, 8, 1)
+  hostBits: cidr.subnet("10.1.2.3/16", 0, 0)
+subnets:
+  packed: cidr.subnets($.vpc, [8, 8, 4, 8])
+  v6: cidr.subnets($.v6, [8, 4])
+  none: cidr.subnets($.vpc, [])
+split:
+  v4: cidr.split("10.0.0.0/24", 2)
+  v6: cidr.split($.v6, 1)
+  same: cidr.split($.vpc, 0)
+parts:
+  network: cidr.network("10.1.2.3/16")
+  networkV6: cidr.network("2001:DB8::1/32")
+  address: cidr.address("10.1.2.3/16")
+  prefixLength: cidr.prefixLength($.v6)
+  netmask: cidr.netmask($.vpc)
+  netmask0: cidr.netmask("0.0.0.0/0")
+  broadcast: cidr.broadcast("10.1.2.3/23")
+size:
+  v4: cidr.size($.vpc)
+  single: cidr.size("10.0.0.1/32")
+  v6: cidr.size("2001:db8::/120")
+hosts:
+  v4: cidr.hosts("10.0.0.0/24")
+  slash30: cidr.hosts("10.0.0.0/30")
+  slash31: cidr.hosts("10.0.0.0/31")
+  slash32: cidr.hosts("10.0.0.0/32")
+  v6: cidr.hosts("2001:db8::/120")
+contains:
+  address: cidr.contains($.vpc, "10.0.255.255")
+  outside: cidr.contains($.vpc, "10.1.0.0")
+  subnet: cidr.contains($.vpc, "10.0.4.0/24")
+  wider: cidr.contains($.vpc, "10.0.0.0/8")
+  v6: cidr.contains($.v6, "2001:db8::ff")
+overlaps:
+  nested: cidr.overlaps("10.0.0.0/8", "10.20.0.0/16")
+  apart: cidr.overlaps("10.0.0.0/24", "10.0.1.0/24")
+version:
+  v4: cidr.version("192.168.0.1")
+  v6: cidr.version($.v6)
+  mapped: cidr.version("::ffff:1.2.3.4")
+isValid:
+  address: cidr.isValid("192.168.0.1")
+  prefix: cidr.isValid($.v6)
+  bad: cidr.isValid("10.0.0.256")
+  badLength: cidr.isValid("10.0.0.0/33")
+  zone: cidr.isValid("fe80::1%eth0")

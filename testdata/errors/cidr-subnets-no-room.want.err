@@ -1,0 +1,1 @@
+cidr-subnets-no-room.yak:2:33: "subnets" runs out of room in 10.0.0.0/24 at index 2

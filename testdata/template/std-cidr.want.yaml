@@ -1,0 +1,72 @@
+vpc: 10.0.0.0/16
+v6: 2001:db8::/56
+host:
+  first: 10.0.0.1
+  last: 10.0.255.255
+  fromEnd: 10.0.1.254
+  v6: 2001:db8::ff
+  mapped: ::ffff:10.0.0.5
+subnet:
+  first: 10.0.0.0/24
+  third: 10.0.2.0/24
+  last: 10.0.240.0/20
+  v6: 2001:db8:0:1::/64
+  hostBits: 10.1.0.0/16
+subnets:
+  packed:
+    - 10.0.0.0/24
+    - 10.0.1.0/24
+    - 10.0.16.0/20
+    - 10.0.32.0/24
+  v6:
+    - 2001:db8::/64
+    - 2001:db8:0:10::/60
+  none: []
+split:
+  v4:
+    - 10.0.0.0/26
+    - 10.0.0.64/26
+    - 10.0.0.128/26
+    - 10.0.0.192/26
+  v6:
+    - 2001:db8::/57
+    - 2001:db8:0:80::/57
+  same:
+    - 10.0.0.0/16
+parts:
+  network: 10.1.0.0/16
+  networkV6: 2001:db8::/32
+  address: 10.1.2.3
+  prefixLength: 56
+  netmask: 255.255.0.0
+  netmask0: 0.0.0.0
+  broadcast: 10.1.3.255
+size:
+  v4: 65536
+  single: 1
+  v6: 256
+hosts:
+  v4: 254
+  slash30: 2
+  slash31: 2
+  slash32: 1
+  v6: 256
+contains:
+  address: true
+  outside: false
+  subnet: true
+  wider: false
+  v6: true
+overlaps:
+  nested: true
+  apart: false
+version:
+  v4: 4
+  v6: 6
+  mapped: 6
+isValid:
+  address: true
+  prefix: true
+  bad: false
+  badLength: false
+  zone: false

@@ -1,0 +1,1 @@
+cidr-netmask-ipv6.yak:2:18: "netmask" needs an IPv4 prefix, found 2001:db8::/32

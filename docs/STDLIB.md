@@ -14,6 +14,7 @@ name a template uses.
     - [Mappings](#mappings)
 - [Modules](#modules)
     - [`std.base64`](#stdbase64)
+    - [`std.cidr`](#stdcidr)
     - [`std.env`](#stdenv)
     - [`std.files`](#stdfiles)
     - [`std.gotemplate`](#stdgotemplate)
@@ -220,6 +221,57 @@ password: base64.encode($$.password)
 | `decode(value)` | The text that the base64 string `value` holds. |
 
 Decoded base64 that is not UTF-8 text is an error.
+
+### `std.cidr`
+
+```yaml
+import std.cidr
+
+subnets: cidr.subnets($$.vpc, [8, 8, 4])  # ["10.0.0.0/24", "10.0.1.0/24", "10.0.16.0/20"]
+gateway: cidr.host(cidr.subnet($$.vpc, 8, 0), 1)  # "10.0.0.1"
+zones: [cidr.subnet($$.vpc, 4, i) for i in range(3)]
+```
+
+| Call | Answer |
+| --- | --- |
+| `host(prefix, n)` | The address `n` places into `prefix`, counting back from the end when `n` is negative, so `-1` is the last address. |
+| `subnet(prefix, newbits, n)` | Subnet `n` of the subnets of `prefix` whose prefix is `newbits` longer, counting back from the end when `n` is negative. |
+| `subnets(prefix, newbits)` | One subnet of `prefix` for each integer of the sequence `newbits`, that much longer, laid out one after another. |
+| `split(prefix, newbits)` | Every subnet of `prefix` whose prefix is `newbits` longer, in order. |
+| `network(prefix)` | `prefix` with its host bits cleared. |
+| `address(prefix)` | The address that `prefix` is written with, host bits included. |
+| `prefixLength(prefix)` | The length of `prefix`, as an integer. |
+| `netmask(prefix)` | The mask of an IPv4 `prefix`, such as `"255.255.0.0"` for a `/16`. |
+| `broadcast(prefix)` | The last address of an IPv4 `prefix`. |
+| `size(prefix)` | How many addresses `prefix` holds. |
+| `hosts(prefix)` | How many of those addresses are usable by hosts. |
+| `contains(prefix, value)` | Whether the address or prefix `value` lies wholly inside `prefix`. |
+| `overlaps(a, b)` | Whether the prefixes `a` and `b` share any address. |
+| `version(value)` | `4` or `6`, for an address or a prefix. |
+| `isValid(value)` | Whether the string `value` is an address or a prefix. |
+
+Addresses and prefixes are strings. Every answer writes them in their
+canonical form, so IPv6 is lowercase with its longest run of zeros shortened
+to `::`. A prefix may be written with host bits set, as an interface address
+such as `"10.1.2.3/16"` is; every call but `address` works from its network,
+`"10.1.0.0/16"`. An IPv4-mapped address such as `"::ffff:10.0.0.1"` is IPv6.
+
+`subnets` allocates as Terraform's `cidrsubnets` does: each subnet starts at
+the first address after the one before it that is a multiple of its own size,
+so `[8, 4]` in a `/16` answers a `/24` and then the `/20` that begins
+`10.0.16.0`. Running out of room in `prefix` is an error. `split` answers at
+most 65536 subnets, so `newbits` must be 16 or less.
+
+`hosts` leaves out the network and broadcast addresses of an IPv4 prefix,
+except that both addresses of a `/31` are usable on a point-to-point link and
+a `/32` is one host. IPv6 has no broadcast address, so every address counts.
+Addresses that a cloud provider reserves are for the template to subtract.
+
+An integer can hold no more than 2^63 - 1, so `size` and `hosts` of a prefix
+with more than 62 host bits, such as an IPv6 `/64`, are errors, and `n` in
+`host` cannot reach past that many addresses. `netmask` and `broadcast` of an
+IPv6 prefix are errors, and so are `contains` and `overlaps` between an IPv4
+and an IPv6 value.
 
 ### `std.env`
 

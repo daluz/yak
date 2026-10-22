@@ -1,0 +1,1 @@
+cidr-size-too-large.yak:2:15: "size" of 2001:db8::/64 is 2^64, too large for an integer

@@ -1249,7 +1249,7 @@ metadata:
 Beyond the built-ins of section 16, the standard library lives in modules
 whose paths begin with `std`: `std.strings`, `std.json`, `std.yaml`,
 `std.base64`, `std.hash`, `std.regex`, `std.math`, `std.path`, `std.files`,
-`std.gotemplate`, `std.random` and `std.env`. Given this context:
+`std.gotemplate`, `std.cidr`, `std.random` and `std.env`. Given this context:
 
 ```yaml
 name: "  Shop  "
