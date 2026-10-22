@@ -1095,8 +1095,8 @@ func TestSpecInitRefusesAPackage(t *testing.T) {
 
 func TestInitThenBuild(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "web")
-	if _, err := run(t, "init", dir); err != nil {
-		t.Fatalf("yak init: %v", err)
+	if _, err := run(t, "package", "init", dir); err != nil {
+		t.Fatalf("yak package init: %v", err)
 	}
 	if _, err := run(t, "package", "init", dir); err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("yak package init again: error = %v, want a refusal", err)

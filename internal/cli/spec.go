@@ -17,8 +17,8 @@ import (
 func newSpecCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "spec",
-		Short: "Work with spec files, which say what a release renders",
-		Long: "A .yakspec spec file names the packages to render, the context and options\n" +
+		Short: "Work with .yakspec files, that consolidate context and templates",
+		Long: "A .yakspec spec file names the packages to render, the context, the options\n" +
 			"they are rendered with, and where each of their outputs goes.",
 	}
 	cmd.AddCommand(newSpecInitCommand(), newSpecRenderCommand())

@@ -9,7 +9,7 @@ This describes the tool that renders templates. The language is specified in
 | --- | --- |
 | `yak render PATH` | Render one template, every template in a directory, or a remote package. |
 | `yak fmt [PATH...]` | Format templates and libraries. |
-| `yak package init [DIR]` | Make a directory a package. Also `yak init`. |
+| `yak package init [DIR]` | Make a directory a package. |
 | `yak package add SOURCE` | Add a dependency. Also `yak add`. |
 | `yak package remove NAME` | Remove a dependency. Also `yak remove`. |
 | `yak package sync` | Vendor the remote dependencies and write `yak.lock`. Also `yak sync`. |
@@ -297,7 +297,7 @@ it parses, beyond the names `--type-names` respells.
 
 `yak package`, or `yak pkg`, manages the package the current directory is in:
 the one whose `yak.pkg` is there or in the nearest directory above it. Its
-`init`, `add`, `remove` and `sync` subcommands are also top-level commands,
+`add`, `remove` and `sync` subcommands are also top-level commands,
 so `yak add` is `yak package add`.
 
 The commands that reach an OCI registry, `render`, `add`, `remove`, `sync` and
@@ -323,10 +323,10 @@ $ podman login ghcr.io
 $ yak package push oci://ghcr.io/acme/web
 ```
 
-### `yak init`
+### `yak package init`
 
 ```console
-$ yak init [DIR] [--name NAME]
+$ yak package init [DIR] [--name NAME]
 ```
 
 Makes `DIR`, or the current directory, a package. It writes a `yak.pkg` named

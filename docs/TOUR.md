@@ -1617,7 +1617,7 @@ Without an `else`, a value that no case matches gives `null`.
 ## 20. Packages
 
 A directory with a `yak.pkg` at its root is a package, which is how
-libraries such as `lib/k8s.yakl` are shared. `yak init` makes the current
+libraries such as `lib/k8s.yakl` are shared. `yak package init` makes the current
 directory one, with a `yak.pkg` like this:
 
 ```yaml
