@@ -1,5 +1,9 @@
 # yak
 
+<p align="center">
+  <img src="docs/assets/mascot.png" alt="yak's mascot, a shaggy brown yak" width="240">
+</p>
+
 `yak` templatizes YAML. It is similar in spirit to jsonnet, but the surface
 language is YAML itself, with the ambiguous parts removed and a small
 expression language added.
