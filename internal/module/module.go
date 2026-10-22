@@ -56,6 +56,36 @@ func Resolve(from string, path []string) (string, error) {
 	return lookup(dir, segs, strings.Join(path, "."))
 }
 
+// ResolveFile returns the file that the quoted path names when it is
+// imported by the file at from. Only a file in no package can import one,
+// and the path must name a template or a library beneath from's directory.
+func ResolveFile(from, path string) (string, error) {
+	dir := filepath.Dir(from)
+	pkg, err := FindPackage(dir)
+	if err != nil {
+		return "", err
+	}
+	if pkg != nil {
+		return "", fmt.Errorf("%q is a file path, which a file inside the package %s at %s cannot import; import it by its dotted path or name it in %s",
+			path, pkg.Name, pkg.Root(), PkgFile)
+	}
+	if !isModule(path) {
+		return "", fmt.Errorf("%q names no module; a file path ends in %s or %s", path, Ext, ExtLibrary)
+	}
+	if !filepath.IsLocal(filepath.FromSlash(path)) {
+		return "", fmt.Errorf("%q is not a path beneath %s", path, dir)
+	}
+	file := filepath.Join(dir, filepath.FromSlash(path))
+	info, err := os.Stat(file)
+	switch {
+	case err != nil:
+		return "", fmt.Errorf("no module %q: %s does not exist", path, file)
+	case info.IsDir():
+		return "", fmt.Errorf("%q is a directory; import one of the modules in it", path)
+	}
+	return file, nil
+}
+
 // lookup finds the module that segs names under dir: the directories of
 // every segment but the last, and the template or library that the last one
 // names. name is the whole path as the import wrote it.

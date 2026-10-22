@@ -85,7 +85,19 @@ func (l *Loader) Root() []*eval.Builtin {
 // mapping of its built-ins; a file module is the value of its one document,
 // evaluated in s.
 func (l *Loader) Import(s *eval.Session, node *ast.Import) (*eval.Thunk, error) {
-	name := strings.Join(node.Path, ".")
+	name := node.Name()
+	if node.File != "" {
+		if l.strict {
+			return nil, eval.Errorf(node.Pos(),
+				"module %q is imported by its file path, which strict mode does not allow; render with --strict=false to use it",
+				name)
+		}
+		file, err := ResolveFile(node.Pos().File, node.File)
+		if err != nil {
+			return nil, eval.Errorf(node.Pos(), "%s", err.Error())
+		}
+		return l.load(s, node, name, file)
+	}
 	if node.Path[0] != Std {
 		file, err := Resolve(node.Pos().File, node.Path)
 		if err != nil {

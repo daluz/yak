@@ -1002,7 +1002,7 @@ func TestRenderSpecLetsTheLastPackageWin(t *testing.T) {
 	if _, err := run(t, "spec", "render", spec); err != nil {
 		t.Fatalf("render returned error: %v", err)
 	}
-	got := readAll(t, filepath.Join(dir, "out"))
+	got := readAll(t, filepath.Join(dir, "build", "out"))
 	if got["service.yaml"] != "from: overlay\n" || got["only.yaml"] != "only: base\n" {
 		t.Errorf("wrote %v, want overlay's service and base's only", got)
 	}
@@ -1032,7 +1032,7 @@ func TestRenderSpecRefuses(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("error = %v, want it to mention %q", err, tc.want)
 			}
-			if _, err := os.Stat(filepath.Join(dir, "web", "web")); err == nil {
+			if _, err := os.Stat(filepath.Join(dir, "build")); err == nil {
 				t.Error("an output was written")
 			}
 		})

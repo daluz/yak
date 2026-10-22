@@ -8,6 +8,7 @@ package parser
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/daluz/yak/internal/ast"
@@ -540,8 +541,9 @@ func (p *parser) parseImport(start int, head []string) ([]*ast.Binding, error) {
 	return []*ast.Binding{bind}, nil
 }
 
-// parseImportSpec parses "name = a.b.c" or "a.b.c". A module is bound under
-// the name it is given, or else under the last segment of its path.
+// parseImportSpec parses "name = a.b.c", "a.b.c" or "name = \"a/b.yak\"". A
+// module is bound under the name it is given, or else under the last segment
+// of its path.
 func (p *parser) parseImportSpec() (*ast.Binding, error) {
 	var name token.Token
 	if p.at(token.Ident) && p.peek().Kind == token.Assign {
@@ -551,6 +553,22 @@ func (p *parser) parseImportSpec() (*ast.Binding, error) {
 		}
 		name = t
 		p.next()
+	}
+	if p.at(token.String) {
+		t := p.next()
+		s, err := p.buildString(t)
+		if err != nil {
+			return nil, err
+		}
+		if !s.IsLiteral() {
+			return nil, p.errorf(t.Pos, "the file path of a module cannot interpolate")
+		}
+		if name.Lit == "" {
+			return nil, p.errorf(t.Pos, "a module imported by its file path must be bound to a name: %s",
+				"import name = "+strconv.Quote(s.Literal()))
+		}
+		imp := &ast.Import{Base: ast.At(t.Pos), File: s.Literal()}
+		return &ast.Binding{Base: ast.At(name.Pos), Name: name.Lit, Value: imp}, nil
 	}
 	if !p.at(token.Ident) {
 		return nil, p.errorf(p.cur().Pos, "expected the path of a module, found %s", p.cur())

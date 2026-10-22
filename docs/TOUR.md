@@ -1228,6 +1228,18 @@ metadata:
 `import shared = lib.labels` picks a different name, and an
 `import { ... }` block takes several imports at once.
 
+A file that belongs to no package (section 20) can also import a module by its
+file path, quoted. It names the file beneath the importing file's directory,
+extension included, and takes a name. Strict mode does not allow it, so the
+template is rendered with `--strict=false`:
+
+```yaml
+import labels = "lib/labels.yakl"
+
+metadata:
+  labels: labels.standard("web")
+```
+
 ### The standard library
 
 Beyond the built-ins of section 16, the standard library lives in modules
@@ -1292,6 +1304,7 @@ safe to re-render in a GitOps loop. Only these things differ between the modes:
 | `std.random` | Importing it is an error. | Available. |
 | `std.env` | Importing it is an error. | Available. |
 | `std.files` | Reads only beneath the directory of the file calling `read`. | Reads any path, absolute or relative. |
+| `import name = "path.yak"` | Importing it is an error. | Available outside a package. |
 
 An import is a binding, so the `std.random` error comes when the import is
 first used rather than where it is written:

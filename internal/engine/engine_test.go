@@ -315,6 +315,63 @@ fallback: env.get("YAK_TEST_UNSET", 8080)
 	}
 }
 
+func TestImportFilePath(t *testing.T) {
+	dir := t.TempDir()
+	for name, src := range map[string]string{
+		"lib/my-base.yak":       "x: 1\n",
+		"lib/v1.2/helpers.yakl": "_y: 2\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	src := "import {\n  base = \"lib/my-base.yak\"\n  helpers = \"lib/v1.2/helpers.yakl\"\n}\nx: base.x\ny: helpers._y\n"
+	got, err := renderFile(t, dir, "t.yak", src, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "x: 1\ny: 2\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestImportFilePathRefuses(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "base.yak"), []byte("x: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, path, want string }{
+		{"a parent", "../base.yak", "is not a path beneath"},
+		{"an absolute path", filepath.ToSlash(filepath.Join(dir, "base.yak")), "is not a path beneath"},
+		{"no extension", "base", "names no module"},
+		{"a missing file", "absent.yak", "does not exist"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "import base = \"" + tc.path + "\"\nx: base.x\n"
+			if _, err := renderFile(t, dir, "sub/t.yak", src, true); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestImportFilePathRefusedInsideAPackage(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "yak.pkg"), []byte("package:\n  name: web\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "base.yak"), []byte("x: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	src := "import base = \"base.yak\"\nx: base.x\n"
+	if _, err := renderFile(t, dir, "t.yak", src, true); err == nil || !strings.Contains(err.Error(), "inside the package web") {
+		t.Errorf("error = %v, want the package refused", err)
+	}
+}
+
 func TestTemplateWritesNothingOnFailure(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "broken.yak")

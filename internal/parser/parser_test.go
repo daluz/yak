@@ -679,7 +679,7 @@ func TestParseErrors(t *testing.T) {
 		{"import with a trailing dot", "import a.\nb: 1\n", "expected a segment of the module path"},
 		{"import with a double dot", "import a..b\nc: 1\n", "segments are separated by a single"},
 		{"import with spaced dots", "import a .b\nc: 1\n", `unexpected "." after the path of an "import"`},
-		{"import of a string", "import \"a\"\nb: 1\n", "expected the path of a module"},
+		{"import of an unnamed string", "import \"a\"\nb: 1\n", "must be bound to a name"},
 		{"import naming a keyword", "import a.for\nb: 1\n", `bind it to another name with "import name = a.for"`},
 		{"import alias naming a keyword", "import null = a\nb: 1\n", "cannot name a module"},
 		{"empty import block", "import {}\na: 1\n", `the "import" block must declare at least one binding`},

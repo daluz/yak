@@ -17,8 +17,8 @@ This describes the tool that renders templates. The language is specified in
 | `yak package push REF` | Push the build to an OCI registry. |
 | `yak schema check PATH...` | Check the schemas of templates and libraries without rendering them. |
 | `yak schema import FILE...` | Translate CustomResourceDefinitions, JSON Schemas or OpenAPI documents into a library of schemas. |
-| `yak spec render FILE` | Render the packages a spec file names. |
 | `yak spec init [FILE]` | Write a spec file to start from. |
+| `yak spec render FILE` | Render the packages a spec file names. |
 | `yak completion SHELL` | Write a shell completion script. |
 | `yak help [command]` | Describe a command. |
 
@@ -98,9 +98,10 @@ $ yak render oci://ghcr.io/acme/web:1.4.0 --output-dir build
 
 Rendering is strict unless `--strict=false` is given, so the same template and
 context always render the same output. Strict mode refuses modules that answer
-differently on every rendering, such as `std.random` and `std.env`, and confines
-`std.files` to the directory of the file that calls it. Turning it off admits
-those modules and lets `std.files` read any path.
+differently on every rendering, such as `std.random` and `std.env`, refuses
+imports by file path, and confines `std.files` to the directory of the file
+that calls it. Turning it off admits those modules and imports, and lets
+`std.files` read any path.
 [SPEC.md](SPEC.md#strict-mode) has the details.
 
 ### Context files
@@ -597,8 +598,8 @@ lists a schema for each item.
 ## `yak spec`
 
 ```console
-$ yak spec render FILE.yakspec
 $ yak spec init [FILE.yakspec]
+$ yak spec render FILE.yakspec
 ```
 
 A spec file, named `NAME.yakspec`, says in one place what a release renders:
@@ -607,6 +608,12 @@ the packages, the context each is rendered against, the options that
 output goes. It is written in yak, but it is no module of the language:
 nothing imports it, and it belongs to no package, so one inside a package's
 directory is an error.
+
+### `yak spec init`
+
+Writes `FILE.yakspec`, or `release.yakspec` in the current directory, as an
+example spec file to edit. It refuses a file that exists, a name that does
+not end in `.yakspec`, and a directory inside a package.
 
 ### `yak spec render`
 
@@ -618,7 +625,6 @@ file.
 import std.env
 
 spec: "yakspec/v1"
-output: "build"
 
 context:
   env: env.get("DEPLOY_ENV", "dev")
@@ -643,7 +649,8 @@ $ DEPLOY_ENV=prod yak spec render release.yakspec
 ```
 
 The spec file is evaluated outside strict mode against an empty context, so
-it can read `std.env` and `std.files` to decide what to render, and what it
+it can read `std.env` and `std.files` to decide what to render and
+[import modules by their file paths](SPEC.md#modules), and what it
 renders is read back as plain data, as a package context file's is. It holds
 one document, which cannot declare `schema $$`, since there is no context to
 check. The packages it names render in strict mode unless it says
@@ -653,7 +660,7 @@ otherwise. It takes these keys:
 | --- | --- | --- |
 | `spec` | The spec version, `"yakspec/v1"`. | `"yakspec/v1"` |
 | `packages` | The packages to render, in order. Required. | |
-| `output` | The directory every output goes beneath, relative to the spec file. | its directory |
+| `output` | The directory every output goes beneath, relative to the spec file. | `"build"` |
 | `context` | The context every package is rendered against. | `{}` |
 | `rules` | Where every package's outputs go. | |
 | `format` | As `--format`. | as for a directory |
@@ -708,14 +715,6 @@ one package that would write the same file are an error; when templates of
 two packages would, the package later in `packages` wins, so a package can
 overlay what an earlier one writes. Nothing is written unless every template
 renders.
-
-### `yak spec init`
-
-Writes `FILE.yakspec`, or `release.yakspec` in the current directory, as an
-example spec file to edit: one package, `web`, rendered against
-`{env: "dev"}` into `build/`, with commented-out rules and a package
-context to start from. It refuses a file that exists, a name that does not
-end in `.yakspec`, and a directory inside a package.
 
 ## Diagnostics
 

@@ -76,12 +76,13 @@ Rendering is strict unless the tool is told otherwise
 files always render the same output, so the result is safe to review as a
 diff and to re-render in a GitOps loop.
 
-Strict mode does two things. [Importing](#modules-and-packages) a module whose answers can
+Strict mode does three things. [Importing](#modules-and-packages) a module whose answers can
 change between renderings, such as [`std.random`](STDLIB.md#stdrandom) and
 [`std.env`](STDLIB.md#stdenv), is an
-error, raised when the import is first read. And
+error, raised when the import is first read, and so is
+[importing a module by its file path](#modules). And
 [`std.files`](STDLIB.md#stdfiles) reads only beneath the directory of the file
-that calls it. Both errors name strict mode as the reason and say how to turn
+that calls it. Every error names strict mode as the reason and says how to turn
 it off. Every other module behaves the same in either mode. A template can
 check if strict-mode is enabled with [`$yak.strict`](#builtin-variables).
 
@@ -710,6 +711,25 @@ import {
   name2 = mydir.module2
 }
 ```
+
+A file in no [package](#packages), which includes a
+[spec file](CLI.md#yak-spec-render), can also import a module by its file
+path, written as a string with no interpolation. The path is relative to the
+importing file's directory and must lie beneath it, so it cannot be absolute
+or climb out with `..`. It must end in `.yak` or `.yakl`, and the module must
+be bound to a name:
+
+```yaml
+import {
+  base = "shared/my-base.yak"
+  helpers = "lib/v1.2/helpers.yakl"
+}
+```
+
+The module it names can be in a package; its own imports then resolve as that
+package's do. A file inside a package imports by dotted paths only, and names
+anything else in `dependencies`. [Strict mode](#strict-mode) refuses an import
+by file path when it is first read.
 
 An import is a binding, so [Scope](#scope) applies: it covers its block, an
 inner one shadows an outer one, it can be rebound, and a module that is never

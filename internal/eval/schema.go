@@ -130,7 +130,7 @@ func (e *Env) moduleSchema(module, name string, pos token.Pos) (*schema, error) 
 	if sc, ok := schemas[name]; ok && sc.name != ast.SchemaRoot && sc.name != ast.SchemaContext {
 		return sc, nil
 	}
-	return nil, errorf(pos, "module %q declares no schema %q", strings.Join(imp.Path, "."), name)
+	return nil, errorf(pos, "module %q declares no schema %q", imp.Name(), name)
 }
 
 // site says which value a check is about: the schema or the document it

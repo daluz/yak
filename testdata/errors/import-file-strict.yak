@@ -1,0 +1,4 @@
+# A module imported by its file path is refused in strict mode.
+import base = "lib/base.yak"
+
+a: base.x

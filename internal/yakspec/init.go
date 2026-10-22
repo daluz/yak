@@ -6,19 +6,17 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
-
-	"github.com/daluz/yak/internal/module"
 )
 
-// DefaultFile is the spec file Init writes when it is given none.
+// DefaultFile is the spec file "yak spec init" writes when it is given none.
 const DefaultFile = "release" + Ext
 
 // example is the spec file Init writes.
 const example = `# The packages "yak spec render" renders, and how.
 spec: "yakspec/v1"
 
-# Every output goes beneath this directory, relative to this file.
+# Every output goes beneath this directory, relative to this file; it
+# defaults to "build".
 output: "build"
 
 # The context every package is rendered against. A package's own context
@@ -47,18 +45,10 @@ packages:
 // Init writes an example spec file at path, which must end in Ext and not
 // exist yet, outside any package.
 func Init(path string) error {
-	if !strings.HasSuffix(path, Ext) {
-		return fmt.Errorf("%s is not a %s spec file", path, Ext)
-	}
-	dir := filepath.Dir(path)
-	pkg, err := module.FindPackage(dir)
-	if err != nil {
+	if err := checkPath(path); err != nil {
 		return err
 	}
-	if pkg != nil {
-		return fmt.Errorf("%s would be inside the package %s at %s; a spec file names packages, and cannot belong to one", path, pkg.Name, pkg.Root())
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)

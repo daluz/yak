@@ -1,0 +1,1 @@
+import-file-unnamed.yak:1:8: a module imported by its file path must be bound to a name: import name = "lib/base.yak"

@@ -1,9 +1,9 @@
 // Package yakspec reads a spec file: a .yakspec file that names the packages
-// one "yak render" renders, the context each is rendered against, the
+// "yak spec render" renders, the context each is rendered against, the
 // options they are rendered with and where each template's output goes.
 //
 // A spec file is written in yak, but it is no module and belongs to no
-// package. It is evaluated out of strict mode against an empty context, and
+// package. It is evaluated outside strict mode against an empty context, and
 // what it renders is read back as plain data and checked against the shape
 // its spec version gives it.
 package yakspec
@@ -60,11 +60,11 @@ type Package struct {
 	Source string
 	// Context is what the package is rendered against: its own context
 	// merged over the top-level one.
-	Context eval.Value
-	// rules are the package's own followed by the top-level ones it does
-	// not override.
+	Context *eval.Object
+	// own are the rules the package's entry gives.
+	own []*Rule
+	// rules are own followed by the top-level ones it does not override.
 	rules []*Rule
-	own   []*Rule
 	label string
 }
 
@@ -80,11 +80,8 @@ type Rule struct {
 // covers reports whether the rule covers the template at rel, a slash
 // path relative to the package root.
 func (r *Rule) covers(rel string) bool {
-	switch {
-	case r.key == rootDir:
-		return true
-	case strings.HasSuffix(r.key, "/"):
-		return strings.HasPrefix(rel, r.key)
+	if strings.HasSuffix(r.key, "/") {
+		return strings.HasPrefix(rel, r.prefix())
 	}
 	return rel == r.key
 }
@@ -156,24 +153,36 @@ func (s *Spec) CheckRules() error {
 	return nil
 }
 
-// Load reads the spec file at path.
+// Load reads the spec file at path, which must end in Ext.
 func Load(path string) (*Spec, error) {
+	if err := checkPath(path); err != nil {
+		return nil, err
+	}
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading spec file: %w", err)
-	}
-	pkg, err := module.FindPackage(filepath.Dir(path))
-	if err != nil {
-		return nil, err
-	}
-	if pkg != nil {
-		return nil, fmt.Errorf("%s is inside the package %s at %s; a spec file names packages, and cannot belong to one", path, pkg.Name, pkg.Root())
 	}
 	v, err := evaluate(path, src)
 	if err != nil {
 		return nil, err
 	}
 	return decode(path, v)
+}
+
+// checkPath refuses a spec file path that does not end in Ext, or that
+// lies inside a package.
+func checkPath(path string) error {
+	if !strings.HasSuffix(path, Ext) {
+		return fmt.Errorf("%s is not a %s spec file", path, Ext)
+	}
+	pkg, err := module.FindPackage(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	if pkg != nil {
+		return fmt.Errorf("%s is inside the package %s at %s; a spec file names packages, and cannot belong to one", path, pkg.Name, pkg.Root())
+	}
+	return nil
 }
 
 // evaluate renders the spec file and reads what it renders back as data.
@@ -236,34 +245,20 @@ func (d decoder) mapping(key string, v eval.Value) (*eval.Object, error) {
 	return o, nil
 }
 
-// fields answers the entries of o with their values, which are plain data
-// and so already resolved.
-func fields(o *eval.Object) ([]string, []eval.Value, error) {
-	names, values := o.Names(), make([]eval.Value, 0, o.Len())
-	for _, f := range o.Fields() {
-		v, err := f.Value.Value()
-		if err != nil {
-			return nil, nil, err
-		}
-		values = append(values, v)
-	}
-	return names, values, nil
-}
-
 func decode(file string, v eval.Value) (*Spec, error) {
 	d := decoder{path: file}
 	top, ok := v.(*eval.Object)
 	if !ok {
 		return nil, fmt.Errorf("%s: a spec file must hold a mapping, found %s", file, v.TypeName())
 	}
-	s := &Spec{Path: file, Output: "."}
+	s := &Spec{Path: file, Output: "build"}
 	context := eval.NewObject()
-	names, values, err := fields(top)
-	if err != nil {
-		return nil, err
-	}
-	for i, name := range names {
-		v := values[i]
+	for _, f := range top.Fields() {
+		name := f.Name
+		v, err := f.Value.Value()
+		if err != nil {
+			return nil, err
+		}
 		switch name {
 		case "spec":
 			version, err := d.str(name, v)
@@ -314,7 +309,7 @@ func decode(file string, v eval.Value) (*Spec, error) {
 		}
 	}
 	if len(s.Packages) == 0 {
-		return nil, fmt.Errorf("%s: packages names nothing to render", file)
+		return nil, d.errorf("packages", "names nothing to render")
 	}
 	dir := filepath.Dir(file)
 	if !filepath.IsAbs(s.Output) {
@@ -324,8 +319,8 @@ func decode(file string, v eval.Value) (*Spec, error) {
 		if !module.IsRemote(p.Source) && !filepath.IsAbs(p.Source) {
 			p.Source = filepath.Join(dir, p.Source)
 		}
-		own := p.Context
-		if p.Context, err = eval.Merge(context, own.(*eval.Object)); err != nil {
+		var err error
+		if p.Context, err = eval.Merge(context, p.Context); err != nil {
 			return nil, err
 		}
 		p.rules = append([]*Rule(nil), p.own...)
@@ -364,22 +359,22 @@ func (d decoder) packages(key string, v eval.Value) ([]*Package, error) {
 			return nil, err
 		}
 		p := &Package{Context: eval.NewObject(), label: label}
-		names, values, err := fields(o)
-		if err != nil {
-			return nil, err
-		}
-		for j, name := range names {
-			k := label + "." + name
-			switch name {
+		for _, f := range o.Fields() {
+			v, err := f.Value.Value()
+			if err != nil {
+				return nil, err
+			}
+			k := label + "." + f.Name
+			switch f.Name {
 			case "source":
-				p.Source, err = d.str(k, values[j])
+				p.Source, err = d.str(k, v)
 				if err == nil && p.Source == "" {
 					err = d.errorf(k, "names no package")
 				}
 			case "context":
-				p.Context, err = d.mapping(k, values[j])
+				p.Context, err = d.mapping(k, v)
 			case "rules":
-				p.own, err = d.rules(k, values[j])
+				p.own, err = d.rules(k, v)
 			default:
 				err = d.errorf(k, "is not a key of a package; it takes source, context and rules")
 			}
@@ -400,23 +395,23 @@ func (d decoder) rules(key string, v eval.Value) ([]*Rule, error) {
 	if err != nil {
 		return nil, err
 	}
-	names, values, err := fields(o)
-	if err != nil {
-		return nil, err
-	}
 	var rules []*Rule
-	for i, name := range names {
-		k := key + ": " + name
-		if err := d.ruleKey(k, name); err != nil {
+	for _, f := range o.Fields() {
+		v, err := f.Value.Value()
+		if err != nil {
 			return nil, err
 		}
-		r := &Rule{key: name}
-		switch to := values[i].(type) {
+		k := key + ": " + f.Name
+		if err := d.ruleKey(k, f.Name); err != nil {
+			return nil, err
+		}
+		r := &Rule{key: f.Name}
+		switch to := v.(type) {
 		case eval.Null:
 			r.drop = true
 		case eval.String:
 			r.to = string(to)
-			if err := d.ruleTarget(k, name, r.to); err != nil {
+			if err := d.ruleTarget(k, f.Name, r.to); err != nil {
 				return nil, err
 			}
 		default:
@@ -451,8 +446,7 @@ func (d decoder) ruleKey(k, key string) error {
 // directory ending in "/", beneath output. A directory can only be sent to
 // a directory.
 func (d decoder) ruleTarget(k, key, to string) error {
-	dir := strings.TrimSuffix(to, "/")
-	if dir != "." && !isLocal(dir) {
+	if to != rootDir && !isLocal(strings.TrimSuffix(to, "/")) {
 		return d.errorf(k, "sends it to %q, which is not a path beneath output", to)
 	}
 	if strings.HasSuffix(key, "/") && !strings.HasSuffix(to, "/") {
@@ -461,8 +455,8 @@ func (d decoder) ruleTarget(k, key, to string) error {
 	return nil
 }
 
-// isLocal reports whether p is a clean slash path that stays beneath the
-// directory it is relative to.
+// isLocal reports whether p is a clean slash path beneath the directory it
+// is relative to, and not that directory itself.
 func isLocal(p string) bool {
-	return p != "" && path.Clean(p) == p && filepath.IsLocal(filepath.FromSlash(p))
+	return p != "." && path.Clean(p) == p && filepath.IsLocal(filepath.FromSlash(p))
 }

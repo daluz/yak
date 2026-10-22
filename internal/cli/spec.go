@@ -8,13 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/daluz/yak/internal/deps"
 	"github.com/daluz/yak/internal/module"
-	"github.com/daluz/yak/internal/render"
 	"github.com/daluz/yak/internal/yakspec"
 )
 
@@ -25,7 +23,7 @@ func newSpecCommand() *cobra.Command {
 		Long: "A .yakspec spec file names the packages to render, the context and options\n" +
 			"they are rendered with, and where each of their outputs goes.",
 	}
-	cmd.AddCommand(newSpecRenderCommand(), newSpecInitCommand())
+	cmd.AddCommand(newSpecInitCommand(), newSpecRenderCommand())
 	return cmd
 }
 
@@ -36,15 +34,12 @@ func newSpecRenderCommand() *cobra.Command {
 		Long: "Render every package the spec file names, local or remote, against its\n" +
 			"context, and write each output where the spec file's rules send it. The\n" +
 			"spec file sets every option itself, so there are no flags.\n\n" +
-			"The spec file is evaluated out of strict mode against an empty context;\n" +
+			"The spec file is evaluated outside strict mode against an empty context;\n" +
 			"the packages render in strict mode unless it sets strict: false. When two\n" +
 			"packages would write the same file, the later one in packages wins, and\n" +
 			"nothing is written unless every template renders.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !strings.HasSuffix(args[0], yakspec.Ext) {
-				return fmt.Errorf("%s is not a %s spec file", args[0], yakspec.Ext)
-			}
 			return renderSpec(args[0], cmd.ErrOrStderr())
 		},
 	}
@@ -69,9 +64,7 @@ func newSpecInitCommand() *cobra.Command {
 }
 
 // renderSpec renders the packages the spec file at path names, each
-// against its context and to where its rules send it. Two templates of one
-// package writing the same file are an error; between packages, the later
-// one in the list wins. Nothing is written unless every template renders.
+// against its context and to where its rules send it.
 func renderSpec(path string, log io.Writer) error {
 	spec, err := yakspec.Load(path)
 	if err != nil {
@@ -86,7 +79,6 @@ func renderSpec(path string, log io.Writer) error {
 		skipChecks: spec.SkipSchemaChecks, skipCtx: spec.SkipPackageContext}
 	fetch := deps.Options{Log: log, PlainHTTP: spec.PlainHTTP}
 	var all []rendered
-	written := map[string]int{}
 	for i, p := range spec.Packages {
 		dir := p.Source
 		if module.IsRemote(dir) {
@@ -113,18 +105,17 @@ func renderSpec(path string, log io.Writer) error {
 			if target.Drop {
 				continue
 			}
-			var opts render.Options
-			var dest string
+			output := ""
 			if target.File {
-				opts, err = req.options(template, target.Path)
-				dest = filepath.Join(spec.Output, filepath.FromSlash(target.Path))
-			} else {
-				opts, err = req.options(template, "")
-				dest = filepath.Join(spec.Output, filepath.FromSlash(target.Path),
-					outputName(templateStem(filepath.FromSlash(target.Rest)), opts.Format))
+				output = target.Path
 			}
+			opts, err := req.options(template, output)
 			if err != nil {
 				return err
+			}
+			dest := filepath.Join(spec.Output, filepath.FromSlash(target.Path))
+			if !target.File {
+				dest = filepath.Join(dest, outputName(templateStem(filepath.FromSlash(target.Rest)), opts.Format))
 			}
 			if other, ok := writers[dest]; ok {
 				return fmt.Errorf("%s and %s would both write %s", other, template, dest)
@@ -134,11 +125,7 @@ func renderSpec(path string, log io.Writer) error {
 			if err != nil {
 				return err
 			}
-			if j, ok := written[dest]; ok {
-				all[j].out = out
-				continue
-			}
-			written[dest] = len(all)
+			// Written in order, a later package's file replaces an earlier one's.
 			all = append(all, rendered{dest, out})
 		}
 	}

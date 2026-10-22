@@ -138,10 +138,20 @@ func (p *Param) Label() string {
 }
 
 // Import is the value of a binding introduced by "import": the module that the
-// dotted path names, read from the file the import is written in.
+// dotted path names, read from the file the import is written in. File is
+// set instead of Path when the module is named by a quoted file path.
 type Import struct {
 	Base
 	Path []string
+	File string
+}
+
+// Name is the module's path as the import wrote it.
+func (i *Import) Name() string {
+	if i.File != "" {
+		return i.File
+	}
+	return strings.Join(i.Path, ".")
 }
 
 // The names a schema binding takes when it constrains the document or the
