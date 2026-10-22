@@ -17,6 +17,8 @@ This describes the tool that renders templates. The language is specified in
 | `yak package push REF` | Push the build to an OCI registry. |
 | `yak schema check PATH...` | Check the schemas of templates and libraries without rendering them. |
 | `yak schema import FILE...` | Translate CustomResourceDefinitions, JSON Schemas or OpenAPI documents into a library of schemas. |
+| `yak spec render FILE` | Render the packages a spec file names. |
+| `yak spec init [FILE]` | Write a spec file to start from. |
 | `yak completion SHELL` | Write a shell completion script. |
 | `yak help [command]` | Describe a command. |
 
@@ -54,7 +56,8 @@ The one argument is the template to render, a directory of them, or a
 reads a template from standard input; it is then called `<stdin>` by
 diagnostics and `$filepath`, and `std.files` reads relative to the
 current directory. A `.yakl` file is a [library](SPEC.md#modules-and-packages), which can
-be imported but not rendered, so naming one is an error.
+be imported but not rendered, so naming one is an error, and a `.yakspec` file is
+a [spec file](#yak-spec), which `yak spec render` renders.
 
 ### Rendering a directory
 
@@ -590,6 +593,129 @@ left out with a warning.
 listed here or above, such as `format`, `discriminator`, `patternProperties`,
 `prefixItems` and `if`, is left out with a warning, and so is an `items` that
 lists a schema for each item.
+
+## `yak spec`
+
+```console
+$ yak spec render FILE.yakspec
+$ yak spec init [FILE.yakspec]
+```
+
+A spec file, named `NAME.yakspec`, says in one place what a release renders:
+the packages, the context each is rendered against, the options that
+[`yak render`](#yak-render)'s flags would otherwise give, and where every
+output goes. It is written in yak, but it is no module of the language:
+nothing imports it, and it belongs to no package, so one inside a package's
+directory is an error.
+
+### `yak spec render`
+
+Renders the packages the spec file names. The spec file sets every option
+itself, so the command takes no flags, and `yak render` refuses a `.yakspec`
+file.
+
+```yaml
+import std.env
+
+spec: "yakspec/v1"
+output: "build"
+
+context:
+  env: env.get("DEPLOY_ENV", "dev")
+  region: "eu-west-1"
+  replicas: 2
+
+rules:
+  "tests/": null
+
+packages:
+  - source: "web"
+    context:
+      replicas: 4
+    rules:
+      "./": "manifests/"
+      "deploy/app.toml.yak": "config/web.toml"
+  - source: "db"
+```
+
+```console
+$ DEPLOY_ENV=prod yak spec render release.yakspec
+```
+
+The spec file is evaluated outside strict mode against an empty context, so
+it can read `std.env` and `std.files` to decide what to render, and what it
+renders is read back as plain data, as a package context file's is. It holds
+one document, which cannot declare `schema $$`, since there is no context to
+check. The packages it names render in strict mode unless it says
+otherwise. It takes these keys:
+
+| Key | Meaning | Default |
+| --- | --- | --- |
+| `spec` | The spec version, `"yakspec/v1"`. | `"yakspec/v1"` |
+| `packages` | The packages to render, in order. Required. | |
+| `output` | The directory every output goes beneath, relative to the spec file. | its directory |
+| `context` | The context every package is rendered against. | `{}` |
+| `rules` | Where every package's outputs go. | |
+| `format` | As `--format`. | as for a directory |
+| `strict` | `false` renders the packages as `--strict=false` does. | `true` |
+| `keepNullDocuments` | As `--keep-null-documents`. | `false` |
+| `skipSchemaChecks` | As `--skip-schema-checks`. | `false` |
+| `skipPackageContext` | As `--skip-package-context`. | `false` |
+| `plainHttp` | As `--plain-http`. | `false` |
+
+Each entry of `packages` is a mapping. Its `source` is a package's directory,
+relative to the spec file, or a [git or OCI reference](SPEC.md#remote-packages),
+which is fetched as `yak render` fetches one; either way it must hold a
+`yak.pkg` at its root. It may carry `context` and `rules` of its own, which
+apply to that package alone. Its `context` merges over the top-level one as a
+later `-c` file merges over an earlier one, and the result is what the
+package's [context file](#package-context) reads. Its rules are added to the
+top-level ones, replacing any with the same key. With the spec above, `web`
+reads `replicas: 4` and `db` reads `replicas: 2`.
+
+Without a rule, a package's templates go beneath a directory named for the
+package, laid out as [rendering a directory](#rendering-a-directory) lays
+them out under `--output-dir`. A rule's key says which of the package's
+templates it covers, relative to the package root, and its value where they
+go, relative to `output`:
+
+| Key | Covers |
+| --- | --- |
+| `"service.yak"` | That template. |
+| `"deploy/"` | Every template beneath the directory. |
+| `"./"` | Every template of the package. |
+
+| Value | Sends them |
+| --- | --- |
+| `"config/web.toml"` | To that file, which only a template's key can be sent to. Its extension chooses the format, as `-o` does. |
+| `"manifests/"` | Beneath that directory, each at its path beneath the key, named as `-O` names it. |
+| `null` | Nowhere: they are not rendered. |
+
+The longest key that covers a template decides where it goes, so a template's
+key overrides its directory's, and `"deploy/"` overrides `"./"`. The keys and
+values are quoted, since they are not identifiers. The spec above writes:
+
+```text
+build/manifests/service.yaml
+build/manifests/deploy/app.yaml
+build/config/web.toml
+build/db/db.yaml
+```
+
+A top-level rule that covers no template of any package is an error, and so
+is a package's own rule that covers none of its templates. Two templates of
+one package that would write the same file are an error; when templates of
+two packages would, the package later in `packages` wins, so a package can
+overlay what an earlier one writes. Nothing is written unless every template
+renders.
+
+### `yak spec init`
+
+Writes `FILE.yakspec`, or `release.yakspec` in the current directory, as an
+example spec file to edit: one package, `web`, rendered against
+`{env: "dev"}` into `build/`, with commented-out rules and a package
+context to start from. It refuses a file that exists, a name that does not
+end in `.yakspec`, and a directory inside a package.
 
 ## Diagnostics
 

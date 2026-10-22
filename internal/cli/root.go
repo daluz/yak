@@ -25,6 +25,7 @@ func NewRootCommand() *cobra.Command {
 		newFmtCommand(),
 		newPackageCommand(),
 		newSchemaCommand(),
+		newSpecCommand(),
 		shortcut(newInitCommand()),
 		shortcut(newAddCommand()),
 		shortcut(newRemoveCommand()),

@@ -861,10 +861,27 @@ func TestSyncNamesDependenciesOnlyWithUpdate(t *testing.T) {
 }
 
 func TestRenderGitPackage(t *testing.T) {
+	ref := gitPackage(t, project(t))
+	out := filepath.Join(t.TempDir(), "build")
+
+	if _, err := run(t, "render", ref, "-O"); err == nil || !strings.Contains(err.Error(), "give --output-dir") {
+		t.Errorf("render -O: error = %v, want --output-dir asked for", err)
+	}
+	if _, err := run(t, "render", ref, "--output-dir", out); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(out, "deploy", "svc.toml")); string(got) != "service = \"web\"\n" {
+		t.Errorf("deploy/svc.toml = %q, want the template rendered", got)
+	}
+}
+
+// gitPackage commits the package at repo to a git repository, tags it v1,
+// and answers the reference that fetches it.
+func gitPackage(t *testing.T, repo string) string {
+	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")
 	}
-	repo := project(t)
 	for _, args := range [][]string{
 		{"init", "--quiet"},
 		{"add", "-A"},
@@ -878,17 +895,201 @@ func TestRenderGitPackage(t *testing.T) {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
 	}
-	ref := "git+file://" + filepath.ToSlash(repo) + "@v1"
-	out := filepath.Join(t.TempDir(), "build")
+	return "git+file://" + filepath.ToSlash(repo) + "@v1"
+}
 
-	if _, err := run(t, "render", ref, "-O"); err == nil || !strings.Contains(err.Error(), "give --output-dir") {
-		t.Errorf("render -O: error = %v, want --output-dir asked for", err)
+// specPackages writes, beneath dir, the packages web and db that a spec
+// file renders. web reads its context through a context file.
+func specPackages(t *testing.T, dir string) {
+	t.Helper()
+	write(t, dir, "web/yak.pkg", "package:\n  name: web\n  context: context.yak\n")
+	write(t, dir, "web/context.yak", "<<: $$\nfullname: \"\\($$.env)-web\"\n")
+	write(t, dir, "web/service.yak", "name: $$.fullname\nreplicas: $$.replicas\n")
+	write(t, dir, "web/deploy/app.yak", "app: $$.fullname\n")
+	write(t, dir, "web/deploy/app.toml.yak", "region: $$.region\n")
+	write(t, dir, "web/tests/smoke.yak", "smoke: true\n")
+	write(t, dir, "db/yak.pkg", "package:\n  name: db\n")
+	write(t, dir, "db/db.yak", "db: $$.env\nreplicas: $$.replicas\n")
+	write(t, dir, "db/tests/db.yak", "test: true\n")
+}
+
+func readAll(t *testing.T, root string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		rel, _ := filepath.Rel(root, path)
+		files[filepath.ToSlash(rel)] = string(data)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := run(t, "render", ref, "--output-dir", out); err != nil {
+	return files
+}
+
+func TestRenderSpec(t *testing.T) {
+	dir := t.TempDir()
+	specPackages(t, dir)
+	t.Setenv("YAK_TEST_ENV", "prod")
+	spec := write(t, dir, "release.yakspec", `import std.env
+
+spec: "yakspec/v1"
+output: "build"
+context:
+  env: env.get("YAK_TEST_ENV")
+  region: "eu"
+  replicas: 2
+rules:
+  "tests/": null
+packages:
+  - source: "web"
+    context:
+      replicas: 4
+    rules:
+      "./": "manifests/"
+      "deploy/app.toml.yak": "config/web.json"
+  - source: "db"
+`)
+
+	if _, err := run(t, "spec", "render", spec); err != nil {
 		t.Fatalf("render returned error: %v", err)
 	}
-	if got, _ := os.ReadFile(filepath.Join(out, "deploy", "svc.toml")); string(got) != "service = \"web\"\n" {
-		t.Errorf("deploy/svc.toml = %q, want the template rendered", got)
+	want := map[string]string{
+		"manifests/service.yaml":    "name: prod-web\nreplicas: 4\n",
+		"manifests/deploy/app.yaml": "app: prod-web\n",
+		"config/web.json":           "{\n  \"region\": \"eu\"\n}\n",
+		"db/db.yaml":                "db: prod\nreplicas: 2\n",
+	}
+	got := readAll(t, filepath.Join(dir, "build"))
+	if len(got) != len(want) {
+		t.Errorf("wrote %v, want %v", got, want)
+	}
+	for name, w := range want {
+		if got[name] != w {
+			t.Errorf("%s = %q, want %q", name, got[name], w)
+		}
+	}
+}
+
+func TestRenderSpecKeepsThePackagesStrict(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "web/yak.pkg", "package:\n  name: web\n")
+	write(t, dir, "web/app.yak", "import std.env\nhome: env.get(\"HOME\")\n")
+	strict := write(t, dir, "strict.yakspec", "packages: [{source: \"web\"}]\n")
+	loose := write(t, dir, "loose.yakspec", "strict: false\npackages: [{source: \"web\"}]\n")
+
+	if _, err := run(t, "spec", "render", strict); err == nil || !strings.Contains(err.Error(), "strict") {
+		t.Errorf("error = %v, want std.env refused in strict mode", err)
+	}
+	if _, err := run(t, "spec", "render", loose); err != nil {
+		t.Errorf("render with strict: false: %v", err)
+	}
+}
+
+func TestRenderSpecLetsTheLastPackageWin(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "base/yak.pkg", "package:\n  name: base\n")
+	write(t, dir, "base/service.yak", "from: \"base\"\n")
+	write(t, dir, "base/only.yak", "only: \"base\"\n")
+	write(t, dir, "overlay/yak.pkg", "package:\n  name: overlay\n")
+	write(t, dir, "overlay/service.yak", "from: \"overlay\"\n")
+	spec := write(t, dir, "release.yakspec", "rules: {\"./\": \"out/\"}\npackages: [{source: \"base\"}, {source: \"overlay\"}]\n")
+
+	if _, err := run(t, "spec", "render", spec); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	got := readAll(t, filepath.Join(dir, "out"))
+	if got["service.yaml"] != "from: overlay\n" || got["only.yaml"] != "only: base\n" {
+		t.Errorf("wrote %v, want overlay's service and base's only", got)
+	}
+}
+
+func TestRenderSpecRefuses(t *testing.T) {
+	for _, tc := range []struct {
+		name, spec, want string
+		args             []string
+	}{
+		{"a flag", "packages: [{source: \"web\"}]\n", "unknown shorthand flag: 'c'", []string{"-c", "ctx.yaml"}},
+		{"two templates of one package writing one file",
+			"packages:\n  - source: \"web\"\n    rules: {\"app.yak\": \"x.yaml\", \"other.yak\": \"x.yaml\"}\n", "would both write", nil},
+		{"a rule that covers nothing",
+			"packages:\n  - source: \"web\"\n    rules: {\"deploy/\": \"k8s/\"}\n", "deploy/ covers no template", nil},
+		{"a source that is no package", "packages: [{source: \"lib\"}]\n", "is not a package", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, "web/yak.pkg", "package:\n  name: web\n")
+			write(t, dir, "web/app.yak", "a: 1\n")
+			write(t, dir, "web/other.yak", "b: 1\n")
+			write(t, dir, "lib/app.yak", "a: 1\n")
+			spec := write(t, dir, "release.yakspec", tc.spec)
+
+			_, err := run(t, append([]string{"spec", "render", spec}, tc.args...)...)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to mention %q", err, tc.want)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "web", "web")); err == nil {
+				t.Error("an output was written")
+			}
+		})
+	}
+}
+
+func TestRenderSpecFetchesARemotePackage(t *testing.T) {
+	ref := gitPackage(t, project(t))
+	dir := t.TempDir()
+	spec := write(t, dir, "release.yakspec", "output: \"build\"\npackages:\n  - source: \""+ref+"\"\n    rules: {\"deploy/\": \"svc/\"}\n")
+
+	if _, err := run(t, "spec", "render", spec); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	got := readAll(t, filepath.Join(dir, "build"))
+	if got["web/app.yaml"] != "name: web\n" || got["svc/svc.toml"] != "service = \"web\"\n" {
+		t.Errorf("wrote %v, want web/app.yaml and svc/svc.toml", got)
+	}
+}
+
+func TestRenderPointsASpecFileToSpecRender(t *testing.T) {
+	spec := write(t, t.TempDir(), "release.yakspec", "packages: [{source: \"web\"}]\n")
+	if _, err := run(t, "render", spec); err == nil || !strings.Contains(err.Error(), "render it with yak spec render") {
+		t.Errorf("error = %v, want yak spec render named", err)
+	}
+	if _, err := run(t, "spec", "render", filepath.Join(t.TempDir(), "app.yak")); err == nil || !strings.Contains(err.Error(), "is not a .yakspec spec file") {
+		t.Errorf("error = %v, want the template refused", err)
+	}
+}
+
+func TestSpecInitThenRender(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	write(t, dir, "web/yak.pkg", "package:\n  name: web\n")
+	write(t, dir, "web/app.yak", "env: $$.env\n")
+
+	if _, err := run(t, "spec", "init"); err != nil {
+		t.Fatalf("yak spec init: %v", err)
+	}
+	if _, err := run(t, "spec", "init"); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("a second yak spec init: error = %v, want the file kept", err)
+	}
+	if _, err := run(t, "spec", "render", "release.yakspec"); err != nil {
+		t.Fatalf("yak spec render: %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "build", "web", "app.yaml")); string(got) != "env: dev\n" {
+		t.Errorf("build/web/app.yaml = %q, want the example's context rendered", got)
+	}
+}
+
+func TestSpecInitRefusesAPackage(t *testing.T) {
+	dir := project(t)
+	if _, err := run(t, "spec", "init", filepath.Join(dir, "deploy", "release.yakspec")); err == nil || !strings.Contains(err.Error(), "cannot belong to one") {
+		t.Errorf("error = %v, want the package refused", err)
+	}
+	if _, err := run(t, "spec", "init", filepath.Join(t.TempDir(), "release.yaml")); err == nil || !strings.Contains(err.Error(), "is not a .yakspec spec file") {
+		t.Errorf("error = %v, want the extension refused", err)
 	}
 }
 

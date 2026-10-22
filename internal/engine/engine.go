@@ -25,6 +25,9 @@ type TemplateRequest struct {
 	// ContextPaths are merged in order, with later files taking precedence,
 	// into the context the template's package context file reads.
 	ContextPaths []string
+	// Context, when set, is the context itself, and ContextPaths is not
+	// read.
+	Context eval.Value
 	// SkipPackageContext hands the template the merged context files
 	// without evaluating its package's context file.
 	SkipPackageContext bool
@@ -48,9 +51,11 @@ func Template(req TemplateRequest) error {
 	if err != nil {
 		return err
 	}
-	context, err := ctxfile.Load(req.ContextPaths)
-	if err != nil {
-		return err
+	context := req.Context
+	if context == nil {
+		if context, err = ctxfile.Load(req.ContextPaths); err != nil {
+			return err
+		}
 	}
 	workdir, err := os.Getwd()
 	if err != nil {

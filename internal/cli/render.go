@@ -15,8 +15,10 @@ import (
 
 	"github.com/daluz/yak/internal/deps"
 	"github.com/daluz/yak/internal/engine"
+	"github.com/daluz/yak/internal/eval"
 	"github.com/daluz/yak/internal/module"
 	"github.com/daluz/yak/internal/render"
+	"github.com/daluz/yak/internal/yakspec"
 )
 
 func newRenderCommand() *cobra.Command {
@@ -64,9 +66,13 @@ func newRenderCommand() *cobra.Command {
 			"std.env are refused, and std.files reads only beneath the directory of the\n" +
 			"file that calls it.\n\n" +
 			"--skip-schema-checks lets every value through the schemas, which then\n" +
-			"only fill in defaults.",
+			"only fill in defaults.\n\n" +
+			"A .yakspec spec file is rendered with yak spec render.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.HasSuffix(args[0], yakspec.Ext) {
+				return fmt.Errorf("%s is a spec file; render it with yak spec render", args[0])
+			}
 			req := renderRequest{contexts: contexts, format: format, keepNull: keepNull, nonStrict: !strict,
 				skipChecks: skipChecks, skipCtx: skipCtx}
 			if module.IsRemote(args[0]) {
@@ -191,7 +197,9 @@ func outputName(stem string, f render.Format) string {
 // renderRequest holds what every template one command renders has in
 // common.
 type renderRequest struct {
-	contexts   []string
+	contexts []string
+	// context, when set, is the context itself, and contexts is not read.
+	context    eval.Value
 	format     string
 	keepNull   bool
 	nonStrict  bool
@@ -212,6 +220,7 @@ func (r renderRequest) render(template string, opts render.Options) ([]byte, err
 	err := engine.Template(engine.TemplateRequest{
 		Path:               template,
 		ContextPaths:       r.contexts,
+		Context:            r.context,
 		SkipPackageContext: r.skipCtx,
 		Out:                &buf,
 		Options:            opts,
@@ -231,24 +240,13 @@ func renderDir(dir string, req renderRequest, output string, automatic bool, out
 	if !automatic && outputDir == "" {
 		return fmt.Errorf("the directory %s writes one file per template; give --output-dir or --automatic-output", dir)
 	}
-	templates, err := sourcesIn(dir, module.Ext)
+	templates, err := templatesIn(dir)
 	if err != nil {
 		return err
-	}
-	templates, err = withoutContextFiles(templates)
-	if err != nil {
-		return err
-	}
-	if len(templates) == 0 {
-		return fmt.Errorf("no %s templates beneath %s", module.Ext, dir)
 	}
 	base := dir
 	if outputDir != "" {
 		base = outputDir
-	}
-	type rendered struct {
-		dest string
-		out  []byte
 	}
 	var all []rendered
 	writers := map[string]string{}
@@ -272,6 +270,16 @@ func renderDir(dir string, req renderRequest, output string, automatic bool, out
 		}
 		all = append(all, rendered{dest, out})
 	}
+	return writeAll(all)
+}
+
+// rendered is the output of one template and the file it goes to.
+type rendered struct {
+	dest string
+	out  []byte
+}
+
+func writeAll(all []rendered) error {
 	for _, r := range all {
 		if err := writeOutput(r.dest, r.out, true); err != nil {
 			return err
@@ -280,29 +288,55 @@ func renderDir(dir string, req renderRequest, output string, automatic bool, out
 	return nil
 }
 
+// templatesIn lists the templates beneath dir that a directory renders.
+func templatesIn(dir string) ([]string, error) {
+	templates, err := sourcesIn(dir, module.Ext)
+	if err != nil {
+		return nil, err
+	}
+	templates, err = withoutContextFiles(templates)
+	if err != nil {
+		return nil, err
+	}
+	if len(templates) == 0 {
+		return nil, fmt.Errorf("no %s templates beneath %s", module.Ext, dir)
+	}
+	return templates, nil
+}
+
 // renderRemote fetches the remote package ref names, with what it depends
 // on, and renders it into outputDir.
 func renderRemote(ref string, req renderRequest, output string, automatic bool, outputDir string, fetch deps.Options) error {
 	if output != "" || automatic || outputDir == "" {
 		return fmt.Errorf("the remote package %s writes one file per template; give --output-dir, without --output or --automatic-output", ref)
 	}
-	src, err := module.ParseSource(ref)
-	if err != nil {
-		return err
-	}
 	tmp, err := os.MkdirTemp("", "yak-render-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	dir, err := deps.Fetch(src, tmp, fetch)
+	dir, err := fetchRemote(ref, tmp, fetch)
 	if err != nil {
 		return err
 	}
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		return fmt.Errorf("%s names no directory of its repository", ref)
-	}
 	return renderDir(dir, req, "", false, outputDir)
+}
+
+// fetchRemote fetches the remote package ref names, with what it depends
+// on, into tmp, and answers its directory.
+func fetchRemote(ref, tmp string, fetch deps.Options) (string, error) {
+	src, err := module.ParseSource(ref)
+	if err != nil {
+		return "", err
+	}
+	dir, err := deps.Fetch(src, tmp, fetch)
+	if err != nil {
+		return "", err
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("%s names no directory of its repository", ref)
+	}
+	return dir, nil
 }
 
 // withoutContextFiles leaves out the templates that are their package's
