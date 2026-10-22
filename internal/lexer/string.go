@@ -11,7 +11,7 @@ import (
 
 // decoded accumulates the characters of a string literal together with the
 // source position of every byte, so that interpolations can be reported at
-// their real location even after escapes and block folding have been applied.
+// their real location even after escapes and line folding have been applied.
 type decoded struct {
 	buf []byte
 	pos []token.Pos
@@ -46,6 +46,17 @@ func (d *decoded) addText(s string, start token.Pos) {
 	}
 }
 
+// trimLineEnd drops the spaces, tabs and carriage returns that end a line
+// of a quoted string, since a line break folds them away with it, unless an
+// escape wrote them.
+func (d *decoded) trimLineEnd() {
+	n := len(d.buf)
+	for n > 0 && !d.escaped[n-1] && (d.buf[n-1] == ' ' || d.buf[n-1] == '\t' || d.buf[n-1] == '\r') {
+		n--
+	}
+	d.buf, d.pos, d.escaped = d.buf[:n], d.pos[:n], d.escaped[:n]
+}
+
 func (d *decoded) posAt(i int) token.Pos {
 	if i < len(d.pos) {
 		return d.pos[i]
@@ -65,14 +76,12 @@ func (l *lexer) scanQuotedAt(start token.Pos, raw bool) error {
 		case c == quote:
 			l.advance()
 			if l.peek() == quote {
-				if raw {
-					return l.errorf(p, "a raw string cannot contain its own quote; use the other quote or a raw block scalar")
-				}
 				return l.errorf(p, `a doubled quote is not an escape; write \%c instead`, quote)
 			}
 			closed = true
 		case c == '\n':
 			l.advance()
+			d.trimLineEnd()
 			blanks := 0
 			for !l.eof() {
 				for l.peek() == ' ' || l.peek() == '\t' || l.peek() == '\r' {
@@ -97,6 +106,10 @@ func (l *lexer) scanQuotedAt(start token.Pos, raw bool) error {
 			if err := l.copyInterpolation(d); err != nil {
 				return err
 			}
+			continue
+		case c == '\\' && raw && l.peekAt(1) == quote:
+			l.advance()
+			d.addByte(l.advance(), p, false)
 			continue
 		case c == '\\' && !raw:
 			if err := l.scanEscape(d); err != nil {
@@ -218,8 +231,14 @@ func (l *lexer) scanEscape(d *decoded) error {
 		return l.scanHexEscape(d, p, 4)
 	case 'U':
 		return l.scanHexEscape(d, p, 8)
-	case '\n':
+	case '\r', '\n':
 		// Line continuation: drop the break and the next line's indentation.
+		if c == '\r' {
+			if l.peek() != '\n' {
+				return l.errorf(p, "unknown escape sequence %q", `\`+string(rune(c)))
+			}
+			l.advance()
+		}
 		for l.peek() == ' ' || l.peek() == '\t' {
 			l.advance()
 		}
@@ -273,7 +292,7 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 		return l.errorf(start, "block scalars are not allowed here")
 	}
 	headerIndent := l.lineIndent()
-	style := l.advance() // | or >
+	l.advance()
 
 	chomp := byte(0)
 	explicit := 0
@@ -311,7 +330,7 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 
 	contentIndent := -1
 	if explicit > 0 {
-		contentIndent = headerIndent + explicit
+		contentIndent = l.parentIndent(start, headerIndent) + explicit
 	}
 	var lines []blockLine
 	for !l.eof() {
@@ -333,9 +352,6 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 		lines = append(lines, bl)
 		end = lineEnd
 	}
-	if contentIndent < 0 {
-		contentIndent = headerIndent + 1
-	}
 
 	// Drop trailing blank lines from the body; chomping decides how many of
 	// their line breaks survive.
@@ -345,27 +361,17 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 			last = i
 		}
 	}
-	trailingBlanks := 0
-	if last >= 0 {
-		trailingBlanks = len(lines) - 1 - last
-	} else {
-		lines = nil
-	}
+	trailingBlanks := len(lines) - 1 - last
 
 	d := newDecoded(start)
 	body := lines[:last+1]
-	for i := range body {
-		body[i] = stripIndent(body[i], contentIndent)
-	}
-	if style == '|' {
-		for i, bl := range body {
-			if i > 0 {
-				d.addByte('\n', bl.pos, false)
-			}
-			d.addText(bl.text, bl.pos)
+	for i, bl := range body {
+		if i > 0 {
+			d.addByte('\n', bl.pos, false)
 		}
-	} else {
-		foldLines(d, body, contentIndent)
+		if len(bl.text) > contentIndent {
+			d.addText(bl.text[contentIndent:], token.Pos{File: bl.pos.File, Line: bl.pos.Line, Col: contentIndent + 1})
+		}
 	}
 	if len(body) > 0 {
 		switch chomp {
@@ -385,53 +391,6 @@ func (l *lexer) scanBlockScalar(start token.Pos, raw bool) error {
 	// may be a document marker or an indented comment.
 	l.bol = l.col == 1
 	return nil
-}
-
-// foldLines implements folded ("greater than") block scalars: a single line
-// break becomes a space, blank lines become line breaks, and lines indented
-// beyond the block indentation keep their breaks verbatim.
-func foldLines(d *decoded, body []blockLine, contentIndent int) {
-	blanks := 0
-	first := true
-	prevMore := false
-	for _, bl := range body {
-		if bl.blank {
-			blanks++
-			continue
-		}
-		more := bl.indent > contentIndent
-		switch {
-		case first:
-			first = false
-		case blanks > 0:
-			d.addString(strings.Repeat("\n", blanks), bl.pos, false)
-		case more || prevMore:
-			d.addByte('\n', bl.pos, false)
-		default:
-			d.addByte(' ', bl.pos, false)
-		}
-		d.addText(bl.text, bl.pos)
-		blanks = 0
-		prevMore = more
-	}
-}
-
-func stripIndent(bl blockLine, indent int) blockLine {
-	if bl.blank {
-		return blockLine{text: "", pos: bl.pos, indent: indent, blank: true}
-	}
-	text := bl.text
-	if len(text) >= indent {
-		text = text[indent:]
-	} else {
-		text = strings.TrimLeft(text, " ")
-	}
-	return blockLine{
-		text:   text,
-		pos:    token.Pos{File: bl.pos.File, Line: bl.pos.Line, Col: indent + 1},
-		indent: bl.indent,
-		blank:  false,
-	}
 }
 
 // readBlockLine consumes one physical line, including its terminator, and
@@ -454,6 +413,19 @@ func (l *lexer) readBlockLine() (blockLine, token.Pos) {
 		indent: len(text) - len(trimmed),
 		blank:  strings.TrimSpace(text) == "",
 	}, end
+}
+
+// parentIndent answers the indentation an indentation indicator counts
+// from: the column of the node that holds the block scalar starting at
+// start, past the "-" indicators its line begins with, or the indentation of
+// that line when nothing else is on it.
+func (l *lexer) parentIndent(start token.Pos, indent int) int {
+	for i := len(l.toks) - 1; i >= 0 && l.toks[i].Pos.Line == start.Line; i-- {
+		if l.toks[i].Kind != token.Dash {
+			indent = l.toks[i].Pos.Col - 1
+		}
+	}
+	return indent
 }
 
 // lineIndent returns the number of leading spaces on the line the lexer is

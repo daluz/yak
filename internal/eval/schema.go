@@ -254,11 +254,7 @@ func (s *schema) check(v Value, t ast.Node, at site, fresh bool) (Value, error) 
 			case !ok:
 				return nil, mismatch(at, "sequence", v)
 			}
-			want := fmt.Sprintf("%d items", len(t.Items))
-			if len(t.Items) == 1 {
-				want = "1 item"
-			}
-			return nil, misfit(deepMisfit, at.pos, "%s expects %s, found %d", at, want, arr.Len())
+			return nil, misfit(deepMisfit, at.pos, "%s expects %s, found %d", at, plural(len(t.Items), "item"), arr.Len())
 		}
 		items := make([]*Elem, arr.Len())
 		for i, e := range arr.Items() {
@@ -457,7 +453,7 @@ func (s *schema) checkMapping(v Value, t *ast.TypeMapping, at site, fresh bool) 
 		f.Value = m.owner.defaulted(target, m, at.field(f.Name, f.Value.pos))
 	}
 	for _, m := range fields {
-		if !present[m.decl.Name] && m.decl.Default != nil {
+		if _, written := obj.Lookup(m.decl.Name); !written && m.decl.Default != nil {
 			target.Set(m.decl.Name, false, m.owner.defaulted(target, m, at.field(m.decl.Name, m.decl.Default.Pos())))
 		}
 	}
@@ -604,6 +600,9 @@ func found(v Value) string {
 	}
 	if requireScalar(v) == nil {
 		text, _ := stringify(v)
+		if _, ok := v.(Float); ok && !strings.ContainsAny(text, ".e") {
+			text += ".0"
+		}
 		return text
 	}
 	return v.TypeName()

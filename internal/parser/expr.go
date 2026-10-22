@@ -153,6 +153,9 @@ func (p *parser) atBinaryOp(level int) bool {
 func (p *parser) parseUnary() (ast.Node, error) {
 	if p.at(token.Dash) {
 		t := p.next()
+		if p.cur().Pos != t.End {
+			return nil, p.errorf(t.Pos, "a negation is written flush against its operand, as in %q", "-x")
+		}
 		x, err := p.parseUnary()
 		if err != nil {
 			return nil, err
@@ -492,8 +495,6 @@ func (p *parser) atLambda() bool {
 			if depth == 0 {
 				return p.toks[i+1].Kind == token.Arrow
 			}
-		case token.EOF:
-			return false
 		}
 	}
 	return false
@@ -587,7 +588,7 @@ func (p *parser) parseBuiltin() (ast.Node, error) {
 // written immediately after the dots binds to that mapping.
 func (p *parser) parseSelf() (ast.Node, error) {
 	dots := p.next()
-	self := &ast.Self{Base: ast.At(dots.Pos), Up: len(dots.Lit) - 1, Src: dots.Lit}
+	self := &ast.Self{Base: ast.At(dots.Pos), Up: len(dots.Lit) - 1}
 	if name, ok := p.adjacentFieldName(dots); ok {
 		return &ast.Field{Base: ast.At(dots.Pos), X: self, Name: name}, nil
 	}

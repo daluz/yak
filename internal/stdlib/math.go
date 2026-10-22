@@ -8,7 +8,7 @@ import (
 	"github.com/daluz/yak/internal/module"
 )
 
-// The math module rounds numbers. Rounding a float answers an integer, so
+// The math module rounds numbers and takes their absolute value. Rounding a float answers an integer, so
 // that its result can count things, and an integer is already as round as it
 // gets.
 func init() {
@@ -40,6 +40,9 @@ func round(c call) (eval.Value, error) {
 	}
 	if f, ok := v.(eval.Float); ok {
 		scale := math.Pow(10, float64(digits))
+		if math.IsInf(float64(f)*scale, 0) {
+			return f, nil
+		}
 		return eval.Float(math.Round(float64(f)*scale) / scale), nil
 	}
 	return v, nil
@@ -73,10 +76,6 @@ func rounding(fn func(float64) float64) func(call) (eval.Value, error) {
 		if !ok {
 			return v, nil
 		}
-		r := fn(float64(f))
-		if math.IsNaN(r) || r < math.MinInt64 || r >= math.MaxInt64 {
-			return nil, c.errorf(0, "of %v does not fit in an integer", float64(f))
-		}
-		return eval.Int(r), nil
+		return c.wholeInt(0, fn(float64(f)))
 	}
 }

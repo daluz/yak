@@ -1,0 +1,1 @@
+folded-block.yak:1:14: folded block scalars (">") are not supported in yak; write a "|" block and fold it with std.strings.fold

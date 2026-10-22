@@ -48,6 +48,13 @@ quantified:
   everyTrue: every([true, false])
   someOfNone: some([], (p) => true)
   everyOfNone: every([], (p) => false)
+  ## Items after the one that decides are never evaluated.
+  someStops: some([true, 1 / 0])
+  everyStops: every([false, 1 / 0])
+lazy:
+  reversed: size(reverse([1, 1 / 0]))
+  sliced: slice([1, 1 / 0], 0, 1)
+  range: range(9223372036854775806, 9223372036854775807, 2)
 
 ## A named function works as a key as well as an anonymous one.
 let negated(n) = -n

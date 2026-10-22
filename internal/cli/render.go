@@ -63,8 +63,8 @@ func newRenderCommand() *cobra.Command {
 			"bindings, is left out unless --keep-null-documents is given.\n\n" +
 			"Rendering is strict unless --strict=false is given: the same template and\n" +
 			"context always render the same output, so modules such as std.random and\n" +
-			"std.env are refused, and std.files reads only beneath the directory of the\n" +
-			"file that calls it.\n\n" +
+			"std.env are refused, so are imports by file path, and std.files reads only\n" +
+			"beneath the directory of the file that calls it.\n\n" +
 			"--skip-schema-checks lets every value through the schemas, which then\n" +
 			"only fill in defaults.\n\n" +
 			"A .yakspec spec file is rendered with yak spec render.",
@@ -107,7 +107,7 @@ func newRenderCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&skipCtx, "skip-package-context", false,
 		"read the context files as they are, without the context file of the template's package")
 	cmd.Flags().StringVarP(&output, "output", "o", "",
-		"write the rendered output to this file instead of standard output")
+		"write the rendered output to this file instead of standard output, which - names")
 	cmd.Flags().BoolVarP(&automatic, "automatic-output", "O", false,
 		"write the rendered output to a file named after the template and its format")
 	cmd.Flags().StringVar(&outputDir, "output-dir", "",
@@ -118,7 +118,7 @@ func newRenderCommand() *cobra.Command {
 		"write the documents that evaluated to null instead of leaving them out")
 	plainHTTPFlag(cmd, &plainHTTP)
 	cmd.Flags().BoolVar(&strict, "strict", true,
-		"render deterministically; --strict=false admits std.random, std.env and reading files anywhere")
+		"render deterministically; --strict=false admits std.random, std.env, imports by file path and reading files anywhere")
 	cmd.Flags().BoolVar(&skipChecks, "skip-schema-checks", false,
 		"fill in the defaults schemas declare without checking any value against them")
 	cmd.MarkFlagsMutuallyExclusive("output", "automatic-output")
@@ -172,6 +172,9 @@ func outputPath(template, output string, automatic bool, dir string, f render.Fo
 	}
 	if dir == "" {
 		return dest, nil
+	}
+	if output == "-" {
+		return "", errors.New("--output-dir cannot hold standard output")
 	}
 	if dest == "" {
 		return "", errors.New("--output-dir needs --output or --automatic-output")
@@ -388,7 +391,11 @@ func modulesAt(path string) ([]string, error) {
 	if info, err := os.Stat(path); err != nil || !info.IsDir() {
 		return []string{path}, nil
 	}
-	return sourcesIn(path, module.Ext, module.ExtLibrary)
+	files, err := sourcesIn(path, module.Ext, module.ExtLibrary)
+	if err == nil && len(files) == 0 {
+		err = fmt.Errorf("no %s templates or %s libraries beneath %s", module.Ext, module.ExtLibrary, path)
+	}
+	return files, err
 }
 
 // readInput reads the file at path, or standard input for "-", and answers

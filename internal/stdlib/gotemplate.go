@@ -30,14 +30,14 @@ var templateFuncs = template.FuncMap{
 		return strconv.Quote(fmt.Sprint(v))
 	},
 	"indent": indentLines,
-	"nindent": func(n int, s string) string {
+	"nindent": func(n int64, s string) string {
 		return "\n" + indentLines(n, s)
 	},
 }
 
 // indentLines puts n spaces before every line of s.
-func indentLines(n int, s string) string {
-	pad := strings.Repeat(" ", n)
+func indentLines(n int64, s string) string {
+	pad := strings.Repeat(" ", int(n))
 	return pad + strings.ReplaceAll(s, "\n", "\n"+pad)
 }
 

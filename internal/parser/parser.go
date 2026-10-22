@@ -41,8 +41,9 @@ type parser struct {
 	// prevEnd is where the most recently consumed token ended, used to
 	// require that references are written without internal whitespace.
 	prevEnd token.Pos
-	// nested counts the values being parsed inside one another, so a block
-	// can tell whether it is the one a document holds.
+	// nested counts the values being parsed inside one another, so a
+	// "schema $" or "schema $$" can tell whether it is at the top of its
+	// document.
 	nested int
 	// binding says that the items of a tuple type being parsed may bind
 	// names with "as", as they may in the type of a case.
@@ -118,7 +119,7 @@ func (p *parser) atDocBoundary() bool {
 }
 
 func (p *parser) parseStream() (*ast.Stream, error) {
-	st := &ast.Stream{File: p.file}
+	st := &ast.Stream{}
 	for !p.at(token.EOF) {
 		if p.at(token.DocEnd) {
 			p.next()
@@ -675,8 +676,9 @@ var (
 )
 
 // nextInList moves to the next item of the list l that open opened, and
-// reports whether there is one. It consumes the comma after the item before
-// it, which first says there is none of, or the bracket that closes the list.
+// reports whether there is one. Unless first says there is no item before
+// it, it consumes the comma after that item; at the end it consumes the
+// bracket that closes the list.
 func (p *parser) nextInList(open token.Token, l list, first bool) (bool, error) {
 	separated := first
 	if !first && p.at(token.Comma) {
@@ -859,9 +861,6 @@ func (p *parser) parseSequenceItem(dash token.Token) (ast.Node, error) {
 	}
 	t := p.cur()
 	if t.Line() == dash.Line() {
-		if t.Col() <= dash.Col() {
-			return nil, p.errorf(t.Pos, "unexpected %s after %q", t, "-")
-		}
 		if t.Kind == token.Bang {
 			return p.parseBlockTag(func(token.Token) (ast.Node, error) {
 				if p.atDocBoundary() || p.cur().Col() <= dash.Col() {
@@ -879,12 +878,12 @@ func (p *parser) parseSequenceItem(dash token.Token) (ast.Node, error) {
 }
 
 // looksLikeEntry reports whether the current position begins a mapping entry.
-// It scans for a key-shaped token run followed by ":" or "::" without
+// It scans for a key-shaped token run followed by ":", "::" or ":?" without
 // validating the key, so that an invalid key still produces the specific
 // diagnostic from parseKey rather than being silently reparsed as a value.
 func (p *parser) looksLikeEntry() bool {
 	j := p.keyEnd(p.i)
-	if j < 0 || j >= len(p.toks) {
+	if j < 0 {
 		return false
 	}
 	return p.toks[j].Kind.IsSeparator()
@@ -907,8 +906,6 @@ func (p *parser) keyEnd(i int) int {
 				if depth == 0 {
 					return j + 1
 				}
-			case token.EOF:
-				return -1
 			}
 		}
 	}

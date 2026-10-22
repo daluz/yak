@@ -112,9 +112,8 @@ func CheckSchemas(path string) error {
 	return nil
 }
 
-// Render parses, evaluates and writes a source buffer. It is the seam used by
-// tests and by future commands that already hold their input in memory. The
-// run names the source and is what "$yak", "$filepath" and "$workdir"
+// Render parses, evaluates and writes a source buffer. The run names the
+// source and is what "$yak", "$filepath" and "$workdir"
 // report, along with the format opts selects.
 func Render(run eval.Run, src []byte, context eval.Value, w io.Writer, opts render.Options) error {
 	run.Format = opts.Format.String()

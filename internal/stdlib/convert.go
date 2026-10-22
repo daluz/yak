@@ -40,10 +40,7 @@ func toInt(c call) (eval.Value, error) {
 		if f != math.Trunc(f) {
 			return nil, c.errorf(0, "cannot convert %v to an integer without losing its fraction; round it with std.math", f)
 		}
-		if f < math.MinInt64 || f >= math.MaxInt64 {
-			return nil, c.errorf(0, "of %v does not fit in an integer", f)
-		}
-		return eval.Int(f), nil
+		return c.wholeInt(0, f)
 	case eval.String:
 		n, err := strconv.ParseInt(string(t), 10, 64)
 		if err != nil {
@@ -69,7 +66,7 @@ func toFloat(c call) (eval.Value, error) {
 		return t, nil
 	case eval.String:
 		f, err := strconv.ParseFloat(string(t), 64)
-		if err != nil || math.IsInf(f, 0) || math.IsNaN(f) || strings.ContainsAny(string(t), "xX") {
+		if err != nil || math.IsInf(f, 0) || math.IsNaN(f) || strings.ContainsAny(string(t), "xX_") {
 			return nil, c.errorf(0, "cannot convert %q to a float", string(t))
 		}
 		return eval.Float(f), nil

@@ -418,7 +418,7 @@ func TestParseOperators(t *testing.T) {
 		{"parentheses regroup", "a: (1 < 2) == (3 < 4)\n", `{"a":((1<2)==(3<4))}`},
 		{"left associative", "a: 1 == 2 == true\n", `{"a":((1==2)==true)}`},
 		{"in an interpolation", `a: "\(1 < 2)"`, `{"a":concat((1<2))}`},
-		{"greater than beats a folded scalar", "a: .x > 2\n", `{"a":(self+0.x>2)}`},
+		{"greater than is an operator", "a: .x > 2\n", `{"a":(self+0.x>2)}`},
 		{"addition", "a: 1 + 2\n", `{"a":(1+2)}`},
 		{"subtraction", "a: 1 - 2\n", `{"a":(1-2)}`},
 		{"multiplication", "a: 1 * 2\n", `{"a":(1*2)}`},

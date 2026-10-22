@@ -18,7 +18,7 @@ func init() {
 		builtin("stem", valueParam, mapString(stem)),
 		builtin("clean", valueParam, mapString(path.Clean)),
 		builtin("isAbs", valueParam, isAbs),
-		builtin("join", params("values"), joinPath),
+		builtin("join", valuesParam, joinPath),
 	}})
 }
 

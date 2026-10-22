@@ -87,7 +87,7 @@ func sortedBy(c call, a *eval.Array, keys []eval.Value) (eval.Value, error) {
 }
 
 func reverse(c call) (eval.Value, error) {
-	a, _, err := c.seq(0)
+	a, err := c.array(0)
 	if err != nil {
 		return nil, err
 	}
@@ -108,11 +108,11 @@ func unique(c call) (eval.Value, error) {
 	var items []*eval.Elem
 	var kept []eval.Value
 	for i, v := range values {
-		seen, err := indexOf(kept, v)
+		seen, err := contains(kept, v)
 		if err != nil {
 			return nil, c.errorf(0, "cannot compare item %d: %s", i, err.Error())
 		}
-		if seen < 0 {
+		if !seen {
 			items = append(items, a.Items()[i])
 			kept = append(kept, v)
 		}
@@ -120,17 +120,14 @@ func unique(c call) (eval.Value, error) {
 	return eval.NewArray(items), nil
 }
 
-func indexOf(values []eval.Value, v eval.Value) (int, error) {
-	for i, have := range values {
+func contains(values []eval.Value, v eval.Value) (bool, error) {
+	for _, have := range values {
 		same, err := eval.Equal(have, v)
-		if err != nil {
-			return -1, err
-		}
-		if same {
-			return i, nil
+		if err != nil || same {
+			return same, err
 		}
 	}
-	return -1, nil
+	return false, nil
 }
 
 // flatten joins a sequence of sequences into one. It goes one level deep,
@@ -156,7 +153,7 @@ func flatten(c call) (eval.Value, error) {
 // does, and a position past either end stops there, so a stop before the
 // start gives an empty sequence.
 func slice(c call) (eval.Value, error) {
-	a, _, err := c.seq(0)
+	a, err := c.array(0)
 	if err != nil {
 		return nil, err
 	}
@@ -164,13 +161,12 @@ func slice(c call) (eval.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	stop := eval.Int(a.Len())
-	if v, err := c.value(2); err != nil {
+	stop, given, err := c.optionalInt(2)
+	if err != nil {
 		return nil, err
-	} else if _, none := v.(eval.Null); !none {
-		if stop, err = c.integer(2); err != nil {
-			return nil, err
-		}
+	}
+	if !given {
+		stop = eval.Int(a.Len())
 	}
 	lo, hi := position(start, a.Len()), position(stop, a.Len())
 	return eval.NewArray(a.Items()[lo:max(lo, hi)]), nil
@@ -195,13 +191,12 @@ func rangeSeq(c call) (eval.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	var stop eval.Int
-	if v, err := c.value(1); err != nil {
+	stop, given, err := c.optionalInt(1)
+	if err != nil {
 		return nil, err
-	} else if _, none := v.(eval.Null); none {
+	}
+	if !given {
 		start, stop = 0, start
-	} else if stop, err = c.integer(1); err != nil {
-		return nil, err
 	}
 	step, err := c.integer(2)
 	if err != nil {
@@ -213,6 +208,9 @@ func rangeSeq(c call) (eval.Value, error) {
 	var items []*eval.Elem
 	for i := start; (step > 0 && i < stop) || (step < 0 && i > stop); i += step {
 		items = append(items, eval.Item(i))
+		if (step > 0) != (i+step > i) {
+			break
+		}
 	}
 	return eval.NewArray(items), nil
 }
@@ -226,21 +224,13 @@ func sum(c call) (eval.Value, error) {
 	}
 	var total eval.Value = eval.Int(0)
 	for i, v := range values {
-		switch t := v.(type) {
-		case eval.Int:
-			if n, ok := total.(eval.Int); ok {
-				total = n + t
-			} else {
-				total = total.(eval.Float) + eval.Float(t)
-			}
-		case eval.Float:
-			if n, ok := total.(eval.Int); ok {
-				total = eval.Float(n) + t
-			} else {
-				total = total.(eval.Float) + t
-			}
+		switch v.(type) {
+		case eval.Int, eval.Float:
 		default:
 			return nil, c.errorf(0, "needs a sequence of numbers, found %s at index %d", v.TypeName(), i)
+		}
+		if total, err = eval.Add(total, v); err != nil {
+			return nil, c.errorf(0, "cannot add item %d: %s", i, err.Error())
 		}
 	}
 	return total, nil
@@ -282,7 +272,7 @@ func extreme(want int) func(call) (eval.Value, error) {
 // of it for every, so the items after it are never handed to the predicate.
 func quantifier(stop bool) func(call) (eval.Value, error) {
 	return func(c call) (eval.Value, error) {
-		_, values, err := c.seq(0)
+		a, err := c.array(0)
 		if err != nil {
 			return nil, err
 		}
@@ -291,7 +281,11 @@ func quantifier(stop bool) func(call) (eval.Value, error) {
 			return nil, err
 		}
 		_, none := pred.(eval.Null)
-		for i, v := range values {
+		for i, item := range a.Items() {
+			v, err := item.Value.Value()
+			if err != nil {
+				return nil, err
+			}
 			r := v
 			if !none {
 				if r, err = eval.Call(pred, c.pos(1), v); err != nil {

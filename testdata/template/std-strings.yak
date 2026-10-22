@@ -35,6 +35,26 @@ split:
 joined: strings.join(strings.split($$.hosts, ","), " | ")
 named: strings.join(separator = "-", values = ["a", "b"])
 
+## fold joins lines as YAML's folded block scalars do.
+let paragraphs = |
+
+  one
+  line
+
+  next
+    indented
+    lines
+
+  last
+let stripped = |-
+  no
+  newline
+folded:
+  paragraphs: strings.fold(paragraphs)
+  stripped: strings.fold(stripped)
+  kept: strings.fold("a\nb\n\n")
+  empty: strings.fold("")
+
 ## Like any built-in, a module's functions are values.
 let apply(fn, to) = fn(to)
 applied: apply(strings.lower, "LOUD")

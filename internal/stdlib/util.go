@@ -2,6 +2,7 @@ package stdlib
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/eval"
@@ -81,6 +82,29 @@ func (c call) optionalStr(i int) (string, bool, error) {
 	return s, err == nil, err
 }
 
+// wholeInt converts f, a float with no fraction, to an integer, refusing one
+// out of an integer's range.
+func (c call) wholeInt(i int, f float64) (eval.Value, error) {
+	if math.IsNaN(f) || f < math.MinInt64 || f >= math.MaxInt64 {
+		return nil, c.errorf(i, "of %v does not fit in an integer", f)
+	}
+	return eval.Int(f), nil
+}
+
+// optionalInt reads an argument that is an integer or null, and reports
+// whether it was given.
+func (c call) optionalInt(i int) (eval.Int, bool, error) {
+	v, err := c.value(i)
+	if err != nil {
+		return 0, false, err
+	}
+	if _, none := v.(eval.Null); none {
+		return 0, false, nil
+	}
+	n, err := c.integer(i)
+	return n, err == nil, err
+}
+
 func (c call) boolean(i int) (bool, error) {
 	v, err := c.value(i)
 	if err != nil {
@@ -130,16 +154,26 @@ func (c call) count(i int) (int, error) {
 	return int(n), nil
 }
 
-// seq reads an argument that has to be a sequence, along with the values of
-// its items.
-func (c call) seq(i int) (*eval.Array, []eval.Value, error) {
+// array reads an argument that has to be a sequence, leaving its items
+// unevaluated.
+func (c call) array(i int) (*eval.Array, error) {
 	v, err := c.value(i)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	a, ok := v.(*eval.Array)
 	if !ok {
-		return nil, nil, c.errorf(i, "needs a sequence, found %s", v.TypeName())
+		return nil, c.errorf(i, "needs a sequence, found %s", v.TypeName())
+	}
+	return a, nil
+}
+
+// seq reads an argument that has to be a sequence, along with the values of
+// its items.
+func (c call) seq(i int) (*eval.Array, []eval.Value, error) {
+	a, err := c.array(i)
+	if err != nil {
+		return nil, nil, err
 	}
 	values := make([]eval.Value, a.Len())
 	for j, item := range a.Items() {

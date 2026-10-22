@@ -170,6 +170,9 @@ func TestParseSource(t *testing.T) {
 		"git+https://github.com/":               "names no repository",
 		"oci://ghcr.io/acme/lib":                "names no tag or digest",
 		"oci://ghcr.io":                         "names no repository",
+		"oci://../victim:1":                     "names no repository",
+		"git+https://host/..":                   "names no repository",
+		"git+https://../../x":                   "names no repository",
 	} {
 		if _, err := module.ParseSource(target); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("ParseSource(%q) error = %v, want it to contain %q", target, err, want)

@@ -1,10 +1,8 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -86,7 +84,10 @@ func renderSpec(path string, log io.Writer) error {
 				return err
 			}
 		}
-		pkg, err := packageAt(dir)
+		pkg, err := module.ReadPackage(dir)
+		if err == nil && pkg == nil {
+			err = fmt.Errorf("%s is not a package: it has no %s", dir, module.PkgFile)
+		}
 		if err != nil {
 			return err
 		}
@@ -133,17 +134,4 @@ func renderSpec(path string, log io.Writer) error {
 		return err
 	}
 	return writeAll(all)
-}
-
-// packageAt reads the yak.pkg at the root of dir, which a spec file's
-// package must have.
-func packageAt(dir string) (*module.Package, error) {
-	src, err := os.ReadFile(filepath.Join(dir, module.PkgFile))
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("%s is not a package: it has no %s", dir, module.PkgFile)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return module.ParsePackage(filepath.Join(dir, module.PkgFile), src)
 }

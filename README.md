@@ -19,11 +19,16 @@ spec:
   replicas: $$.app?.replicas ?? 1
   selector:
     matchLabels: $.metadata.labels
-  containers:
-    - image: "\(image):\(tag)"
-      env:
-        - name: "APP_NAME"
-          value: $$.app.name
+  template:
+    metadata:
+      labels: $.metadata.labels
+    spec:
+      containers:
+        - name: "web"
+          image: "\(image):\(tag)"
+          env:
+            - name: "APP_NAME"
+              value: $$.app.name
 ```
 
 ```console

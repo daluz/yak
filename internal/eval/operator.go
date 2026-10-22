@@ -46,6 +46,9 @@ func evalNegate(node *ast.Unary, env *Env) (Value, error) {
 	}
 	switch t := x.(type) {
 	case Int:
+		if t == math.MinInt64 {
+			return nil, errorf(node.Pos(), "-(%d) does not fit in an integer", int64(t))
+		}
 		return -t, nil
 	case Float:
 		return -t, nil
@@ -182,30 +185,47 @@ func arith(op token.Kind, x, y Value) (Value, error) {
 	ai, aInt := x.(Int)
 	bi, bInt := y.(Int)
 	if aInt && bInt && op != token.Slash {
+		var r Int
+		overflow := false
 		switch op {
 		case token.Plus:
-			return ai + bi, nil
+			r = ai + bi
+			overflow = (bi > 0) != (r > ai)
 		case token.Dash:
-			return ai - bi, nil
+			r = ai - bi
+			overflow = (bi > 0) != (r < ai)
 		case token.Star:
-			return ai * bi, nil
+			r = ai * bi
+			overflow = ai != 0 && (r/ai != bi || (ai == -1 && bi == math.MinInt64))
 		default:
-			return ai % bi, nil
+			r = ai % bi
 		}
+		if overflow {
+			return nil, fmt.Errorf("%d %s %d does not fit in an integer", int64(ai), op.Text(), int64(bi))
+		}
+		return r, nil
 	}
+	var r float64
 	switch op {
 	case token.Plus:
-		return Float(a + b), nil
+		r = a + b
 	case token.Dash:
-		return Float(a - b), nil
+		r = a - b
 	case token.Star:
-		return Float(a * b), nil
+		r = a * b
 	case token.Slash:
-		return Float(a / b), nil
+		r = a / b
 	default:
-		return Float(math.Mod(a, b)), nil
+		r = math.Mod(a, b)
 	}
+	if math.IsInf(r, 0) {
+		return nil, fmt.Errorf("%v %s %v does not fit in a float", a, op.Text(), b)
+	}
+	return Float(r), nil
 }
+
+// Add adds two numbers as "+" does.
+func Add(x, y Value) (Value, error) { return arith(token.Plus, x, y) }
 
 // concat joins two sequences. The items are shared rather than copied, so an
 // item still resolves in the sequence it was written in.

@@ -285,7 +285,7 @@ Besides Go's `text/template` functions, the following extra template functions a
 | --- | --- |
 | `quote VALUE` | `VALUE` written as a double-quoted string, escapes included, or `""` for `null`. |
 | `indent N TEXT` | `TEXT` with `N` spaces in front of every line. |
-| `nindent N TEXT` | A line break and then `indent N TEXT`, for a value that starts on a line of its own, as in `{{ .labels \| nindent 4 }}`. |
+| `nindent N TEXT` | A line break and then `indent N TEXT`, for a value that starts on a line of its own, as in `{{ .labels \| nindent 4 }}` when `labels` is YAML text from `yaml.encode`. |
 
 There are fewer functions than, for example, Helm, because you should compute everything
 else in yak and pass it in `data`, such as YAML from `std.yaml`, so the template only lays
@@ -422,9 +422,11 @@ hosts: strings.split($$.hosts, ",")
 | `truncate(value, length)` | The first `length` characters of `value`, or all of it when it is shorter. |
 | `split(value, separator = null)` | The sequence of the pieces of `value` between each `separator`, or between runs of whitespace when there is none. |
 | `join(values, separator)` | The strings of a sequence written one after another, with `separator` between them. |
+| `fold(value)` | `value` with its lines joined as YAML's folded (`>`) block scalars join them. |
 
-Every argument but `count` and `length` is a string, and anything else is an
-error naming its type; `count` and `length` are integers of zero or more.
+Every argument but `values`, `count` and `length` is a string, and anything
+else is an error naming its type; `values` is a sequence of strings, and
+`count` and `length` are integers of zero or more.
 Lengths are in characters, as for `size`, so `truncate("café", 3)` is
 `"caf"`.
 
@@ -434,8 +436,27 @@ pieces, so `split("  a  b ")` is `["a", "b"]`. `join` does not convert items,
 so each must already be a string:
 
 ```yaml
+import std.strings
+
 ports: [80, 443]
 list: strings.join(["\(p)" for p in .ports], ",")   # "80,443"
+```
+
+yak has no folded block scalar, since `>` is the greater-than operator;
+`fold` does its work on any string, most often a `|` block. A single line
+break between two lines becomes a space and each blank line between them a
+line break. A line that starts with a space or a tab keeps the line breaks
+around it, and the line breaks at the end of `value` are kept as they are:
+
+```yaml
+import std.strings
+
+let text = |
+  These lines are folded
+  into a single one.
+
+  This is a second paragraph.
+summary: strings.fold(text)   # "These lines are folded into a single one.\nThis is a second paragraph.\n"
 ```
 
 ### `std.yaml`

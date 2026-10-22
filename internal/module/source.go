@@ -66,9 +66,21 @@ var gitSchemes = []string{"https", "ssh", "file"}
 
 // ParseSource parses the target of a remote dependency.
 func ParseSource(target string) (Source, error) {
+	var src Source
+	var err error
 	if rest, ok := strings.CutPrefix(target, "oci://"); ok {
-		return parseOCI(target, rest)
+		src, err = parseOCI(target, rest)
+	} else {
+		src, err = parseGit(target)
 	}
+	if err == nil && (src.Key == "." || !filepath.IsLocal(filepath.FromSlash(src.Key))) {
+		return Source{}, fmt.Errorf("%s: names no repository", target)
+	}
+	return src, err
+}
+
+// parseGit parses a target written as git+SCHEME://.
+func parseGit(target string) (Source, error) {
 	rest, ok := strings.CutPrefix(target, "git+")
 	if !ok {
 		return Source{}, fmt.Errorf("%s: a remote package is written as git+https://, git+ssh://, git+file:// or oci://", target)
@@ -97,7 +109,7 @@ func ParseSource(target string) (Source, error) {
 	}
 	host, _, _ = strings.Cut(host, ":")
 	key := path.Clean(path.Join(host, strings.TrimSuffix(repo, ".git")))
-	if repo == "" || key == "." || strings.HasPrefix(key, "..") {
+	if repo == "" {
 		return Source{}, fmt.Errorf("%s: names no repository", target)
 	}
 	src.Repo = scheme + "://" + authority + "/" + repo

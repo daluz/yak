@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/daluz/yak/internal/ast"
@@ -140,7 +141,7 @@ func (p *Package) Target(name, rel string) Target {
 func (s *Spec) CheckRules() error {
 	for _, r := range s.rules {
 		if !r.used {
-			return fmt.Errorf("%s: rules: %s covers no template in any package", s.Path, r.key)
+			return fmt.Errorf("%s: rules: %s covers no template in any package, or every package overrides it", s.Path, r.key)
 		}
 	}
 	for _, p := range s.Packages {
@@ -325,21 +326,12 @@ func decode(file string, v eval.Value) (*Spec, error) {
 		}
 		p.rules = append([]*Rule(nil), p.own...)
 		for _, r := range s.rules {
-			if !hasKey(p.own, r.key) {
+			if !slices.ContainsFunc(p.own, func(o *Rule) bool { return o.key == r.key }) {
 				p.rules = append(p.rules, r)
 			}
 		}
 	}
 	return s, nil
-}
-
-func hasKey(rules []*Rule, key string) bool {
-	for _, r := range rules {
-		if r.key == key {
-			return true
-		}
-	}
-	return false
 }
 
 func (d decoder) packages(key string, v eval.Value) ([]*Package, error) {

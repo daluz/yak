@@ -32,5 +32,12 @@ split:
     - "80"
 joined: a.example.com | b.example.com
 named: a-b
+folded:
+  paragraphs: "\none line\nnext\n  indented\n  lines\n\nlast\n"
+  stripped: no newline
+  kept: |+
+    a b
+
+  empty: ""
 applied: loud
 renamed: QUIET

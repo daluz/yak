@@ -1,6 +1,7 @@
 package stdlib
 
 import (
+	"math"
 	"strings"
 
 	"github.com/daluz/yak/internal/ast"
@@ -24,6 +25,7 @@ func init() {
 		builtin("truncate", params("value", "length"), truncate),
 		builtin("split", append(params("value"), optional("separator", &ast.Null{})), split),
 		builtin("join", params("values", "separator"), join),
+		builtin("fold", valueParam, mapString(fold)),
 	}})
 }
 
@@ -95,6 +97,9 @@ func repeat(c call) (eval.Value, error) {
 	n, err := c.count(1)
 	if err != nil {
 		return nil, err
+	}
+	if n > 0 && len(s) > math.MaxInt/n {
+		return nil, c.errorf(1, "would make a string too long to hold")
 	}
 	return eval.String(strings.Repeat(s, n)), nil
 }
@@ -172,4 +177,32 @@ func join(c call) (eval.Value, error) {
 		return nil, err
 	}
 	return eval.String(strings.Join(parts, sep)), nil
+}
+
+// fold joins lines as a YAML folded scalar does: a single line break between
+// two lines becomes a space, and each blank line between them a line break.
+// A line that starts with a space or a tab keeps the breaks around it, and
+// the line breaks the string ends with are kept as they are.
+func fold(s string) string {
+	body := strings.TrimRight(s, "\n")
+	var b strings.Builder
+	blanks, started, prevMore := 0, false, false
+	for line := range strings.SplitSeq(body, "\n") {
+		if strings.TrimSpace(line) == "" {
+			blanks++
+			continue
+		}
+		more := line[0] == ' ' || line[0] == '\t'
+		switch {
+		case !started || (blanks > 0 && !more && !prevMore):
+			b.WriteString(strings.Repeat("\n", blanks))
+		case more || prevMore:
+			b.WriteString(strings.Repeat("\n", blanks+1))
+		default:
+			b.WriteByte(' ')
+		}
+		b.WriteString(line)
+		started, blanks, prevMore = true, 0, more
+	}
+	return b.String() + s[len(body):]
 }

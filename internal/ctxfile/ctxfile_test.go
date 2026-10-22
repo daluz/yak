@@ -53,7 +53,7 @@ func lookup(t *testing.T, obj *eval.Object, path string) eval.Value {
 }
 
 func TestDecodeScalarTypes(t *testing.T) {
-	obj := decode(t, "s: text\nq: \"quoted\"\ni: 42\nf: 1.5\nb: true\nn: null\nyes: yes\n")
+	obj := decode(t, "s: text\nq: \"quoted\"\ni: 42\nf: 1.5\nb: true\nn: null\nyes: yes\nbig: 18446744073709551615\nd: 2024-01-01\n")
 
 	tests := []struct {
 		path string
@@ -68,6 +68,8 @@ func TestDecodeScalarTypes(t *testing.T) {
 		// The YAML 1.2 core schema treats "yes" as a string, which matches
 		// yak's own rule that only true and false are booleans.
 		{"yes", eval.String("yes")},
+		{"big", eval.Float(18446744073709551615)},
+		{"d", eval.String("2024-01-01")},
 	}
 	for _, tc := range tests {
 		t.Run(tc.path, func(t *testing.T) {
@@ -226,9 +228,18 @@ func TestDecodeAnchors(t *testing.T) {
 }
 
 func TestDecodeEmpty(t *testing.T) {
-	obj := decode(t, "")
-	if obj.Len() != 0 {
-		t.Errorf("empty file decoded to %d fields, want 0", obj.Len())
+	for _, src := range []string{"", "---\n", "~\n", "---\n---\n"} {
+		if obj := decode(t, src); obj.Len() != 0 {
+			t.Errorf("%q decoded to %d fields, want 0", src, obj.Len())
+		}
+	}
+}
+
+func TestDecodeRejectsNonFiniteNumbers(t *testing.T) {
+	for _, src := range []string{"x: .nan\n", "x: -.inf\n"} {
+		if _, err := ctxfile.Decode("context.yaml", []byte(src)); err == nil || !strings.Contains(err.Error(), "is not a number yak can hold") {
+			t.Errorf("%q: error = %v, want the number refused", src, err)
+		}
 	}
 }
 

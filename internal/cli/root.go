@@ -36,9 +36,16 @@ func NewRootCommand() *cobra.Command {
 
 // Main runs the CLI and returns the process exit code.
 func Main() int {
-	if err := NewRootCommand().Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "yak: %v\n", err)
-		return 1
+	err := NewRootCommand().Execute()
+	if err == nil {
+		return 0
 	}
-	return 0
+	errs := []error{err}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = joined.Unwrap()
+	}
+	for _, err := range errs {
+		fmt.Fprintf(os.Stderr, "yak: %v\n", err)
+	}
+	return 1
 }

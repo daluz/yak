@@ -1,0 +1,3 @@
+import std.strings
+
+wide: strings.repeat("ab", 9223372036854775807)

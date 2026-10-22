@@ -10,7 +10,7 @@ d:
   f: |2
         kept two spaces deeper
       than the header
-  g: >-
+  g: |-
     folded
     text
   h: "a string

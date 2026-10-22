@@ -11,7 +11,8 @@ import (
 type Builtin struct {
 	Name string
 	// Params are declared as a function's are. A built-in has no scope to
-	// evaluate a default in, so a default is a literal other than a string.
+	// evaluate a default in, so a default is a literal with no
+	// interpolation.
 	Params []*ast.Param
 	// Fn receives one thunk per parameter, in the order they were declared,
 	// so that it decides what to resolve and can point a complaint at the

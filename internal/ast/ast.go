@@ -27,7 +27,6 @@ func At(p token.Pos) Base { return Base{P: p} }
 
 // Stream is a parsed file: one or more documents separated by "---".
 type Stream struct {
-	File string
 	Docs []*Document
 }
 
@@ -41,9 +40,10 @@ type Document struct {
 // or in flow form with braces.
 type Mapping struct {
 	Base
-	// Binds holds the "let", "import" and "schema" statements written among the entries. They cover
-	// the whole mapping, wherever in it they appear, and they can see the
-	// mapping itself, so a binding may refer to a field with ".name".
+	// Binds holds the "let", "import" and "schema" statements written
+	// among the entries. They cover the whole mapping, wherever in it they
+	// appear, and they can see the mapping itself, so a binding may refer to
+	// a field with ".name".
 	Binds   []*Binding
 	Entries []*Entry
 	Flow    bool
@@ -420,9 +420,6 @@ type Null struct{ Base }
 type Self struct {
 	Base
 	Up int
-	// Src is the run of dots the reference was written with. A reference
-	// that reaches past the outermost mapping is reported with it.
-	Src string
 }
 
 // Root is "$", or "$root" written out in full: the root node of the enclosing

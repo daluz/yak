@@ -8,11 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -121,6 +121,9 @@ func decodeYAML(src source) (*eval.Object, error) {
 		v, err := convert(&doc, src)
 		if err != nil {
 			return nil, err
+		}
+		if _, empty := v.(eval.Null); empty {
+			continue
 		}
 		if merged, err = mergeMapping(src, merged, v); err != nil {
 			return nil, err
@@ -346,13 +349,14 @@ func convertScalar(n *yaml.Node, src source) (eval.Value, error) {
 	case int64:
 		return eval.Int(v), nil
 	case uint64:
-		return eval.Int(int64(v)), nil
+		return eval.Float(v), nil
 	case float64:
+		if math.IsInf(v, 0) || math.IsNaN(v) {
+			return nil, fmt.Errorf("%s:%d:%d: %s is not a number yak can hold", src.name, n.Line, n.Column, n.Value)
+		}
 		return eval.Float(v), nil
 	case string:
 		return eval.String(v), nil
-	case time.Time:
-		return eval.String(v.Format(time.RFC3339)), nil
 	default:
 		return eval.String(n.Value), nil
 	}

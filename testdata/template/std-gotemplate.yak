@@ -27,6 +27,7 @@ let helpers = |-
   quoted: {{ quote .name }} {{ quote .port }} {{ quote .none }}
   indented:
   {{ indent 4 .text }}
+  {{ indent .width .text }}
 
 helpers: gotemplate.render(helpers, {
   labels: strings.trimSuffix(yaml.encode({app: "web", tier: "front"}), "\n"),
@@ -34,6 +35,7 @@ helpers: gotemplate.render(helpers, {
   port: 80,
   none: null,
   text: "a\nb",
+  width: 2,
 })
 
 no-data: gotemplate.render("plain {{ `text` }}")

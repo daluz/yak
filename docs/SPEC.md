@@ -107,10 +107,12 @@ double: "escapes \t and \u00e9 are processed"
 single: 'and so they are here'
 literal: |
   line breaks are preserved
-folded: >
-  these lines are
-  joined with spaces
 ```
+
+YAML's folded block scalar, written `>`, is not available, since `>` is the
+greater-than operator: a `>` where a value begins is an error that points to
+`fold` in [`std.strings`](STDLIB.md#stdstrings), which folds the lines of any
+string, a `|` block included.
 
 Single and double quotes mean the same thing, as in Python: both process the
 backslash escapes of YAML's double-quoted strings, and both interpolate. They
@@ -135,8 +137,8 @@ write `\'`. The escapes are:
 | `\` at the end of a line | Nothing: the line break and the next line's indentation are dropped. |
 
 Any other backslash sequence, such as `\d`, is an error. Block scalars have no
-escapes, and accept the chomping and indentation indicators `|-`, `|+`, `>-`,
-`>+` and `|2`.
+escapes, and accept the chomping and indentation indicators `|-`, `|+` and
+`|2`.
 
 ### Every string interpolates
 
@@ -173,8 +175,9 @@ script: r|
   sed 's/\(v[0-9]*\)/x/'
 ```
 
-A raw string cannot contain its own quote: write `r'...'` for text with a `"`
-in it, `r"..."` for text with a `'`, and a raw block scalar for both.
+The one escape a raw string keeps is its own quote: `\"` in `r"..."` and `\'`
+in `r'...'` write the quote alone, so `r"say \"\d\""` is `say "\d"`. Any other
+backslash stays as written, and a raw string cannot end in a backslash.
 
 ### Only `true` and `false` are booleans
 
@@ -842,7 +845,9 @@ noticed until the next `yak sync`, which puts them back.
 
 Vendoring is flat. The root package vendors the remote packages its
 dependencies depend on too, each once, and a vendored package finds its own
-dependencies in that same `vendor/`. A repository is checked out at one ref
+dependencies in that same `vendor/`. So does a local package beneath the
+root; one outside it, such as `../shared`, vendors its own with `yak sync`
+run inside it. A repository is checked out at one ref
 only, so two packages that want it at different refs are an error.
 
 `yak.lock`, beside `yak.pkg`, pins every vendored repository to a commit and
@@ -1173,7 +1178,9 @@ no `replicas`, so an optional field is written `$$?.replicas ?? 1`.
 
 Two integers give an integer, and a float on either side gives a float. `/`
 always gives a float, so `7 / 2` is `3.5`. Dividing or taking the remainder by
-zero is an error, as is an operand that is not a number.
+zero is an error, as is an operand that is not a number. Integers are 64-bit,
+and a result that does not fit in one, or a float too large to hold, is an
+error rather than wrapping around or becoming infinite.
 
 `+` also concatenates two strings or two sequences:
 
@@ -1577,7 +1584,7 @@ binding     := identifier params? "=" value
 pattern     := identifier | "_" | patterns
 patterns    := "[" pattern ("," pattern)* "]"
 import      := "import" module | "import" "{" module+ "}"
-module      := (identifier "=")? identifier ("." identifier)*
+module      := (identifier "=")? identifier ("." identifier)* | identifier "=" string
 schema      := "schema" "*"? (target "=" type | "{" (target "=" type)+ "}")
 target      := identifier | "$" | "$$"
 type        := typeAtom ("|" typeAtom)* ("if" value)?
@@ -1595,7 +1602,7 @@ lambda      := params "=>" value
 value       := conditional | match | coalesce
 conditional := "if" coalesce "then" value ("else" value)?
 match       := "match" coalesce ("case" type ("as" identifier)? "then" value)+ ("else" value)?
-coalesce    := or
+coalesce    := or ("??" or)*
 or          := and ("or" and)*
 and         := not ("and" not)*
 not         := "not" not | binary
@@ -1603,7 +1610,7 @@ binary      := unary (op unary)*                  -- see the precedence list
 unary       := "-"* operand
 operand     := literal | reference | flowSeq | flowMap | lambda | tag | "(" value ")"
 flowSeq     := "[" ((value loop) | (value ("," value)*)? ","?) "]"
-flowMap     := "{" ((entry loop) | (entry ("," entry)*)?) "}"
+flowMap     := "{" ((entry loop) | (entry ("," entry)*)? ","?) "}"
 entry       := (key | "<<") sep value
 loop        := ("for" pattern ("," pattern)* "in" value ("if" value)?)+
 key         := identifier | string | "(" value ")"

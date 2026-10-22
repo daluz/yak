@@ -162,19 +162,19 @@ renders as:
 pattern: ^\(\d+\)$
 ```
 
+The one escape a raw string still reads is its own quote, so `r"say \"\d\""`
+is `say "\d"`.
+
 ### Block scalars
 
-YAML's block scalars work as usual: `|` keeps line breaks and `>` folds them
-into spaces. They interpolate like any other string, and `r|` makes a raw one:
+YAML's literal block scalar, `|`, keeps its line breaks as usual. It
+interpolates like any other string, and `r|` makes a raw one:
 
 ```yaml
 service: "web"
 notes: |
   \(.service) keeps its line breaks.
   This is the second line.
-summary: >
-  These lines are folded
-  into a single one.
 script: r|
   echo "${HOME} and \(this) stay as written"
 ```
@@ -186,11 +186,13 @@ service: web
 notes: |
   web keeps its line breaks.
   This is the second line.
-summary: |
-  These lines are folded into a single one.
 script: |
   echo "${HOME} and \(this) stay as written"
 ```
+
+The folded block scalar, `>`, is gone, since `>` compares numbers in yak.
+`strings.fold`, from [the standard library](#the-standard-library), folds the
+lines of a `|` block instead.
 
 ## 4. Mappings, sequences and keys
 

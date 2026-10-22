@@ -235,7 +235,7 @@ func gap(prev, next token.Token, orig int) int {
 func (p *printer) shift(text string, col int) int {
 	header, body, _ := strings.Cut(text, "\n")
 	header = strings.TrimPrefix(header, "r")
-	if strings.HasPrefix(header, "|") || strings.HasPrefix(header, ">") {
+	if strings.HasPrefix(header, "|") {
 		if strings.ContainsAny(header[1:min(len(header), 3)], "123456789") {
 			return p.delta
 		}

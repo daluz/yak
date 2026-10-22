@@ -3,6 +3,7 @@ package stdlib
 import (
 	"crypto/rand"
 	"fmt"
+	"math"
 	mathrand "math/rand/v2"
 
 	"github.com/daluz/yak/internal/eval"
@@ -34,7 +35,11 @@ func randint(c call) (eval.Value, error) {
 	if hi < lo {
 		return nil, c.errorf(1, "needs a max of at least min %d, found %d", lo, hi)
 	}
-	return lo + eval.Int(mathrand.Int64N(int64(hi-lo)+1)), nil
+	span := uint64(hi) - uint64(lo)
+	if span == math.MaxUint64 {
+		return eval.Int(mathrand.Uint64()), nil
+	}
+	return eval.Int(uint64(lo) + mathrand.Uint64N(span+1)), nil
 }
 
 // randfloat is rand, which answers a float from 0 up to but not including 1.
@@ -43,19 +48,19 @@ func randfloat(call) (eval.Value, error) {
 }
 
 func choice(c call) (eval.Value, error) {
-	_, values, err := c.seq(0)
+	a, err := c.array(0)
 	if err != nil {
 		return nil, err
 	}
-	if len(values) == 0 {
+	if a.Len() == 0 {
 		return nil, c.errorf(0, "needs a sequence with an item in it, found []")
 	}
-	return values[mathrand.IntN(len(values))], nil
+	return a.Items()[mathrand.IntN(a.Len())].Value.Value()
 }
 
 // shuffle answers the items in a random order, each keeping its comments.
 func shuffle(c call) (eval.Value, error) {
-	a, _, err := c.seq(0)
+	a, err := c.array(0)
 	if err != nil {
 		return nil, err
 	}

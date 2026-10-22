@@ -41,7 +41,7 @@ $ yak render FILE.yak|DIR|REMOTE [-c context.yaml|context.json]... [-f FORMAT]
 | `-c`, `--context FILE` | Merge a YAML or JSON file into `$context`. Repeatable. |
 | `--skip-package-context` | Read the context files as they are, without the [package context](#package-context). |
 | `-f`, `--format NAME` | Write this [output format](#output-formats). |
-| `-o`, `--output FILE` | Write to this file rather than standard output. |
+| `-o`, `--output FILE` | Write to this file rather than standard output, which `-` names. |
 | `-O`, `--automatic-output` | Write to a file named after the template. |
 | `--output-dir DIR` | Put the output file in this directory. |
 | `--keep-null-documents` | Write the documents that evaluated to `null`. |
@@ -347,8 +347,8 @@ included, as it was. `SOURCE` is a local path, to a package or to a module,
 or a [git or OCI reference](SPEC.md#remote-packages). The dependency is named after
 the package, as its own `yak.pkg` names it, or after the module's file, unless
 `--name` gives the import path it goes under. A local path is written
-relative to `yak.pkg`. A remote package is vendored and pinned in `yak.lock`
-at once.
+relative to `yak.pkg`. The package is then synced, as by `yak sync`, so a
+remote package is vendored and pinned in `yak.lock` at once.
 
 ```console
 $ yak add git+https://github.com/acme/lib.git@v1.2.0   # named as its yak.pkg names it
@@ -361,8 +361,8 @@ $ yak add ../shared --name common
 $ yak remove NAME
 ```
 
-Removes the dependency `NAME` from `yak.pkg`. A remote package leaves `vendor/`
-and `yak.lock` too, unless another package still depends on it.
+Removes the dependency `NAME` from `yak.pkg` and syncs the package, so the
+remote packages that only it brought in leave `vendor/` and `yak.lock` too.
 
 ### `yak sync`
 
@@ -371,7 +371,8 @@ $ yak sync [--update [NAME]...]
 ```
 
 Vendors every remote package the package depends on, directly or through
-another, into `vendor/` beneath its root, and rewrites `yak.lock`. A package
+another, into `vendor/` beneath its root, and rewrites `yak.lock`. The local
+packages beneath the root that it depends on are followed too. A package
 `yak.lock` pins is fetched at the pinned commit or digest, and one already vendored
 with the pinned content is not fetched at all, so `sync` needs no network
 when nothing changed. A dependency that `yak.lock` does not pin yet, or whose
@@ -442,7 +443,7 @@ $ yak schema import FILE.yaml|-... [-o FILE] [--format FORMAT]
 
 | Flag | Meaning |
 | --- | --- |
-| `-o`, `--output FILE` | Write the library to this file instead of standard output. |
+| `-o`, `--output FILE` | Write the library to this file instead of standard output, which `-` names. |
 | `--format FORMAT` | What the files hold: `crd`, `jsonschema` or `openapi`. |
 
 Translates the schemas each file declares into one `.yakl` library, which a

@@ -9,13 +9,12 @@ package deps
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -48,8 +47,8 @@ func Sync(pkg *module.Package, opts Options) error {
 }
 
 // Add adds source, a path or a remote package, to the dependencies of pkg
-// under name, or else under the name the dependency's own yak.pkg gives it.
-// A remote one is vendored, and pkg synced.
+// under name, or else under the name the dependency's own yak.pkg gives it,
+// and syncs pkg.
 func Add(pkg *module.Package, source, name string, opts Options) error {
 	if !module.IsRemote(source) {
 		abs, err := filepath.Abs(source)
@@ -70,8 +69,11 @@ func Add(pkg *module.Package, source, name string, opts Options) error {
 		if err != nil {
 			return err
 		}
-		_, content, err := addDependency(pkg, name, filepath.ToSlash(rel))
+		updated, content, err := addDependency(pkg, name, filepath.ToSlash(rel))
 		if err != nil {
+			return err
+		}
+		if err := Sync(updated, opts); err != nil {
 			return err
 		}
 		return os.WriteFile(pkg.Path, content, 0o644)
@@ -85,15 +87,20 @@ func Add(pkg *module.Package, source, name string, opts Options) error {
 		return err
 	}
 	defer s.close()
-	if _, err := s.vendor(dependency{target: source, src: src, from: pkg.Path}); err != nil {
+	if err := s.vendor(src, pkg.Path); err != nil {
 		return err
 	}
 	dir := filepath.Join(s.vendorPath(src.Key), filepath.FromSlash(src.Dir))
-	if name, err = dependencyName(dir, source, name); err != nil {
-		return err
+	name, err = dependencyName(dir, source, name)
+	var updated *module.Package
+	var content []byte
+	if err == nil {
+		updated, content, err = addDependency(pkg, name, source)
 	}
-	updated, content, err := addDependency(pkg, name, source)
 	if err != nil {
+		if _, kept := s.locked[src.Key]; !kept {
+			os.RemoveAll(s.vendorPath(src.Key))
+		}
 		return err
 	}
 	if err := s.sync(updated); err != nil {
@@ -102,11 +109,10 @@ func Add(pkg *module.Package, source, name string, opts Options) error {
 	return os.WriteFile(pkg.Path, content, 0o644)
 }
 
-// Remove removes the dependency name from pkg, and syncs pkg when it was a
-// remote one, so that its vendored copy goes too.
+// Remove removes the dependency name from pkg, and syncs pkg, so that what
+// only it brought in leaves the vendor directory.
 func Remove(pkg *module.Package, name string, opts Options) error {
-	target, ok := pkg.Dependencies[name]
-	if !ok {
+	if _, ok := pkg.Dependencies[name]; !ok {
 		return fmt.Errorf("%s has no dependency %q", pkg.Path, name)
 	}
 	updated, content, err := editDependencies(pkg, func(deps *yaml.Node) {
@@ -120,10 +126,8 @@ func Remove(pkg *module.Package, name string, opts Options) error {
 	if err != nil {
 		return err
 	}
-	if module.IsRemote(target) {
-		if err := Sync(updated, opts); err != nil {
-			return err
-		}
+	if err := Sync(updated, opts); err != nil {
+		return err
 	}
 	return os.WriteFile(pkg.Path, content, 0o644)
 }
@@ -140,19 +144,11 @@ func Fetch(src module.Source, dir string, opts Options) (string, error) {
 		return "", err
 	}
 	root := filepath.Join(clone, filepath.FromSlash(src.Dir))
-	pkg, err := readPackage(root)
+	pkg, err := module.ReadPackage(root)
 	if err != nil || pkg == nil {
 		return root, err
 	}
 	return root, Sync(pkg, opts)
-}
-
-// dependency is a remote dependency as one yak.pkg writes it.
-type dependency struct {
-	target string
-	src    module.Source
-	// from is the yak.pkg that depends on it.
-	from string
 }
 
 type syncer struct {
@@ -213,39 +209,47 @@ func (s *syncer) vendorPath(key string) string {
 }
 
 // sync vendors what pkg depends on, then what that depends on in turn,
-// prunes the vendor directory and writes yak.lock.
+// prunes the vendor directory and writes yak.lock. A local package beneath
+// the root is walked as well, since its imports find the root's vendor
+// directory; one outside the root vendors its own.
 func (s *syncer) sync(pkg *module.Package) error {
-	queue, err := remoteDependencies(pkg)
+	root, err := filepath.Abs(s.root)
 	if err != nil {
 		return err
 	}
-	seen := map[string]bool{}
+	queue := []*module.Package{pkg}
+	seen := map[string]bool{root: true}
 	for len(queue) > 0 {
-		d := queue[0]
+		p := queue[0]
 		queue = queue[1:]
-		if _, err := s.vendor(d); err != nil {
-			return err
+		for _, name := range slices.Sorted(maps.Keys(p.Dependencies)) {
+			target := p.Dependencies[name]
+			dir, err := s.packageDir(p, name, target)
+			if err != nil {
+				return err
+			}
+			if dir == "" {
+				continue
+			}
+			if dir, err = filepath.Abs(dir); err != nil {
+				return err
+			}
+			if rel, err := filepath.Rel(root, dir); err != nil || !filepath.IsLocal(rel) || seen[dir] {
+				continue
+			}
+			seen[dir] = true
+			sub, err := module.ReadPackage(dir)
+			if err != nil {
+				return err
+			}
+			if sub == nil {
+				if module.IsRemote(target) {
+					return fmt.Errorf("%s depends on %s, which is not a package: it holds no %s", p.Path, target, module.PkgFile)
+				}
+				continue
+			}
+			queue = append(queue, sub)
 		}
-		dir := filepath.Join(s.vendorPath(d.src.Key), filepath.FromSlash(d.src.Dir))
-		if seen[dir] {
-			continue
-		}
-		seen[dir] = true
-		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-			continue
-		}
-		sub, err := readPackage(dir)
-		if err != nil {
-			return err
-		}
-		if sub == nil {
-			return fmt.Errorf("%s depends on %s, which is not a package: it holds no %s", d.from, d.target, module.PkgFile)
-		}
-		more, err := remoteDependencies(sub)
-		if err != nil {
-			return err
-		}
-		queue = append(queue, more...)
 	}
 	if err := prune(filepath.Join(s.root, module.VendorDir), s.done); err != nil {
 		return err
@@ -253,21 +257,54 @@ func (s *syncer) sync(pkg *module.Package) error {
 	return writeLock(filepath.Join(s.root, module.LockFile), s.done)
 }
 
-// vendor makes the vendor directory hold the repository d names: at the
-// commit yak.lock pins, unless its ref changed or is being updated, and
-// otherwise at the commit its ref names now.
-func (s *syncer) vendor(d dependency) (module.LockEntry, error) {
-	src := d.src
-	if e, ok := s.done[src.Key]; ok {
-		if e.Ref != src.Ref {
-			return e, fmt.Errorf("%s depends on %s at %s, but it is vendored at %s; depend on one ref of a repository",
-				d.from, src.Key, refName(src.Ref), refName(e.Ref))
+// packageDir vendors the dependency name of p when it is remote, and answers
+// the directory its target names, or "" when the target is a module's file.
+func (s *syncer) packageDir(p *module.Package, name, target string) (string, error) {
+	if !module.IsRemote(target) {
+		if strings.HasSuffix(target, module.Ext) || strings.HasSuffix(target, module.ExtLibrary) {
+			return "", nil
 		}
-		return e, nil
+		if filepath.IsAbs(target) {
+			return target, nil
+		}
+		return filepath.Join(p.Root(), filepath.FromSlash(target)), nil
+	}
+	src, err := module.ParseSource(target)
+	if err != nil {
+		return "", fmt.Errorf("%s: dependency %q: %w", p.Path, name, err)
+	}
+	if err := s.vendor(src, p.Path); err != nil {
+		return "", err
+	}
+	dir := filepath.Join(s.vendorPath(src.Key), filepath.FromSlash(src.Dir))
+	info, err := os.Stat(dir)
+	if err != nil {
+		return "", fmt.Errorf("%s depends on %s, but %s holds no %s", p.Path, target, src.Key, src.Dir)
+	}
+	if !info.IsDir() {
+		return "", nil
+	}
+	return dir, nil
+}
+
+// vendor makes the vendor directory hold the repository src names, which the
+// yak.pkg at from depends on: at the commit yak.lock pins, unless its ref
+// changed or is being updated, and otherwise at the commit its ref names now.
+func (s *syncer) vendor(src module.Source, from string) error {
+	if e, ok := s.done[src.Key]; ok {
+		if e.Source != src.Repo {
+			return fmt.Errorf("%s depends on %s, but %s is vendored from %s; depend on one source of a repository",
+				from, src.Repo, src.Key, e.Source)
+		}
+		if e.Ref != src.Ref {
+			return fmt.Errorf("%s depends on %s at %s, but it is vendored at %s; depend on one ref of a repository",
+				from, src.Key, refName(src.Ref), refName(e.Ref))
+		}
+		return nil
 	}
 	for key := range s.done {
 		if strings.HasPrefix(key, src.Key+"/") || strings.HasPrefix(src.Key, key+"/") {
-			return module.LockEntry{}, fmt.Errorf("cannot vendor both %s and %s, as one would be inside the other", key, src.Key)
+			return fmt.Errorf("cannot vendor both %s and %s, as one would be inside the other", key, src.Key)
 		}
 	}
 	dest := s.vendorPath(src.Key)
@@ -276,11 +313,11 @@ func (s *syncer) vendor(d dependency) (module.LockEntry, error) {
 	if pinned {
 		if h, err := hashDir(dest); err == nil && h == e.Hash {
 			s.done[src.Key] = e
-			return e, nil
+			return nil
 		}
 	}
 	if err := os.RemoveAll(dest); err != nil {
-		return module.LockEntry{}, err
+		return err
 	}
 	got := module.LockEntry{Source: src.Repo, Ref: src.Ref}
 	var err error
@@ -294,18 +331,18 @@ func (s *syncer) vendor(d dependency) (module.LockEntry, error) {
 		got.Commit, err = s.clone(src, e.Commit, pinned, dest)
 	}
 	if err != nil {
-		return module.LockEntry{}, err
+		return err
 	}
 	if got.Hash, err = hashDir(dest); err != nil {
-		return module.LockEntry{}, err
+		return err
 	}
 	if pinned && got.Hash != e.Hash {
-		return module.LockEntry{}, fmt.Errorf("%s at %s%s does not hold what %s pinned; run yak sync --update to accept it",
+		return fmt.Errorf("%s at %s%s does not hold what %s pinned; run yak sync --update to accept it",
 			src.Key, got.Commit, got.Digest, module.LockFile)
 	}
 	s.done[src.Key] = got
 	fmt.Fprintf(s.log, "vendored %s at %s (%s)\n", src.Key, refName(src.Ref), short(got.Commit+got.Digest))
-	return got, nil
+	return nil
 }
 
 // clone checks src out at the commit pinned when it is, or else at its ref,
@@ -328,7 +365,9 @@ func (s *syncer) clone(src module.Source, commit string, pinned bool, dest strin
 
 // short abbreviates a commit or a digest.
 func short(id string) string {
-	_, id, _ = strings.Cut(id, ":")
+	if _, digest, ok := strings.Cut(id, ":"); ok {
+		id = digest
+	}
 	return id[:min(12, len(id))]
 }
 
@@ -337,40 +376,6 @@ func refName(ref string) string {
 		return "the default branch"
 	}
 	return ref
-}
-
-// remoteDependencies lists the remote dependencies of pkg, by name.
-func remoteDependencies(pkg *module.Package) ([]dependency, error) {
-	names := make([]string, 0, len(pkg.Dependencies))
-	for name, target := range pkg.Dependencies {
-		if module.IsRemote(target) {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	deps := make([]dependency, 0, len(names))
-	for _, name := range names {
-		target := pkg.Dependencies[name]
-		src, err := module.ParseSource(target)
-		if err != nil {
-			return nil, fmt.Errorf("%s: dependency %q: %w", pkg.Path, name, err)
-		}
-		deps = append(deps, dependency{target: target, src: src, from: pkg.Path})
-	}
-	return deps, nil
-}
-
-// readPackage reads the yak.pkg in dir, and answers nil when there is none.
-func readPackage(dir string) (*module.Package, error) {
-	path := filepath.Join(dir, module.PkgFile)
-	src, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return module.ParsePackage(path, src)
 }
 
 // dependencyName checks that path, which source names, is a package or a
@@ -384,7 +389,7 @@ func dependencyName(path, source, name string) (string, error) {
 		}
 		derived = strings.TrimSuffix(strings.TrimSuffix(base, module.ExtLibrary), module.Ext)
 	} else {
-		pkg, err := readPackage(path)
+		pkg, err := module.ReadPackage(path)
 		if err != nil {
 			return "", err
 		}

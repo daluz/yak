@@ -1,0 +1,10 @@
+schema Service =
+  name: string
+  replicas: integer = 1
+
+## A hidden entry keeps its value and stays hidden; it does not take the
+## default.
+web: !Service
+  name: "web"
+  replicas:: 3
+replicas: $.web.replicas

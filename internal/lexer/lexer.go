@@ -225,11 +225,11 @@ func (l *lexer) scanToken() error {
 	switch {
 	case c == '"' || c == '\'':
 		return l.scanQuotedAt(start, false)
-	case c == 'r' && isStringStart(l.peekAt(1)):
+	case c == 'r' && l.block && l.peekAt(1) == '|' && l.blockScalarHeader(l.off+2):
 		l.advance()
-		if l.peek() == '|' || l.peek() == '>' {
-			return l.scanBlockScalar(start, true)
-		}
+		return l.scanBlockScalar(start, true)
+	case c == 'r' && (l.peekAt(1) == '"' || l.peekAt(1) == '\''):
+		l.advance()
 		return l.scanQuotedAt(start, true)
 	case isIdentStart(c):
 		l.emit(token.Token{Kind: token.Ident, Lit: l.readIdent(), Pos: start})
@@ -255,8 +255,9 @@ func (l *lexer) scanToken() error {
 			return l.errorf(start, "unexpected %q", string(c))
 		}
 		return l.scanBlockScalar(start, false)
-	case c == '>' && l.peekAt(1) != '=' && l.block && l.blockScalarHeader():
-		return l.scanBlockScalar(start, false)
+	case c == '>' && l.block && !l.afterOperand() && l.blockScalarHeader(l.off+1):
+		return l.errorf(start, "folded block scalars (%q) are not supported in yak; write a %q block and fold it with std.strings.fold",
+			">", "|")
 	case c == '?' && l.peekAt(1) != '?' && l.peekAt(1) != '.' && l.peekAt(1) != '[':
 		return l.errorf(start,
 			"explicit key indicators (%q) are not supported; use (expr) for a computed key, %q for an optional access, or %q for a default",
@@ -314,24 +315,37 @@ func (l *lexer) scanDots(start token.Pos) error {
 
 // afterOperand reports whether the current position follows an operand on
 // the same line, which is where a "|" separates the alternatives of a union.
-// Anywhere else a "|" begins a value, and so opens a block scalar.
+// Anywhere else a "|" begins a value, and so opens a block scalar. A keyword
+// such as "then", or the name in a tag, is followed by a value rather than
+// ending one.
 func (l *lexer) afterOperand() bool {
-	if l.bol || len(l.toks) == 0 {
+	n := len(l.toks)
+	if l.bol || n == 0 {
 		return false
 	}
-	switch l.toks[len(l.toks)-1].Kind {
-	case token.Ident, token.String, token.Int, token.Float, token.RBracket, token.RBrace, token.RParen:
+	switch l.toks[n-1].Kind {
+	case token.Ident:
+		before := func(i int) token.Kind {
+			if n-i < 0 {
+				return token.EOF
+			}
+			return l.toks[n-i].Kind
+		}
+		if before(2) == token.Dots {
+			return before(4) != token.Bang
+		}
+		return before(2) != token.Bang && !token.IsKeyword(l.toks[n-1].Lit)
+	case token.String, token.Int, token.Float, token.RBracket, token.RBrace, token.RParen:
 		return true
 	}
 	return false
 }
 
-// blockScalarHeader reports whether the ">" at the current position opens a
-// folded block scalar rather than being the greater-than operator. A header
-// carries nothing but its indicators and an optional comment, so anything
-// else on the line means the character was written as an operator.
-func (l *lexer) blockScalarHeader() bool {
-	i := l.off + 1
+// blockScalarHeader reports whether a block scalar header follows its "|"
+// or ">", which ends at i. A header carries nothing but its indicators and an
+// optional comment, so anything else on the line means the character was
+// written as an operator.
+func (l *lexer) blockScalarHeader(i int) bool {
 	for n := 0; n < 2 && i < len(l.src); n++ {
 		c := l.src[i]
 		if c != '-' && c != '+' && !(c >= '1' && c <= '9') {
@@ -431,10 +445,6 @@ func (l *lexer) scanNumber() error {
 	}
 	l.emit(token.Token{Kind: kind, Lit: string(l.src[from:l.off]), Pos: start})
 	return nil
-}
-
-func isStringStart(c byte) bool {
-	return c == '"' || c == '\'' || c == '|' || c == '>'
 }
 
 func isIdentStart(c byte) bool {

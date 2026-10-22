@@ -671,7 +671,7 @@ func evalString(node *ast.String, env *Env) (Value, error) {
 
 func evalSelf(node *ast.Self, env *Env) (Value, error) {
 	if node.Up >= len(env.self) {
-		return nil, errorf(node.Pos(), "%q reaches past the outermost mapping of the document", node.Src)
+		return nil, errorf(node.Pos(), "%q reaches past the outermost mapping of the document", strings.Repeat(".", node.Up+1))
 	}
 	return env.self[node.Up], nil
 }

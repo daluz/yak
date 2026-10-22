@@ -131,7 +131,8 @@ func newAddCommand() *cobra.Command {
 			"written as git+https://HOST/REPOSITORY[//DIR][@REF], with git+ssh:// or\n" +
 			"git+file://, or as oci://REGISTRY/REPOSITORY:TAG. The dependency is named\n" +
 			"after the package, or after the module's file, unless --name gives it a\n" +
-			"name. A remote package is vendored and pinned in yak.lock at once.",
+			"name. The package is then synced, so a remote package is vendored and\n" +
+			"pinned in yak.lock at once.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pkg, err := currentPackage()
@@ -151,8 +152,9 @@ func newRemoveCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove NAME",
 		Short: "Remove a dependency from the package",
-		Long: "Remove a dependency from the package's yak.pkg. A remote one leaves\n" +
-			"the vendor directory and yak.lock as well.",
+		Long: "Remove a dependency from the package's yak.pkg and sync the package, so\n" +
+			"the remote packages only it brought in leave the vendor directory and\n" +
+			"yak.lock as well.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pkg, err := currentPackage()
@@ -171,10 +173,11 @@ func newSyncCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync [--update [NAME]...]",
 		Short: "Vendor the package's remote dependencies",
-		Long: "Vendor every remote package the package depends on, directly or through\n" +
-			"another, into vendor/ beneath its root, at the commits yak.lock pins, and\n" +
-			"rewrite yak.lock. A dependency yak.lock does not pin yet, or whose ref\n" +
-			"changed, is fetched at the commit its ref names now.\n\n" +
+		Long: "Vendor every remote package the package depends on, directly, through\n" +
+			"another, or through a local package beneath its root, into vendor/ beneath\n" +
+			"its root, at the commits or digests yak.lock pins, and rewrite yak.lock. A\n" +
+			"dependency yak.lock does not pin yet, or whose ref changed, is fetched at\n" +
+			"the commit its ref names now.\n\n" +
 			"--update resolves the refs of the dependencies it names again, or of\n" +
 			"every one when it names none.",
 		RunE: func(cmd *cobra.Command, args []string) error {

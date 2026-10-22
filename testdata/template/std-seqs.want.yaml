@@ -106,6 +106,14 @@ quantified:
   everyTrue: false
   someOfNone: false
   everyOfNone: true
+  someStops: true
+  everyStops: false
+lazy:
+  reversed: 2
+  sliced:
+    - 1
+  range:
+    - 9223372036854775806
 descending:
   - 8080
   - 443

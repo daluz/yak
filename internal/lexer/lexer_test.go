@@ -68,9 +68,16 @@ func TestQuotedStrings(t *testing.T) {
 		{"lone dollar", `"cost: $5"`, "cost: $5"},
 		{"line folding", "\"a\nb\"", "a b"},
 		{"blank line folding", "\"a\n\nb\"", "a\nb"},
+		{"folding drops trailing spaces", "\"a  \t\n  b\"", "a b"},
+		{"folding keeps an escaped space", "\"a\\ \n  b\"", "a  b"},
+		{"folding a CRLF break", "\"a\r\n  b\"", "a b"},
+		{"continuing over a CRLF break", "\"a\\\r\n  b\"", "ab"},
 		{"line continuation", "\"a\\\n  b\"", "ab"},
 		{"newline escape in single quotes", `'a\nb'`, "a\nb"},
 		{"raw single quoted", `r'a\nb'`, `a\nb`},
+		{"raw single quoted escapes its quote", `r'it\'s \d'`, `it's \d`},
+		{"raw double quoted escapes its quote", `r"say \"\d\""`, `say "\d"`},
+		{"raw keeps the other quote's escape", `r'\"'`, `\"`},
 	}
 
 	for _, tc := range tests {
@@ -145,11 +152,8 @@ func TestBlockScalars(t *testing.T) {
 		{"literal strip", "k: |-\n  a\n  b\n", "a\nb"},
 		{"literal keep", "k: |+\n  a\n\n", "a\n\n"},
 		{"literal preserves indent", "k: |\n  a\n    b\n", "a\n  b\n"},
-		{"folded", "k: >\n  a\n  b\n", "a b\n"},
-		{"folded blank line", "k: >\n  a\n\n  b\n", "a\nb\n"},
-		{"folded keeps more indented", "k: >\n  a\n   b\n", "a\n b\n"},
-		{"folded strip", "k: >-\n  a\n  b\n", "a b"},
 		{"explicit indent", "k: |2\n    a\n", "  a\n"},
+		{"explicit indent in a sequence item", "s:\n- a: |2\n      x\n", "  x\n"},
 		{"nested indentation", "a:\n  k: |\n    x\n", "x\n"},
 		{"ends at dedent", "a:\n  k: |\n    x\nb: 1\n", "x\n"},
 		{"raw literal", "k: r|\n  \\(.a)\n", "\\(.a)\n"},
@@ -274,14 +278,22 @@ func TestOperatorTokens(t *testing.T) {
 		{"inequality", "a: 1 != 2\n", []token.Kind{
 			token.Ident, token.Colon, token.Int, token.Ne, token.Int, token.EOF,
 		}},
-		{"a folded scalar is still a string", "a: >\n  text\n", []token.Kind{
-			token.Ident, token.Colon, token.String, token.EOF,
+		{"greater than after an operand", "a: n >3\n", []token.Kind{
+			token.Ident, token.Colon, token.Ident, token.Gt, token.Int, token.EOF,
 		}},
-		{"a folded scalar with indicators", "a: >-\n  text\n", []token.Kind{
-			token.Ident, token.Colon, token.String, token.EOF,
+		{"a binding named r", "a: r>3 and r|int\n", []token.Kind{
+			token.Ident, token.Colon, token.Ident, token.Gt, token.Int, token.Ident, token.Ident, token.Pipe,
+			token.Ident, token.EOF,
 		}},
-		{"a folded scalar with a comment", "a: > # why\n  text\n", []token.Kind{
-			token.Ident, token.Colon, token.String, token.EOF,
+		{"a block scalar after a tag", "a: !k8s.S |\n  text\n", []token.Kind{
+			token.Ident, token.Colon, token.Bang, token.Ident, token.Dots, token.Ident, token.String, token.EOF,
+		}},
+		{"a block scalar after then", "a: if c then |\n    text\n  else 1\n", []token.Kind{
+			token.Ident, token.Colon, token.Ident, token.Ident, token.Ident, token.String, token.Ident, token.Int,
+			token.EOF,
+		}},
+		{"a union after a field name", "a: x.y | z\n", []token.Kind{
+			token.Ident, token.Colon, token.Ident, token.Dots, token.Ident, token.Pipe, token.Ident, token.EOF,
 		}},
 		{"a literal scalar is still a string", "a: |\n  text\n", []token.Kind{
 			token.Ident, token.Colon, token.String, token.EOF,
@@ -427,7 +439,7 @@ func TestLexErrors(t *testing.T) {
 		{"unknown escape in single quotes", `a: '\q'`, "unknown escape sequence"},
 		{"doubled single quote", `a: 'it''s'`, `a doubled quote is not an escape; write \' instead`},
 		{"doubled double quote", `a: "say ""hi"""`, `a doubled quote is not an escape; write \" instead`},
-		{"own quote in a raw string", `a: r'it''s'`, "a raw string cannot contain its own quote"},
+		{"doubled quote in a raw string", `a: r'it''s'`, `a doubled quote is not an escape; write \' instead`},
 		{"tab indentation", "a:\n\tb: 1\n", "tabs may not be used for indentation"},
 		{"unterminated interpolation", `a: "\(.x`, "unterminated string interpolation"},
 		{"unterminated interpolation in a block scalar", "a: |\n  \\(.x\n", "unterminated string interpolation"},

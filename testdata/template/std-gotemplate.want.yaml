@@ -12,5 +12,7 @@ helpers: |-
   indented:
       a
       b
+    a
+    b
 no-data: plain text
 typed: 3/2.5

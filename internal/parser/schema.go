@@ -383,7 +383,8 @@ func (p *parser) parseTupleType() (ast.Node, error) {
 	return tuple, nil
 }
 
-// binds reports whether the items of a tuple t is, at any depth, bind a name.
+// binds reports whether t, or a tuple item at any depth inside it, binds a
+// name.
 func binds(t ast.Node) bool {
 	switch t := t.(type) {
 	case *ast.TypeBind:

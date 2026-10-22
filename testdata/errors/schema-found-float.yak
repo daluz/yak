@@ -1,0 +1,3 @@
+schema Port = {number: integer}
+
+web: !Port {number: 80.0}

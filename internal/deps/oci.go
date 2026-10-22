@@ -42,7 +42,7 @@ const (
 type BuildOptions struct {
 	// Tag tags the build, in place of the package's version.
 	Tag string
-	// Output is an OCI image layout to write instead of BuildDir: a
+	// Output is an OCI image layout to write instead of .yak/oci: a
 	// directory, or a tar archive when it ends in ".tar".
 	Output string
 	Log    io.Writer
@@ -114,7 +114,7 @@ func Build(pkg *module.Package, opts BuildOptions) error {
 	return nil
 }
 
-// Push uploads the build of pkg that BuildDir holds to ref, which is
+// Push uploads the build of pkg that .yak/oci holds to ref, which is
 // oci://REGISTRY/REPOSITORY[:TAG]. The tag is the package's version when ref
 // gives none, and picks the build to upload as well as naming the upload.
 func Push(pkg *module.Package, ref string, opts Options) error {

@@ -200,6 +200,45 @@ func TestSyncVendorsDependenciesOfDependencies(t *testing.T) {
 	}
 }
 
+func TestSyncWalksLocalPackages(t *testing.T) {
+	util := repo(t, map[string]string{"yak.pkg": "package:\n  name: util\n", "y.yakl": "v:: 1\n"})
+	pkg := project(t, "package:\n  name: app\ndependencies:\n  shared: ./shared\n")
+	write(t, pkg.Root(), map[string]string{
+		"shared/yak.pkg": "package:\n  name: shared\ndependencies:\n  util: " + source(util, "") + "\n",
+	})
+
+	if err := deps.Sync(pkg, deps.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	y, err := module.Resolve(filepath.Join(pkg.Root(), "shared", "x.yak"), []string{"util", "y"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(pkg.Root(), "vendor", filepath.FromSlash(key(util)), "y.yakl"); y != want {
+		t.Errorf("Resolve(util.y) from shared = %s, want %s", y, want)
+	}
+}
+
+func TestSyncRefusesTwoSourcesOfOneRepository(t *testing.T) {
+	lib := repo(t, map[string]string{"yak.pkg": "package:\n  name: lib\n"})
+	pkg := project(t, "package:\n  name: app\ndependencies:\n  a: "+source(lib, "")+"\n  b: "+source(lib, ".git")+"\n")
+
+	err := deps.Sync(pkg, deps.Options{})
+	if err == nil || !strings.Contains(err.Error(), "depend on one source of a repository") {
+		t.Errorf("error = %v, want the two sources refused", err)
+	}
+}
+
+func TestSyncRefusesAMissingDirectory(t *testing.T) {
+	lib := repo(t, map[string]string{"yak.pkg": "package:\n  name: lib\n"})
+	pkg := project(t, "package:\n  name: app\ndependencies:\n  lib: "+source(lib, "//nope")+"\n")
+
+	err := deps.Sync(pkg, deps.Options{})
+	if err == nil || !strings.Contains(err.Error(), "holds no nope") {
+		t.Errorf("error = %v, want the missing directory refused", err)
+	}
+}
+
 func TestSyncRefusesTwoRefsOfOneRepository(t *testing.T) {
 	util := repo(t, map[string]string{"yak.pkg": "package:\n  name: util\n"})
 	git(t, util, "tag", "v1")
@@ -273,6 +312,9 @@ func TestAddLeavesYakPkgAloneOnFailure(t *testing.T) {
 	}
 	if got := read(t, pkg.Path); got != pkgfile {
 		t.Errorf("yak.pkg = %q, want it unchanged", got)
+	}
+	if _, err := os.Stat(filepath.Join(pkg.Root(), module.VendorDir, filepath.FromSlash(key(plain)))); err == nil {
+		t.Error("the refused repository is still vendored")
 	}
 }
 

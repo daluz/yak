@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/daluz/yak/internal/engine"
-	"github.com/daluz/yak/internal/module"
 	"github.com/daluz/yak/internal/schemaimport"
 )
 
@@ -74,7 +73,7 @@ func newSchemaImportCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&output, "output", "o", "",
-		"write the library to this file instead of standard output")
+		"write the library to this file instead of standard output, which - names")
 	cmd.Flags().StringVar(&format, "format", "",
 		"input format: "+strings.Join(schemaimport.Formats, ", ")+" (default: detected, the same for every file)")
 	return cmd
@@ -117,10 +116,6 @@ func newSchemaCheckCommand() *cobra.Command {
 				files, err := modulesAt(path)
 				if err != nil {
 					return err
-				}
-				if len(files) == 0 {
-					return fmt.Errorf("no %s templates or %s libraries beneath %s",
-						module.Ext, module.ExtLibrary, path)
 				}
 				for _, file := range files {
 					if err := engine.CheckSchemas(file); err != nil {

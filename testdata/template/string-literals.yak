@@ -1,3 +1,5 @@
+import std.strings
+
 # Every string form, with and without interpolation.
 who: "world"
 double: "hello"
@@ -30,13 +32,17 @@ literal-strip: |-
 literal-keep: |+
   kept blank line below
 
-folded-block: >
+## A folded block is a literal block passed through strings.fold.
+let paragraphs = |
   these lines
   become one
 
   this is a second paragraph
-folded-strip: >-
-  folded without a trailing newline
+let stripped = |-
+  folded without
+  a trailing newline
+folded-block: strings.fold(paragraphs)
+folded-strip: strings.fold(stripped)
 raw-block: r|
   \(untouched)
 indented-block: |
@@ -45,7 +51,7 @@ indented-block: |
 block-items:
   - |
     one
-  - >
+  - |
     two
   - |
     three

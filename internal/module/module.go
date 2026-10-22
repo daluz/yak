@@ -157,29 +157,33 @@ func (p *Package) IsContext(path string) bool {
 // FindPackage reads the nearest yak.pkg in dir or above it, and answers nil
 // when there is none.
 func FindPackage(dir string) (*Package, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
 	for {
-		path := filepath.Join(dir, PkgFile)
-		src, err := os.ReadFile(path)
-		if err == nil {
-			return ParsePackage(path, src)
+		if pkg, err := ReadPackage(dir); pkg != nil || err != nil {
+			return pkg, err
 		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("reading %s: %w", path, err)
-		}
-		parent := filepath.Join(dir, "..")
-		here, err := filepath.Abs(dir)
-		if err != nil {
-			return nil, err
-		}
-		above, err := filepath.Abs(parent)
-		if err != nil {
-			return nil, err
-		}
-		if here == above {
+		parent := filepath.Dir(abs)
+		if parent == abs {
 			return nil, nil
 		}
-		dir = parent
+		abs, dir = parent, filepath.Join(dir, "..")
 	}
+}
+
+// ReadPackage reads the yak.pkg in dir, and answers nil when there is none.
+func ReadPackage(dir string) (*Package, error) {
+	path := filepath.Join(dir, PkgFile)
+	src, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return ParsePackage(path, src)
 }
 
 // ParsePackage parses src as the yak.pkg at path.

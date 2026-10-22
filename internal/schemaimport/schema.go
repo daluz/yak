@@ -316,9 +316,9 @@ func (m *mapping) add(f field) {
 func (im *importer) inherited(merges []string, name, path string) *typ {
 	for _, merge := range slices.Backward(merges) {
 		if p := get(get(im.defs[merge], "properties"), name); p != nil {
-			warnings, regex := len(im.warnings), im.regex
+			warnings := len(im.warnings)
 			t := im.convert(p, path+"."+name, false)
-			im.warnings, im.regex = im.warnings[:warnings], regex || im.regex
+			im.warnings = im.warnings[:warnings]
 			return t
 		}
 	}
@@ -626,20 +626,20 @@ func (m *mapping) text(indent string) string {
 	b.WriteString("{\n")
 	inner := indent + "  "
 	for _, name := range m.merges {
-		b.WriteString(inner + "<<: " + name + ",\n")
+		fmt.Fprintf(&b, "%s<<: %s,\n", inner, name)
 	}
 	for _, f := range m.fields {
-		b.WriteString(inner + f.head() + " " + f.t.text(inner) + f.defaultText() + ",\n")
+		fmt.Fprintf(&b, "%s%s %s%s,\n", inner, f.head(), f.t.text(inner), f.defaultText())
 	}
 	if m.rest != nil {
-		b.WriteString(inner + "(string): " + m.rest.text(inner) + ",\n")
+		fmt.Fprintf(&b, "%s(string): %s,\n", inner, m.rest.text(inner))
 	}
 	return b.String() + indent + "}"
 }
 
 func (m *mapping) write(b *strings.Builder, indent string) {
 	for _, name := range m.merges {
-		b.WriteString(indent + "<<: " + name + "\n")
+		fmt.Fprintf(b, "%s<<: %s\n", indent, name)
 	}
 	for _, f := range m.fields {
 		writeMember(b, indent, f.head(), f.t, f.defaultText())
@@ -651,11 +651,11 @@ func (m *mapping) write(b *strings.Builder, indent string) {
 
 func writeMember(b *strings.Builder, indent, head string, t *typ, def string) {
 	if def == "" && t.block() {
-		b.WriteString(indent + head + "\n")
+		fmt.Fprintf(b, "%s%s\n", indent, head)
 		t.mapping.write(b, indent+"  ")
 		return
 	}
-	b.WriteString(indent + head + " " + t.text(indent) + def + "\n")
+	fmt.Fprintf(b, "%s%s %s%s\n", indent, head, t.text(indent), def)
 }
 
 func (f field) head() string {
@@ -682,10 +682,10 @@ func (im *importer) library(names []string) []byte {
 	for _, d := range im.schemas {
 		b.WriteString("\n")
 		if d.typ.block() {
-			b.WriteString("schema " + d.name + " =\n")
+			fmt.Fprintf(&b, "schema %s =\n", d.name)
 			d.typ.mapping.write(&b, "  ")
 		} else {
-			b.WriteString("schema " + d.name + " = " + d.typ.text("") + "\n")
+			fmt.Fprintf(&b, "schema %s = %s\n", d.name, d.typ.text(""))
 		}
 	}
 	return []byte(b.String())
