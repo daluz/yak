@@ -1,4 +1,5 @@
-// Command yak renders YAML templates written in the yak language.
+// Command yak renders configuration files from templates written in the yak
+// language.
 package main
 
 import (

@@ -1,6 +1,7 @@
 # AGENTS.md
 
-`yak` is a YAML templating language. Go module `github.com/daluz/yak`;
+`yak` is a templating language for structured configuration files (YAML,
+JSON, TOML and others). Go module `github.com/daluz/yak`;
 the CLI entry point is `cmd/yak`, and everything else lives under `internal/`
 (`token`, `lexer`, `parser`, `ast`, `eval`, `stdlib`, `module`, `deps`,
 `engine`, `render`, `ctxfile`, `schemaimport`, `yakfmt`, `yakspec`, `version`,

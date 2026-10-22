@@ -13,9 +13,10 @@ import (
 func NewRootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "yak",
-		Short: "Templatize YAML with a small, explicit language",
-		Long: "yak renders YAML templates written in a restricted, unambiguous\n" +
-			"dialect of YAML with string interpolation and relative references.",
+		Short: "Templatize structured configuration files with a small, explicit language",
+		Long: "yak renders YAML, JSON, TOML and other configuration files from\n" +
+			"templates written in a restricted, unambiguous dialect of YAML with\n" +
+			"string interpolation and relative references.",
 		Version:       version.Current,
 		SilenceUsage:  true,
 		SilenceErrors: true,

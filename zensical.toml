@@ -1,6 +1,6 @@
 [project]
 site_name = "yak"
-site_description = "A YAML templating language"
+site_description = "A templating language for structured configuration files"
 repo_url = "https://github.com/daluz/yak"
 repo_name = "daluz/yak"
 docs_dir = "docs"

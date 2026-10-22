@@ -4,9 +4,10 @@
   <img src="docs/assets/mascot.png" alt="yak's mascot, a shaggy brown yak" width="240">
 </p>
 
-`yak` templatizes YAML. It is similar in spirit to jsonnet, but the surface
-language is YAML itself, with the ambiguous parts removed and a small
-expression language added.
+`yak` _(/jæk/)_ templatizes structured configuration files (primarily YAML, but also
+JSON, TOML and others). It is similar in spirit to jsonnet, but the surface
+language is closer to YAML, with the ambiguous parts removed and an expression
+language added.
 
 ```yaml
 # app.yak
