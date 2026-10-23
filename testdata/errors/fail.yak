@@ -1,0 +1,4 @@
+let unused = fail("never read")
+env: "dev"
+debug: if .env == "dev" then true else fail("not taken")
+replicas: if .env == "prod" then 5 else fail("env \(.env) is not supported")

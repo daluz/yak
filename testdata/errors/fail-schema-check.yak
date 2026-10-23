@@ -1,0 +1,6 @@
+schema Port =
+  number: integer if (n) => n > 0 and n < 65536 or fail("port \(n) is out of range")
+
+schema Listener = Port | {number: integer}
+
+listener: !Listener {number: 70000}

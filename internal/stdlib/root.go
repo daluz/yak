@@ -19,7 +19,17 @@ func init() {
 		builtin("nempty", valueParam, nempty),
 		builtin("prune", valueParam, prune),
 		builtin("render", append(params("value"), optional("format", &ast.Null{})), renderValue),
+		builtin("fail", params("message"), fail),
 	}})
+}
+
+// fail stops the render with message, reported at the message itself.
+func fail(c call) (eval.Value, error) {
+	msg, err := c.str(0)
+	if err != nil {
+		return nil, err
+	}
+	return nil, eval.Errorf(c.pos(0), "%s", msg)
 }
 
 // size counts the items of a sequence, the entries of a mapping, or the

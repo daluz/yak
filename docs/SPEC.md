@@ -45,6 +45,7 @@ made explicit, and a small expression language is added on top.
     - [When values are checked](#when-values-are-checked)
     - [Schemas in modules](#schemas-in-modules)
 - [Standard library](#standard-library)
+    - [Failing](#failing)
 - [Missing values](#missing-values)
 - [Operators](#operators)
     - [Arithmetic](#arithmetic)
@@ -1137,6 +1138,25 @@ import str = std.strings
 
 Some modules are refused or restricted in [strict mode](#strict-mode).
 [STDLIB.md](STDLIB.md) documents every built-in and every module.
+
+### Failing
+
+`fail(message)` stops the render with `message`, reported at the position of
+its argument. It is an ordinary call, evaluated lazily like any other value,
+so it fails only when something reads it: in the branch of a conditional
+that is taken, the right side of an `and` or `or` that is reached, or a
+binding or field that is used. A binding that nothing reads never fails, so
+`fail` is no assertion that runs on its own:
+
+```yaml
+let check = fail("never reported")   # never read
+replicas: if $$.env == "prod" then 5 else fail("only prod is supported")
+```
+
+A `fail` in the check of a schema stops the render even when the check
+belongs to one alternative of a union, rather than moving on to the next,
+and under `--skip-schema-checks` the check, and the `fail` in it, does not
+run.
 
 ## Missing values
 

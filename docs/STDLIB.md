@@ -43,6 +43,7 @@ same as leaving the argument out. A binding of the same name
 | `nempty(value)` | `null` when `empty(value)`, and the value itself otherwise. |
 | `prune(value)` | `value` without the items and entries that are empty, at any depth. |
 | `render(value, format = null)` | `value` as a string in the output format `format`, or in YAML when there is none. |
+| `fail(message)` | Nothing: it stops the render with `message`. |
 
 `size` counts items, entries, or characters:
 
@@ -89,6 +90,20 @@ a newline as the file would. Unlike a null document, a `null` value is not
 left out: `render(null)` is `"null\n"`. Hidden and `:?` entries are left out,
 and a function in `value`, or a value the format cannot hold such as a
 sequence in TOML, is an error.
+
+`fail` reports `message` as an error at the position of its argument, so a
+template can refuse what it cannot render and say why:
+
+```yaml
+replicas: if $$.env == "prod" then $$.replicas else fail("replicas is only set in prod")
+
+schema Service =
+  port: integer if (n) => n > 0 and n < 65536 or fail("port must be in 1..65535")
+```
+
+`message` has to be a string; [interpolation](SPEC.md#every-string-interpolates) builds one
+from other values. Like any value, a call to `fail` only stops the render
+when it is [evaluated](SPEC.md#failing).
 
 The [conversions](#conversions) and the operations on
 [sequences](#sequences) and [mappings](#mappings) are built-ins as well.
