@@ -1,0 +1,1 @@
+semver-bad-version.yak:2:17: "bump" needs a version such as "1.2.3", found "1.2"

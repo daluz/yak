@@ -1,0 +1,23 @@
+let services = [
+  {name: "web", tier: 2, port: 443},
+  {name: "api", tier: 1, port: 8080},
+  {name: "jobs", tier: 2, port: 80},
+  {name: "auth", tier: 1, port: 8443},
+]
+
+operators:
+  less: [1, 2] < [1, 3]
+  firstDiffers: [1, "a"] < [2, 3]
+  shorterFirst: [1] < [1, 0]
+  empty: [] < [0]
+  equal: [1, 2] <= [1, 2]
+  greater: ["b"] > ["a", "z"]
+  atLeast: [2, 0] >= [1, 9]
+  nested: [[1, 2], 3] < [[1, 3], 0]
+  mixedNumbers: [1, 2.5] < [1.0, 3]
+  lazy: [1, 1 / 0] < [2, 0]
+sorted:
+  byTierThenName: [s.name for s in sort(services, (s) => [s.tier, s.name])]
+  pairs: sort([[2, "b"], [1, "z"], [2, "a"], [1]])
+lowest: min(services, (s) => [s.tier, -s.port]).name
+highest: max(services, (s) => [s.tier, s.name]).name

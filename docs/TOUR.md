@@ -630,14 +630,16 @@ error that says so:
 yak: app.yak:2:11: a subtraction needs whitespace on both sides of its "-"
 ```
 
-Comparisons answer booleans, and `in` asks whether a sequence holds an item, a
-mapping holds a key, or a string holds a substring. `and`, `or` and `not` are
-spelled as words. Given a context of
+Comparisons answer booleans. Sequences are ordered item by item, by the first
+items that differ. `in` asks whether a sequence holds an item, a mapping holds
+a key, or a string holds a substring. `and`, `or` and `not` are spelled as
+words. Given a context of
 `{env: prod, roles: [web, worker], url: https://shop.example.com}`:
 
 ```yaml
 prod: $$.env == "prod"
 big: 2 < 10
+older: [1, 9, 4] < [1, 10, 0]
 web: "web" in $$.roles
 secure: "https://" in $$.url
 legacy: $$.env not in ["dev", "staging"]
@@ -1109,6 +1111,28 @@ countdown:
   - 1
 ```
 
+A key that answers a sequence sorts by several things at once, here by
+weight and then by name:
+
+```yaml
+let services = [
+  {name: "web", weight: 2},
+  {name: "api", weight: 1},
+  {name: "jobs", weight: 2},
+]
+
+ranked: [s.name for s in sort(services, (s) => [s.weight, s.name])]
+```
+
+renders as:
+
+```yaml
+ranked:
+  - api
+  - jobs
+  - web
+```
+
 ### Mappings
 
 `keys`, `values`, `items`, `pick`, `omit`, `visible` and `merge` work on
@@ -1249,7 +1273,8 @@ metadata:
 Beyond the built-ins of section 16, the standard library lives in modules
 whose paths begin with `std`: `std.strings`, `std.json`, `std.yaml`,
 `std.base64`, `std.hash`, `std.regex`, `std.math`, `std.path`, `std.files`,
-`std.gotemplate`, `std.cidr`, `std.random` and `std.env`. Given this context:
+`std.gotemplate`, `std.cidr`, `std.semver`, `std.random` and `std.env`. Given
+this context:
 
 ```yaml
 name: "  Shop  "

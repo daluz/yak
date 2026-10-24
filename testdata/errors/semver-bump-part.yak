@@ -1,0 +1,2 @@
+import std.semver
+ok: semver.bump("1.2.3", "build")

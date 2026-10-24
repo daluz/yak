@@ -1,0 +1,2 @@
+import std.semver
+ok: semver.satisfies("1.2.3", "^1 || ")

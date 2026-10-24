@@ -1,0 +1,27 @@
+operators:
+  less: true
+  firstDiffers: true
+  shorterFirst: true
+  empty: true
+  equal: true
+  greater: true
+  atLeast: true
+  nested: true
+  mixedNumbers: true
+  lazy: true
+sorted:
+  byTierThenName:
+    - api
+    - auth
+    - jobs
+    - web
+  pairs:
+    - - 1
+    - - 1
+      - z
+    - - 2
+      - a
+    - - 2
+      - b
+lowest: auth
+highest: web

@@ -1,0 +1,1 @@
+semver-bad-constraint.yak:2:31: "satisfies" cannot read "<2.0.0.0" in the constraint ">=1.0 <2.0.0.0"

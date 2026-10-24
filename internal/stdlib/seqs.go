@@ -1,6 +1,7 @@
 package stdlib
 
 import (
+	"errors"
 	"sort"
 
 	"github.com/daluz/yak/internal/ast"
@@ -61,8 +62,7 @@ func sortSeq(c call) (eval.Value, error) {
 }
 
 // sortedBy answers the items of a in the order of keys, keeping items whose
-// keys are equal in the order they had. Only numbers and strings have an
-// order, and they cannot be mixed, as for "<".
+// keys are equal in the order they had. Keys are ordered as "<" orders them.
 func sortedBy(c call, a *eval.Array, keys []eval.Value) (eval.Value, error) {
 	order := make([]int, len(keys))
 	for i := range order {
@@ -76,6 +76,9 @@ func sortedBy(c call, a *eval.Array, keys []eval.Value) (eval.Value, error) {
 		}
 		return cmp < 0
 	})
+	if _, positioned := errors.AsType[*eval.Error](failed); positioned {
+		return nil, failed
+	}
 	if failed != nil {
 		return nil, c.errorf(0, "cannot order its items: %s", failed.Error())
 	}
@@ -255,6 +258,9 @@ func extreme(want int) func(call) (eval.Value, error) {
 		best := 0
 		for i := 1; i < len(keys); i++ {
 			cmp, err := eval.Compare(keys[i], keys[best])
+			if _, positioned := errors.AsType[*eval.Error](err); positioned {
+				return nil, err
+			}
 			if err != nil {
 				return nil, c.errorf(0, "cannot order its items: %s", err.Error())
 			}

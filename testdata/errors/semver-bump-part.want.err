@@ -1,0 +1,1 @@
+semver-bump-part.yak:2:26: "bump" needs "major", "minor" or "patch", found "build"

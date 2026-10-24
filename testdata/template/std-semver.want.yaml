@@ -1,0 +1,103 @@
+releases:
+  - 1.9.0
+  - v1.10.0
+  - 1.2.3
+  - 2.0.0-rc.1
+  - 1.9.4
+  - 0.9.0
+isValid:
+  plain: true
+  prefixed: true
+  full: true
+  partial: false
+  leadingZero: false
+  leadingZeroPrerelease: false
+  emptyPrerelease: false
+  upperV: false
+parse:
+  full:
+    major: 1
+    minor: 2
+    patch: 3
+    prerelease:
+      - rc
+      - 1
+    build:
+      - build
+      - "5"
+  release:
+    major: 10
+    minor: 20
+    patch: 30
+    prerelease: []
+    build: []
+compare:
+  less: -1
+  equal: 0
+  prerelease: -1
+sort:
+  releases:
+    - 0.9.0
+    - 1.2.3
+    - 1.9.0
+    - 1.9.4
+    - v1.10.0
+    - 2.0.0-rc.1
+  prereleases:
+    - 1.0.0-alpha
+    - 1.0.0-alpha.1
+    - 1.0.0-alpha.beta
+    - 1.0.0-beta
+    - 1.0.0-beta.2
+    - 1.0.0-beta.11
+    - 1.0.0-rc.1
+    - 1.0.0
+  stable:
+    - 0.1.0
+    - 1.0.0+b
+    - 1.0.0+a
+  empty: []
+min:
+  all: 0.9.0
+  caret: 1.2.3
+  none: null
+max:
+  all: 2.0.0-rc.1
+  caret: v1.10.0
+  tilde: 1.9.4
+  prerelease: 2.0.0-rc.1
+  none: null
+bump:
+  major: 2.0.0
+  minor: v1.3.0
+  patch: 1.2.4
+  patchOfPrerelease: 1.2.3
+  minorOfPrerelease: 1.3.0
+  minorOfPatchPrerelease: 1.3.0
+satisfies:
+  exact: true
+  exactPrefixed: true
+  notEqual: false
+  partial: true
+  partialX: false
+  any: true
+  range: true
+  rangeComma: false
+  spacedOperator: true
+  greaterPartial: false
+  greaterPartialNext: true
+  atMostPartial: true
+  tilde: true
+  tildeNext: false
+  tildeMajor: true
+  caret: true
+  caretNext: false
+  caretZero: false
+  caretZeroZero: false
+  caretZeroPartial: true
+  or: true
+  prereleaseExcluded: false
+  prereleaseBelowRelease: false
+  prereleaseNamed: true
+  prereleaseOtherRelease: false
+  prereleaseCaret: true

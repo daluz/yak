@@ -1,0 +1,1 @@
+semver-bad-item.yak:2:16: "max" needs a sequence of versions, found "1.0" at index 1

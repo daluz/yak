@@ -1,0 +1,1 @@
+seqs-sort-sequences-mixed.yak:1:10: "sort" cannot order its items: cannot compare string with integer at index 1

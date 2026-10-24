@@ -1,0 +1,1 @@
+semver-empty-range.yak:2:31: "satisfies" has an empty range in the constraint "^1 || "

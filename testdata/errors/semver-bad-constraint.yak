@@ -1,0 +1,2 @@
+import std.semver
+ok: semver.satisfies("1.2.3", ">=1.0 <2.0.0.0")

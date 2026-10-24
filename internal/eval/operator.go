@@ -100,6 +100,9 @@ func evalBinary(node *ast.Binary, env *Env) (Value, error) {
 		return Bool(found == (node.Op == token.In)), nil
 	}
 	c, err := Compare(x, y)
+	if _, positioned := errors.AsType[*Error](err); positioned {
+		return nil, err
+	}
 	if err != nil {
 		return nil, errorAt(node.OpPos, err)
 	}
@@ -345,9 +348,16 @@ func Equal(x, y Value) (bool, error) {
 }
 
 // Compare orders two values for "<", answering a negative number when x sorts
-// first, and fails where "<" would. Numbers and strings are the only things
-// with an order.
+// first, and fails where "<" would. Numbers, strings and sequences are the
+// only things with an order. Sequences are ordered by their first items that
+// differ, so the items after those are never evaluated, and a sequence that
+// runs out first sorts first.
 func Compare(x, y Value) (int, error) {
+	if a, ok := x.(*Array); ok {
+		if b, ok := y.(*Array); ok {
+			return compareArrays(a, b)
+		}
+	}
 	if a, ok := x.(Int); ok {
 		if b, ok := y.(Int); ok {
 			return cmp.Compare(a, b), nil
@@ -371,6 +381,30 @@ func Compare(x, y Value) (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("cannot compare %s with %s", x.TypeName(), y.TypeName())
+}
+
+func compareArrays(a, b *Array) (int, error) {
+	for i := 0; i < a.Len() && i < b.Len(); i++ {
+		x, err := a.Items()[i].Value.Value()
+		if err != nil {
+			return 0, err
+		}
+		y, err := b.Items()[i].Value.Value()
+		if err != nil {
+			return 0, err
+		}
+		c, err := Compare(x, y)
+		if err != nil {
+			if _, positioned := errors.AsType[*Error](err); !positioned {
+				err = fmt.Errorf("%w at index %d", err, i)
+			}
+			return 0, err
+		}
+		if c != 0 {
+			return c, nil
+		}
+	}
+	return cmp.Compare(a.Len(), b.Len()), nil
 }
 
 // member answers "x in y", which op names for its errors. A sequence holds x

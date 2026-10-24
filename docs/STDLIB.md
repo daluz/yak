@@ -24,6 +24,7 @@ name a template uses.
     - [`std.path`](#stdpath)
     - [`std.random`](#stdrandom)
     - [`std.regex`](#stdregex)
+    - [`std.semver`](#stdsemver)
     - [`std.strings`](#stdstrings)
     - [`std.yaml`](#stdyaml)
 
@@ -156,7 +157,10 @@ privileged: some($$.ports, (p) => p < 1024)
 | `every(values, predicate = null)` | Whether `predicate` answers `true` for every item, or every item is `true`. |
 
 `sort`, `min` and `max` order the items, or what `key` answers for them, as
-`<` does, so those must be all numbers or all strings. Sorting is stable, and
+`<` does, so those must be all numbers, all strings or all sequences. A key
+that answers a sequence orders by several things at once:
+`sort($$.services, (s) => [s.tier, s.name])` sorts by tier, and by name within
+a tier. Sorting is stable, and
 of several least or greatest items `min` and `max` answer the first. `min`
 and `max` of `[]` are an error. `unique` compares items with `==`, so they
 must be scalars. `sum` answers an integer unless a float is among the
@@ -465,6 +469,75 @@ Patterns are RE2, which matches in linear time, and match anywhere unless
 anchored with `^` and `$`. A `replacement` names a group as `$1` or
 `${name}`, and `$$` writes a dollar sign. Write patterns as raw strings, so
 that an escaped parenthesis such as `\(` is not read as an interpolation.
+
+### `std.semver`
+
+```yaml
+import std.semver
+
+next: semver.bump($$.version, "minor")  # "1.3.0" for "1.2.3"
+latest: semver.max($$.releases)  # "1.10.0", where the built-in max answers "1.9.0"
+pick: semver.max($$.releases, "^1.2")
+legacy: semver.satisfies($$.version, ">=1.0 <2.0")
+```
+
+| Call | Answer |
+| --- | --- |
+| `isValid(value)` | Whether the string `value` is a version. |
+| `parse(value)` | A mapping of the `major`, `minor` and `patch` integers, and the `prerelease` and `build` sequences of identifiers. |
+| `compare(a, b)` | `-1`, `0` or `1` as `a` comes before, with or after `b`. |
+| `sort(values)` | The versions from lowest to highest. |
+| `min(values, constraint = null)` | The lowest version, of those that meet `constraint` when there is one. |
+| `max(values, constraint = null)` | The highest version, of those that meet `constraint` when there is one. |
+| `bump(value, part)` | The next release that changes the `"major"`, `"minor"` or `"patch"` part of `value`. |
+| `satisfies(value, constraint)` | Whether `value` meets `constraint`. |
+
+Versions are strings written in [Semantic Versioning
+2.0.0](https://semver.org), such as `"1.2.3-rc.1+build.5"`, and may start with
+a lowercase `v`. Their parts may not have leading zeros, and must fit in an
+integer. A string that is not a version is an error, also in a sequence.
+`sort`, `min` and `max` answer the strings they were handed,
+and `bump` keeps the `v` of `value`.
+
+Versions are ordered by precedence: by `major`, `minor` and `patch`, and then
+with a prerelease before its release, so `"1.0.0-rc.1"` comes before
+`"1.0.0"`. Prerelease identifiers are compared one by one, numeric ones by
+value and before the others, which are in ASCII order. The `v` and the build
+metadata are left out, so `compare("v1.0.0+a", "1.0.0+b")` is `0`, and
+`sort` keeps such versions in the order they had. `min` and `max` answer the
+first of several equal versions. Without a `constraint` they are an error for
+`[]`; with one they answer `null` when no version meets it.
+
+`bump` adds one to `part`, sets the parts after it to zero, and drops the
+prerelease and the build metadata, so `bump("1.2.3-rc.1", "minor")` is
+`"1.3.0"`. A prerelease whose parts after `part` are already zero is a
+prerelease of the release `bump` is after, so `part` stays as it is:
+`bump("1.3.0-rc.1", "minor")` is `"1.3.0"` and `bump("1.2.3-rc.1", "patch")`
+is `"1.2.3"`.
+
+A constraint is one or more ranges separated by `||`, met when any of them is.
+A range is one or more comparators separated by spaces or commas, met when all
+of them are:
+
+| Comparator | Meets |
+| --- | --- |
+| `1.2.3` or `=1.2.3` | Exactly that version. |
+| `!=1.2.3` | Any other version. |
+| `>1.2.3`, `>=1.2.3`, `<1.2.3`, `<=1.2.3` | The versions that compare so with it. |
+| `~1.2.3` | `>=1.2.3 <1.3.0`, so patch releases. |
+| `^1.2.3` | `>=1.2.3 <2.0.0`, so releases that keep the first part that is not zero: `^0.2.3` is `>=0.2.3 <0.3.0` and `^0.0.3` is `>=0.0.3 <0.0.4`. |
+
+A comparator other than `!=` may leave out the patch, or the minor and the
+patch, or write them as `x`, `X` or `*`, which stands for every value of them.
+`1.2` and `1.2.x` are `>=1.2.0 <1.3.0`, `>1.2` is `>=1.3.0`, `<=1.2` is
+`<1.3.0`, `~1` is `>=1.0.0 <2.0.0`, `^0.0` is `>=0.0.0 <0.1.0`, and `*` is
+any version.
+
+A prerelease meets a range only when one of its comparators names a
+prerelease of the same `major.minor.patch`. So `"2.0.0-rc.2"` meets
+`>=2.0.0-rc.1`, but not `>=1.0.0` or `<2.0.0`, and `"2.1.0-rc.1"` does not
+meet `>=2.0.0-rc.1`. Hyphen ranges such as `1.2 - 1.4` are not supported, and
+a constraint that cannot be read is an error.
 
 ### `std.strings`
 
