@@ -1,0 +1,1 @@
+files-glob-malformed.yak:3:19: "glob" has a malformed pattern "files/[a"

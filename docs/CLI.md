@@ -11,18 +11,18 @@ This describes the tool that renders templates. The language is specified in
 
 | Command | Purpose |
 | --- | --- |
-| `yak render PATH` | Render one template, every template in a directory, or a remote package. |
-| `yak fmt [PATH...]` | Format templates and libraries. |
-| `yak package init [DIR]` | Make a directory a package. |
-| `yak package add SOURCE` | Add a dependency. Also `yak add`. |
-| `yak package remove NAME` | Remove a dependency. Also `yak remove`. |
-| `yak package sync` | Vendor the remote dependencies and write `yak.lock`. Also `yak sync`. |
-| `yak package build` | Build the package as an OCI artifact. |
-| `yak package push REF` | Push the build to an OCI registry. |
-| `yak schema check PATH...` | Check the schemas of templates and libraries without rendering them. |
-| `yak schema import FILE...` | Translate CustomResourceDefinitions, JSON Schemas or OpenAPI documents into a library of schemas. |
-| `yak spec init [FILE]` | Write a spec file to start from. |
-| `yak spec render FILE` | Render the packages a spec file names. |
+| [`yak render PATH`](#yak-render) | Render one template, every template in a directory, or a remote package. |
+| [`yak fmt [PATH...]`](#yak-fmt) | Format templates and libraries. |
+| [`yak package init [DIR]`](#yak-package-init) | Make a directory a package. |
+| [`yak package add SOURCE`](#yak-add) | Add a dependency. Also `yak add`. |
+| [`yak package remove NAME`](#yak-remove) | Remove a dependency. Also `yak remove`. |
+| [`yak package sync`](#yak-sync) | Vendor the remote dependencies and write `yak.lock`. Also `yak sync`. |
+| [`yak package build`](#yak-package-build) | Build the package as an OCI artifact. |
+| [`yak package push REF`](#yak-package-push) | Push the build to an OCI registry. |
+| [`yak schema check PATH...`](#yak-schema-check) | Check the schemas of templates and libraries without rendering them. |
+| [`yak schema import FILE...`](#yak-schema-import) | Translate CustomResourceDefinitions, JSON Schemas or OpenAPI documents into a library of schemas. |
+| [`yak spec init [FILE]`](#yak-spec-init) | Write a spec file to start from. |
+| [`yak spec render FILE`](#yak-spec-render) | Render the packages a spec file names. |
 | `yak completion SHELL` | Write a shell completion script. |
 | `yak help [command]` | Describe a command. |
 
@@ -244,8 +244,9 @@ first column below, never one of the others it is known as.
 | `jsonl` | `ndjson`                      | many      | no       |
 | `toml`  |                               | one       | yes      |
 
-Key order, hidden fields and the all-or-nothing rule are the same in every
-format, and comments reach every format that can hold them.
+Every format preserves source key order, except that TOML groups plain keys
+before sub-tables. Hidden fields and the all-or-nothing rule are the same in
+every format, and comments reach every format that can hold them.
 
 `kyaml` is the Kubernetes dialect of YAML from KEP-5295: flow style
 throughout, every string value double-quoted, keys bare unless they could be

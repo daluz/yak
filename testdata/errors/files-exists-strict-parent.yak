@@ -1,0 +1,4 @@
+# Strict mode checks only beneath the directory of the file calling exists.
+import std.files
+
+here: files.exists("../template/files/motd.txt")

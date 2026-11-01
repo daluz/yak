@@ -275,6 +275,40 @@ func TestFilesStrictRefusesEscapingSymlink(t *testing.T) {
 	}
 }
 
+func TestFilesOnlyFilesFollowsSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "outside.txt"), []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "sub", "d"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sub", "d", "in.txt"), []byte("in"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("in.txt", filepath.Join(dir, "sub", "d", "inside.txt")); err != nil {
+		t.Skipf("cannot create a symbolic link: %v", err)
+	}
+	if err := os.Symlink(filepath.Join("..", "..", "outside.txt"), filepath.Join(dir, "sub", "d", "escape.txt")); err != nil {
+		t.Fatal(err)
+	}
+	for _, src := range []string{
+		"import std.files\nv: files.list(\"d\", onlyFiles = true)\n",
+		"import { std.files, std.strings }\nv: [strings.trimPrefix(s, \"d/\") for s in files.glob(\"d/*\", onlyFiles = true)]\n",
+	} {
+		if got, err := renderFile(t, dir, "sub/t.yak", src, false); err != nil || got != "v:\n  - in.txt\n  - inside.txt\n" {
+			t.Errorf("strict got %q, %v, want the escaping link left out", got, err)
+		}
+		if got, err := renderFile(t, dir, "sub/t.yak", src, true); err != nil || got != "v:\n  - escape.txt\n  - in.txt\n  - inside.txt\n" {
+			t.Errorf("non-strict got %q, %v, want every link followed", got, err)
+		}
+	}
+	src := "import std.files\nv: files.exists(\"d/escape.txt\")\n"
+	if _, err := renderFile(t, dir, "sub/t.yak", src, false); err == nil || !strings.Contains(err.Error(), "escapes") {
+		t.Errorf("strict exists error = %v, want the link to be refused", err)
+	}
+}
+
 func TestRandomWhenNotStrict(t *testing.T) {
 	src := `import { std.random, std.strings }
 same: random.randint(4, 4)

@@ -1,0 +1,4 @@
+# Strict mode matches only beneath the directory of the file calling glob.
+import std.files
+
+names: files.glob("../template/**")

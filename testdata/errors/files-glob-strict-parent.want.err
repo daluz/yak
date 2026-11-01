@@ -1,0 +1,1 @@
+files-glob-strict-parent.yak:4:19: "glob" cannot match "../template/**" in strict mode, which reads only beneath the directory of the file calling it; render with --strict=false to read anywhere

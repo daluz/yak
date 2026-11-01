@@ -1,0 +1,1 @@
+files-exists-strict-parent.yak:4:20: "exists" cannot check "../template/files/motd.txt" in strict mode, which reads only beneath the directory of the file calling it; render with --strict=false to read anywhere

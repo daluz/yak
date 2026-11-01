@@ -1,0 +1,23 @@
+import std.files
+
+## Hidden entries are listed too; "sub" is a directory.
+list:
+  all: files.list("files/listing")
+  onlyFiles: files.list("files/listing", onlyFiles = true)
+glob:
+  top: files.glob("files/listing/*")
+  topFiles: files.glob("files/listing/*", onlyFiles = true)
+  ## "**" matches any number of directories, none included.
+  deep: files.glob("files/listing/**/*.txt")
+  under: files.glob("files/listing/**")
+  readable: [files.read(p) for p in files.glob("files/listing/sub/*.txt")]
+  none: files.glob("files/listing/*.yaml")
+isDir:
+  sub: files.isDir("files/listing/sub")
+  file: files.isDir("files/listing/a.txt")
+  missing: files.isDir("files/absent")
+exists:
+  file: files.exists("files/listing/a.txt")
+  dir: files.exists("files/listing/sub")
+  missing: files.exists("files/absent")
+  underFile: files.exists("files/listing/a.txt/x")

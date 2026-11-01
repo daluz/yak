@@ -6,7 +6,11 @@
 
 This tour introduces yak one feature at a time, from a file that looks like
 ordinary YAML to a pair of Kubernetes manifests built from layered
-configuration. Every example is a complete template you can render yourself.
+configuration. Blocks are labeled as templates, context files, libraries,
+package files, expected output, or intentional errors. Each example is
+independent: save its input files in a separate directory, keeping any
+subdirectories shown in their names. Context files are passed
+with `-c`; expected output is shown for comparison and is not an input file.
 For the precise rules, [SPEC.md](SPEC.md) defines the language and
 [CLI.md](CLI.md) documents the command line tool.
 
@@ -45,6 +49,8 @@ $ go install github.com/daluz/yak/cmd/yak@latest
 
 A yak template is a `.yak` file. Save this as `hello.yak`:
 
+**Template: `hello.yak`** <!-- example: hello template hello.yak -->
+
 ```yaml
 name: "web"
 replicas: 2
@@ -69,6 +75,8 @@ go between those parentheses, and anywhere else a value can be written.
 yak has the values YAML has: strings, integers, floats, booleans, `null`,
 mappings and sequences.
 
+**Template: `values.yak`** <!-- example: values template values.yak -->
+
 ```yaml
 name: "web"
 port: 8080
@@ -80,21 +88,32 @@ owner: null
 The first rule to learn: **strings are always quoted**. An unquoted value is
 an expression, so forgetting the quotes is an error:
 
+**Intentional error: `values.yak`** <!-- example: unquoted error values.yak -->
+
 ```yaml
 name: web
 ```
 
 ```console
 $ yak render values.yak
+```
+
+<!-- example: unquoted diagnostic values.yak -->
+
+```console
 yak: values.yak:1:7: unknown identifier "web"; strings must be quoted, and no "let" binding is in scope here
 ```
 
 Only `true` and `false` are booleans. The other words YAML accepts are errors
 that say what to write instead:
 
+**Intentional error: `values.yak`** <!-- example: boolean error values.yak -->
+
 ```yaml
 enabled: yes
 ```
+
+<!-- example: boolean diagnostic values.yak -->
 
 ```console
 yak: values.yak:1:10: "yes" is not a boolean in yak; write true, or quote it to make it a string
@@ -109,6 +128,8 @@ The features in the rest of this tour replace them, and a tag returns in
 Double and single quotes mean the same thing, as in Python. Both process
 backslash escapes, so pick whichever quote the text does not contain:
 
+**Template: `app.yak`** <!-- example: quotes template app.yak -->
+
 ```yaml
 double: "a tab:\there"
 single: 'caf\u00e9'
@@ -117,6 +138,8 @@ quoted: 'say "hi"'
 ```
 
 renders as:
+
+**Expected output** <!-- example: quotes output app.yak -->
 
 ```yaml
 double: "a tab:\there"
@@ -130,6 +153,8 @@ quoted: say "hi"
 Every string, in either quote, can hold an expression in `\( ... )`. Any
 expression works there, not only a reference:
 
+**Template: `app.yak`** <!-- example: interpolation template app.yak -->
+
 ```yaml
 service: "web"
 port: 8080
@@ -140,6 +165,8 @@ literal: "\\(not interpolated)"
 ```
 
 renders as:
+
+**Expected output** <!-- example: interpolation output app.yak -->
 
 ```yaml
 service: web
@@ -158,11 +185,15 @@ variables pass through untouched. Writing `\\(` gives a literal `\(`.
 An `r` prefix turns off both interpolation and escapes, which suits text full
 of backslashes, such as a regular expression:
 
+**Template: `app.yak`** <!-- example: raw template app.yak -->
+
 ```yaml
 pattern: r"^\(\d+\)$"
 ```
 
 renders as:
+
+**Expected output** <!-- example: raw output app.yak -->
 
 ```yaml
 pattern: ^\(\d+\)$
@@ -176,6 +207,8 @@ is `say "\d"`.
 YAML's literal block scalar, `|`, keeps its line breaks as usual. It
 interpolates like any other string, and `r|` makes a raw one:
 
+**Template: `app.yak`** <!-- example: block-scalars template app.yak -->
+
 ```yaml
 service: "web"
 notes: |
@@ -186,6 +219,8 @@ script: r|
 ```
 
 renders as:
+
+**Expected output** <!-- example: block-scalars output app.yak -->
 
 ```yaml
 service: web
@@ -205,6 +240,8 @@ lines of a `|` block instead.
 Mappings and sequences are written as in YAML, in block style or in flow
 style:
 
+**Template: `app.yak`** <!-- example: collections template app.yak -->
+
 ```yaml
 service:
   name: "web"
@@ -218,6 +255,8 @@ service:
 A key is a bare name, a quoted string, which interpolates like any other, or
 an expression in parentheses that gives a string:
 
+**Template: `app.yak`** <!-- example: keys template app.yak -->
+
 ```yaml
 plain-key: 1
 "a key with spaces": 2
@@ -227,6 +266,8 @@ for: 5
 ```
 
 renders as:
+
+**Expected output** <!-- example: keys output app.yak -->
 
 ```yaml
 plain-key: 1
@@ -245,6 +286,8 @@ You have already seen `.name`, which reads a field of the mapping it is
 written in. Each extra dot walks one mapping outward, and `$` starts from the
 root of the document:
 
+**Template: `app.yak`** <!-- example: references template app.yak -->
+
 ```yaml
 name: "shop"
 metadata:
@@ -256,6 +299,8 @@ metadata:
 ```
 
 renders as:
+
+**Expected output** <!-- example: references output app.yak -->
 
 ```yaml
 name: shop
@@ -272,6 +317,8 @@ and `...name` of the grandparent. Sequences do not count as a level, so `..`
 inside a sequence item still reaches the mapping that holds the sequence.
 Fields and indices chain, and a negative index counts from the end:
 
+**Template: `app.yak`** <!-- example: indices template app.yak -->
+
 ```yaml
 name: "shop"
 ports:
@@ -284,6 +331,8 @@ last: $.ports[-1].name
 ```
 
 renders as:
+
+**Expected output** <!-- example: indices output app.yak -->
 
 ```yaml
 name: shop
@@ -298,6 +347,8 @@ last: https
 
 Values are evaluated lazily, so a reference may point at something written
 further down:
+
+**Template: `app.yak`** <!-- example: forward-reference template app.yak -->
 
 ```yaml
 alias: .name
@@ -317,6 +368,8 @@ with `$$` (or `$context`, or `$ctx`, in full).
 
 Save this as `prod.yaml`:
 
+**Context file: `prod.yaml`** <!-- example: context context prod.yaml -->
+
 ```yaml
 app: shop
 env: prod
@@ -324,6 +377,8 @@ replicas: 3
 ```
 
 and this as `app.yak`:
+
+**Template: `app.yak`** <!-- example: context template app.yak -->
 
 ```yaml
 name: "\($$.app)-web"
@@ -349,9 +404,13 @@ later ones. Cyclic aliases are an error.
 
 Reading a field the context does not have is an error:
 
+**Intentional error: `app.yak`** <!-- example: missing error app.yak -->
+
 ```yaml
 region: $$.region
 ```
+
+<!-- example: missing diagnostic app.yak -->
 
 ```console
 yak: app.yak:1:9: no field "region" in mapping (the mapping is empty)
@@ -360,6 +419,8 @@ yak: app.yak:1:9: no field "region" in mapping (the mapping is empty)
 `?.` reads a field that may not be there, giving `null` instead of failing,
 and `??` replaces a `null`. They are usually written together:
 
+**Template: `app.yak`** <!-- example: defaults template app.yak -->
+
 ```yaml
 replicas: $$?.replicas ?? 1
 region: $$?.region ?? "us-east-1"
@@ -367,6 +428,8 @@ tls: $$?.tls?.enabled ?? false
 ```
 
 Rendered without a context, that gives:
+
+**Expected output** <!-- example: defaults output app.yak -->
 
 ```yaml
 replicas: 1
@@ -383,6 +446,8 @@ Only `null` triggers `??`; `false`, `0` and `""` are values like any other.
 `::` instead of `:` keeps an entry out of the output but available to
 references, so shared defaults can sit beside the data that uses them:
 
+**Template: `app.yak`** <!-- example: hidden template app.yak -->
+
 ```yaml
 defaults::
   image: "alpine"
@@ -394,6 +459,8 @@ services:
 
 renders as:
 
+**Expected output** <!-- example: hidden output app.yak -->
+
 ```yaml
 services:
   web:
@@ -403,6 +470,8 @@ services:
 `:?` leaves an entry out only when its value is `null`, so an entry the
 context may not supply disappears instead of rendering as `null`:
 
+**Template: `app.yak`** <!-- example: optional template app.yak -->
+
 ```yaml
 replicas:? $$?.replicas
 selector:? $$?.selector
@@ -411,6 +480,8 @@ debug:? false
 
 Rendered without a context, only `debug` remains, because `false` is not
 `null`:
+
+**Expected output** <!-- example: optional output app.yak -->
 
 ```yaml
 debug: false
@@ -422,6 +493,8 @@ A hidden entry still belongs to a mapping. When a value just needs a name,
 `let` gives it one. Bindings render nothing; write the name to read one
 back:
 
+**Template: `app.yak`** <!-- example: let template app.yak -->
+
 ```yaml
 let name = "web"
 let port = 8080
@@ -432,6 +505,8 @@ url: "http://\(name):\(port)"
 
 renders as:
 
+**Expected output** <!-- example: let output app.yak -->
+
 ```yaml
 service: web
 url: http://web:8080
@@ -440,6 +515,8 @@ url: http://web:8080
 Several bindings can share a `let { ... }` block, one per line or separated
 by commas, and a binding's value may be an indented block like any mapping
 value:
+
+**Template: `app.yak`** <!-- example: let-block template app.yak -->
 
 ```yaml
 let {
@@ -459,6 +536,8 @@ image: "\(defaults.image):\(defaults.tag)"
 
 renders as:
 
+**Expected output** <!-- example: let-block output app.yak -->
+
 ```yaml
 placement: us-east-1a
 client:
@@ -472,6 +551,8 @@ image: alpine:3.20
 A binding is visible in the block it is written in and everything nested
 inside it. One in an inner block shadows an outer one of the same name, and
 one written among the entries of a mapping can read that mapping's fields:
+
+**Template: `app.yak`** <!-- example: scope template app.yak -->
 
 ```yaml
 let tier = "shared"
@@ -488,6 +569,8 @@ service:
 ```
 
 renders as:
+
+**Expected output** <!-- example: scope output app.yak -->
 
 ```yaml
 web:
@@ -506,6 +589,8 @@ declares it, and one that is never used is never evaluated.
 Binding a name again in the same block rebinds it from that line down, and
 the new value can build on the old one:
 
+**Template: `app.yak`** <!-- example: rebinding template app.yak -->
+
 ```yaml
 let tag = "v1"
 staging:
@@ -516,6 +601,8 @@ production:
 ```
 
 renders as:
+
+**Expected output** <!-- example: rebinding output app.yak -->
 
 ```yaml
 staging:
@@ -529,6 +616,8 @@ production:
 Comments are part of the output. One above an entry stays above it, and one
 beside a value stays beside it. A comment that starts with `## ` is a note
 for whoever edits the template, and is left out:
+
+**Template: `app.yak`** <!-- example: comments template app.yak -->
 
 ```yaml
 # The public face of the service.
@@ -546,6 +635,8 @@ placement: region
 ```
 
 renders as:
+
+**Expected output** <!-- example: comments output app.yak -->
 
 ```yaml
 # The public face of the service.
@@ -565,6 +656,14 @@ A file can hold several documents separated by `---`, as in YAML. Each one has
 its own bindings and its own `$`; the context is shared by all of them. Given
 a context of `{app: shop}`:
 
+**Context file: `context.yaml`** <!-- example: documents context context.yaml -->
+
+```yaml
+app: shop
+```
+
+**Template: `app.yak`** <!-- example: documents template app.yak -->
+
 ```yaml
 let name = "web"
 
@@ -580,6 +679,8 @@ spec:
 ```
 
 renders as:
+
+**Expected output** <!-- example: documents output app.yak -->
 
 ```yaml
 kind: Deployment
@@ -602,6 +703,8 @@ also write one document per item of a list, which
 
 Arithmetic works on numbers, and `+` also joins two strings or two sequences:
 
+**Template: `app.yak`** <!-- example: arithmetic template app.yak -->
+
 ```yaml
 replicas: 3
 memory: .replicas * 512
@@ -614,6 +717,8 @@ ports: [80] + [443]
 ```
 
 renders as:
+
+**Expected output** <!-- example: arithmetic output app.yak -->
 
 ```yaml
 replicas: 3
@@ -645,6 +750,16 @@ a key, or a string holds a substring. `and`, `or` and `not` are spelled as
 words. Given a context of
 `{env: prod, roles: [web, worker], url: https://shop.example.com}`:
 
+**Context file: `context.yaml`** <!-- example: comparisons context context.yaml -->
+
+```yaml
+env: prod
+roles: [web, worker]
+url: https://shop.example.com
+```
+
+**Template: `app.yak`** <!-- example: comparisons template app.yak -->
+
 ```yaml
 prod: $$.env == "prod"
 big: 2 < 10
@@ -663,6 +778,8 @@ renders every entry as `true`.
 deep as both sides hold mappings, so overriding one field of a nested mapping
 keeps its siblings:
 
+**Template: `app.yak`** <!-- example: merge template app.yak -->
+
 ```yaml
 let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
 
@@ -671,6 +788,8 @@ untouched: defaults.limits
 ```
 
 renders as:
+
+**Expected output** <!-- example: merge output app.yak -->
 
 ```yaml
 container:
@@ -690,6 +809,8 @@ a sequence; that is what `+` is for. The built-in `merge` names the other
 choices: `deep = false` makes the merge shallow, and `append = true` joins the
 sequences both sides hold:
 
+**Template: `app.yak`** <!-- example: merge-options template app.yak -->
+
 ```yaml
 let base = {args: ["-v"], limits: {cpu: 1, memory: 256}}
 
@@ -698,6 +819,8 @@ appended: merge(base, {args: ["-q"]}, append = true)
 ```
 
 renders as:
+
+**Expected output** <!-- example: merge-options output app.yak -->
 
 ```yaml
 shallow:
@@ -720,6 +843,8 @@ Written where a key belongs, `<<` merges into the mapping it is written in,
 like YAML's merge key without the anchor. The merge overrides the entries
 above it, and the entries below it override the merge:
 
+**Template: `app.yak`** <!-- example: merge-key template app.yak -->
+
 ```yaml
 let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
 
@@ -732,6 +857,8 @@ container:
 ```
 
 renders as:
+
+**Expected output** <!-- example: merge-key output app.yak -->
 
 ```yaml
 container:
@@ -746,6 +873,8 @@ The entry modifiers work on a merge too. `<<::` brings entries in hidden, for
 references to read, and `<<:?` merges nothing when the value is `null`, which
 suits optional overrides from the context:
 
+**Template: `app.yak`** <!-- example: hidden-merge template app.yak -->
+
 ```yaml
 let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
 
@@ -757,6 +886,8 @@ sidecar:
 
 renders as:
 
+**Expected output** <!-- example: hidden-merge output app.yak -->
+
 ```yaml
 sidecar:
   cpu: 1
@@ -766,6 +897,14 @@ sidecar:
 
 `if ... then ... else ...` chooses between two values. Only the branch that is
 chosen is evaluated, and an `else` may hold another `if` to form a chain:
+
+**Context file: `context.yaml`** <!-- example: conditional context context.yaml -->
+
+```yaml
+env: staging
+```
+
+**Template: `app.yak`** <!-- example: conditional template app.yak -->
 
 ```yaml
 env: $$.env
@@ -779,6 +918,8 @@ banner:
 ```
 
 With a context of `{env: staging}` that renders as:
+
+**Expected output** <!-- example: conditional output app.yak -->
 
 ```yaml
 env: staging
@@ -805,6 +946,8 @@ A binding whose name is followed by parameters is a function. A parameter
 can have a default, and arguments are given by position, by name, or by
 position and then by name:
 
+**Template: `app.yak`** <!-- example: functions template app.yak -->
+
 ```yaml
 let url(host, port = 8080, scheme = "https") = "\(scheme)://\(host):\(port)"
 
@@ -816,6 +959,8 @@ mixed: url("api.example.com", scheme = "http")
 
 renders as:
 
+**Expected output** <!-- example: functions output app.yak -->
+
 ```yaml
 default: https://web.example.com:8080
 positional: https://web.example.com:443
@@ -825,6 +970,8 @@ mixed: http://api.example.com:8080
 
 The body of a function can be an indented block, so a function can build a
 whole mapping:
+
+**Template: `app.yak`** <!-- example: block-function template app.yak -->
 
 ```yaml
 let endpoint(name) =
@@ -836,6 +983,8 @@ api: endpoint("api")
 ```
 
 renders as:
+
+**Expected output** <!-- example: block-function output app.yak -->
 
 ```yaml
 web:
@@ -849,6 +998,8 @@ api:
 A function body is evaluated where the function was written, not where it is
 called. Here `.name` always means the `name` beside the declaration:
 
+**Template: `app.yak`** <!-- example: function-scope template app.yak -->
+
 ```yaml
 name: "shop"
 let label(suffix) = "\(.name)-\(suffix)"
@@ -858,6 +1009,8 @@ labels:
 ```
 
 renders as:
+
+**Expected output** <!-- example: function-scope output app.yak -->
 
 ```yaml
 name: shop
@@ -872,6 +1025,8 @@ A function is a value: it can be passed to another function, returned from
 one, or bound to a second name. An inline function has no name, so its
 parameters go in parentheses and `=>` separates them from the body:
 
+**Template: `app.yak`** <!-- example: function-values template app.yak -->
+
 ```yaml
 let apply(fn, to) = fn(to)
 let twice(s) = "\(s)\(s)"
@@ -884,6 +1039,8 @@ curried: adder(5)(3)
 ```
 
 renders as:
+
+**Expected output** <!-- example: function-values output app.yak -->
 
 ```yaml
 named: abab
@@ -901,6 +1058,8 @@ one element followed by `for name in source`, and the element is evaluated
 once per item. An `if` clause keeps only the items it accepts. Given this
 context:
 
+**Context file: `context.yaml`** <!-- example: comprehension context context.yaml -->
+
 ```yaml
 host: shop.example.com
 ports:
@@ -912,6 +1071,8 @@ ports:
 
 the template
 
+**Template: `app.yak`** <!-- example: comprehension template app.yak -->
+
 ```yaml
 names: ["port-\(p.name)" for p in $$.ports]
 by-name: {(p.name): p.number for p in $$.ports}
@@ -920,6 +1081,8 @@ urls: {"\(p.name)": "http://\($$.host):\(p.number)" for p in $$.ports}
 ```
 
 renders as:
+
+**Expected output** <!-- example: comprehension output app.yak -->
 
 ```yaml
 names:
@@ -939,11 +1102,15 @@ A mapping comprehension takes any kind of key, and two items that produce the
 same key are an error. Comprehensions nest, and the loop variable is visible
 to everything inside the element:
 
+**Template: `app.yak`** <!-- example: nested-comprehension template app.yak -->
+
 ```yaml
 matrix: [["\(a)-\(b)" for b in ["east", "west"]] for a in ["eu", "us"]]
 ```
 
 renders as:
+
+**Expected output** <!-- example: nested-comprehension output app.yak -->
 
 ```yaml
 matrix:
@@ -957,11 +1124,15 @@ Several `for` clauses in one comprehension walk every combination instead,
 giving one flat sequence. Each clause may have its own `if`, and a later one
 sees the names of those before it:
 
+**Template: `app.yak`** <!-- example: multiple-loops template app.yak -->
+
 ```yaml
 zones: ["\(a)-\(b)" for a in ["eu", "us"] for b in ["east", "west"] if a != "us" or b == "east"]
 ```
 
 renders as:
+
+**Expected output** <!-- example: multiple-loops output app.yak -->
 
 ```yaml
 zones:
@@ -976,6 +1147,15 @@ A section written with `---:` writes one document per item of a sequence,
 which is how a file renders as many manifests as a list has items. Given a
 context of `{namespace: argocd, projects: [platform, payments]}`:
 
+**Context file: `context.yaml`** <!-- example: document-comprehension context context.yaml -->
+
+```yaml
+namespace: argocd
+projects: [platform, payments]
+```
+
+**Template: `app.yak`** <!-- example: document-comprehension template app.yak -->
+
 ```yaml
 let project(name) =
   kind: "AppProject"
@@ -987,6 +1167,8 @@ let project(name) =
 ```
 
 renders as:
+
+**Expected output** <!-- example: document-comprehension output app.yak -->
 
 ```yaml
 kind: AppProject
@@ -1015,6 +1197,15 @@ removes the empty values from inside a collection, however deep. Given a
 context of
 `{labels: {}, annotations: {team: platform}}`:
 
+**Context file: `context.yaml`** <!-- example: builtins context context.yaml -->
+
+```yaml
+labels: {}
+annotations: {team: platform}
+```
+
+**Template: `app.yak`** <!-- example: builtins template app.yak -->
+
 ```yaml
 ports: [80, 443]
 count: size(.ports)
@@ -1026,6 +1217,8 @@ metadata: prune({labels: $$.labels, owner: "", team: [$$.annotations.team, null]
 ```
 
 renders as:
+
+**Expected output** <!-- example: builtins output app.yak -->
 
 ```yaml
 ports:
@@ -1049,6 +1242,8 @@ context was dropped instead of rendering as `{}`, both at the top and inside
 YAML unless another is named. A ConfigMap, which holds whole files as
 strings, wants exactly that:
 
+**Template: `app.yak`** <!-- example: render template app.yak -->
+
 ```yaml
 let config = {name: "web", ports: [80, 443]}
 
@@ -1059,6 +1254,8 @@ data:
 ```
 
 renders as:
+
+**Expected output** <!-- example: render output app.yak -->
 
 ```yaml
 kind: ConfigMap
@@ -1086,6 +1283,16 @@ often needs. They also go by the full names of their types, `integer`,
 `boolean` and `string`. `type` names the type of a value. Given a context of
 `{replicas: "3", debug: "false", port: 8080}`:
 
+**Context file: `context.yaml`** <!-- example: conversions context context.yaml -->
+
+```yaml
+replicas: "3"
+debug: "false"
+port: 8080
+```
+
+**Template: `app.yak`** <!-- example: conversions template app.yak -->
+
 ```yaml
 replicas: int($$.replicas)
 debug: bool($$.debug)
@@ -1095,6 +1302,8 @@ kind: type($$.replicas)
 ```
 
 renders as:
+
+**Expected output** <!-- example: conversions output app.yak -->
 
 ```yaml
 replicas: 3
@@ -1112,6 +1321,8 @@ errors rather than guesses, and rounding a float is left to `std.math`.
 `sort`, `reverse`, `unique`, `flatten`, `slice`, `range`, `sum`, `min`,
 `max`, `some` and `every` work on sequences. The ones that compare or test
 items accept a function, usually an anonymous one:
+
+**Template: `app.yak`** <!-- example: sequences template app.yak -->
 
 ```yaml
 let services = [
@@ -1131,6 +1342,8 @@ countdown: range(5, 0, -2)
 ```
 
 renders as:
+
+**Expected output** <!-- example: sequences output app.yak -->
 
 ```yaml
 ports:
@@ -1159,6 +1372,8 @@ countdown:
 A key that answers a sequence sorts by several things at once, here by
 weight and then by name:
 
+**Template: `app.yak`** <!-- example: sort-keys template app.yak -->
+
 ```yaml
 let services = [
   {name: "web", weight: 2},
@@ -1170,6 +1385,8 @@ ranked: [s.name for s in sort(services, (s) => [s.weight, s.name])]
 ```
 
 renders as:
+
+**Expected output** <!-- example: sort-keys output app.yak -->
 
 ```yaml
 ranked:
@@ -1183,6 +1400,8 @@ ranked:
 `keys`, `values`, `items`, `pick`, `omit`, `visible` and `merge` work on
 mappings:
 
+**Template: `app.yak`** <!-- example: mappings template app.yak -->
+
 ```yaml
 let labels = {app: "web", tier: "frontend", team: "platform"}
 
@@ -1193,6 +1412,8 @@ pairs: items(pick(labels, ["app"]))
 ```
 
 renders as:
+
+**Expected output** <!-- example: mappings output app.yak -->
 
 ```yaml
 names:
@@ -1219,6 +1440,8 @@ already uses one of these names keeps working.
 syntax. A binding can name the items of a sequence instead of the sequence,
 and `_` skips an item:
 
+**Template: `app.yak`** <!-- example: destructuring template app.yak -->
+
 ```yaml
 let pair = ["web", 8080]
 let name, port = pair
@@ -1229,6 +1452,8 @@ registry: host
 ```
 
 renders as:
+
+**Expected output** <!-- example: destructuring output app.yak -->
 
 ```yaml
 service: web:8080
@@ -1243,6 +1468,8 @@ Patterns also work in a function's parameters, where the brackets are
 required, and in a comprehension's loop variable, which is where `items`
 shines:
 
+**Template: `app.yak`** <!-- example: patterns template app.yak -->
+
 ```yaml
 let address([host, port], scheme = "https") = "\(scheme)://\(host):\(port)"
 let limits = {cpu: 2, memory: 512}
@@ -1253,6 +1480,8 @@ large: [k for [k, v] in items(limits) if v > 100]
 ```
 
 renders as:
+
+**Expected output** <!-- example: patterns output app.yak -->
 
 ```yaml
 endpoint: https://web.example.com:443
@@ -1272,6 +1501,8 @@ Every `.yak` file is a module that another can `import`, and so is every
 error. Hidden entries are part of a module's value, which is how a module
 hands out a function without rendering it. Save this as `lib/labels.yakl`:
 
+**Library: `lib/labels.yakl`** <!-- example: modules library lib/labels.yakl -->
+
 ```yaml
 let team = "platform"
 
@@ -1282,6 +1513,8 @@ The import path is dotted and resolves from the importing file's directory,
 and the module is bound under the last segment of its path. Import it from a
 template beside `lib/`:
 
+**Template: `app.yak`** <!-- example: modules template app.yak -->
+
 ```yaml
 import lib.labels
 
@@ -1290,6 +1523,8 @@ metadata:
 ```
 
 which renders as:
+
+**Expected output** <!-- example: modules output app.yak -->
 
 ```yaml
 metadata:
@@ -1306,6 +1541,8 @@ file path, quoted. It names the file beneath the importing file's directory,
 extension included, and takes a name. Strict mode does not allow it, so the
 template is rendered with `--strict=false`:
 
+**Template (`--strict=false`): `path-import.yak`** <!-- example: modules template-nonstrict path-import.yak -->
+
 ```yaml
 import labels = "lib/labels.yakl"
 
@@ -1321,6 +1558,8 @@ whose paths begin with `std`: `std.strings`, `std.json`, `std.yaml`,
 `std.gotemplate`, `std.cidr`, `std.semver`, `std.random` and `std.env`. Given
 this context:
 
+**Context file: `context.yaml`** <!-- example: stdlib context context.yaml -->
+
 ```yaml
 name: "  Shop  "
 hosts: a.example.com,b.example.com
@@ -1328,6 +1567,8 @@ image: ghcr.io/example/shop:1.4.2
 ```
 
 the template
+
+**Template: `app.yak`** <!-- example: stdlib template app.yak -->
 
 ```yaml
 import { std.strings, std.json, std.regex, std.hash }
@@ -1344,6 +1585,8 @@ annotations:
 
 renders as:
 
+**Expected output** <!-- example: stdlib output app.yak -->
+
 ```yaml
 name: shop
 hosts:
@@ -1358,6 +1601,8 @@ annotations:
 `std.files` reads a text file from beside the file that calls `read`, and `std.gotemplate`
 renders one as a Go template with data computed in yak, so a configuration
 file in another format can end up inside a value:
+
+**Template snippet (requires an external file): `app.yak`** <!-- example: go-template snippet app.yak -->
 
 ```yaml
 import { std.files, std.gotemplate }
@@ -1377,7 +1622,7 @@ safe to re-render in a GitOps loop. Only these things differ between the modes:
 | --- | --- | --- |
 | `std.random` | Importing it is an error. | Available. |
 | `std.env` | Importing it is an error. | Available. |
-| `std.files` | Reads only beneath the directory of the file calling `read`. | Reads any path, absolute or relative. |
+| `std.files` | Reads only beneath the directory of the file calling it. | Reads any path, absolute or relative. |
 | `import name = "path.yak"` | Importing it is an error. | Available outside a package. |
 
 An import is a binding, so the `std.random` error comes when the import is
@@ -1390,11 +1635,15 @@ yak: app.yak:1:8: module "std.random" can answer differently on every rendering,
 In strict mode, `std.files` refuses an absolute path, a path that climbs out
 with `..`, and a symbolic link that leads outside the directory:
 
+**Intentional error: `app.yak`** <!-- example: strict-files error app.yak -->
+
 ```yaml
 import std.files
 
 hosts: files.read("/etc/hosts")
 ```
+
+<!-- example: strict-files diagnostic app.yak -->
 
 ```console
 yak: app.yak:3:19: "read" cannot read "/etc/hosts" in strict mode, which reads only beneath the directory of the file calling it; render with --strict=false to read anywhere
@@ -1408,6 +1657,8 @@ not the template, and a template can read it as `$yak.strict`.
 A schema says what a value may hold, and fills in the fields a mapping leaves
 out. `schema` declares one, and a tag, `!Name`, checks a value against it:
 
+**Template: `app.yak`** <!-- example: port-schema template app.yak -->
+
 ```yaml
 schema Port =
   name: string
@@ -1420,6 +1671,8 @@ ports:
 ```
 
 renders as:
+
+**Expected output** <!-- example: port-schema output app.yak -->
 
 ```yaml
 ports:
@@ -1452,6 +1705,8 @@ The built-in types are `any`, `boolean`, `integer`, `float`, `string`,
 short name: `bool`, `int`, `str`, `seq`, `map` and `func`. `sequence[T]`, or
 `seq[T]`, takes a sequence whose every item is a `T`:
 
+**Template: `app.yak`** <!-- example: listener-schema template app.yak -->
+
 ```yaml
 schema Listener =
   ports: seq[int]
@@ -1461,6 +1716,8 @@ web: !Listener {ports: [80, 443], hosts: ["web.example.com"]}
 ```
 
 renders as:
+
+**Expected output** <!-- example: listener-schema output app.yak -->
 
 ```yaml
 web:
@@ -1481,6 +1738,8 @@ yak: listener.yak:5:29: field "ports[1]" of schema "Listener" expects integer, f
 A tuple type, in brackets, takes a sequence of exactly as many items, each of
 its own type:
 
+**Template: `app.yak`** <!-- example: tuple template app.yak -->
+
 ```yaml
 schema Endpoint = [str, int]
 
@@ -1488,6 +1747,8 @@ primary: !Endpoint ["web.example.com", 443]
 ```
 
 renders as:
+
+**Expected output** <!-- example: tuple output app.yak -->
 
 ```yaml
 primary:
@@ -1511,6 +1772,8 @@ A default can read the mapping it fills in through `.`, `if` adds a check to
 a type, `(string): string` types the keys of a mapping that declares none,
 and `:?` marks a field that may be left out:
 
+**Template: `app.yak`** <!-- example: schema-defaults template app.yak -->
+
 ```yaml
 let positive = (n) => n > 0
 
@@ -1528,6 +1791,8 @@ api: !Service {name: "api", labels: {team: "platform"}}
 ```
 
 renders as:
+
+**Expected output** <!-- example: schema-defaults output app.yak -->
 
 ```yaml
 web:
@@ -1552,6 +1817,8 @@ A schema is closed: every key needs a field. `schema*` declares an open one,
 which lets other keys through. `<<` merges another schema's fields in, and a
 `schema { ... }` block declares several at once:
 
+**Template: `app.yak`** <!-- example: open-schema template app.yak -->
+
 ```yaml
 schema {
   Tier = "gold" | "silver"
@@ -1565,6 +1832,8 @@ loose: !LooseService {name: "batch", schedule: "@daily"}
 ```
 
 renders as:
+
+**Expected output** <!-- example: open-schema output app.yak -->
 
 ```yaml
 strict:
@@ -1582,6 +1851,14 @@ loose:
 fills in are what `$$` answers everywhere. An open one leaves room for the
 fields it does not mention:
 
+**Context file: `context.yaml`** <!-- example: context-schema context context.yaml -->
+
+```yaml
+env: prod
+```
+
+**Template: `app.yak`** <!-- example: context-schema template app.yak -->
+
 ```yaml
 schema* $$ =
   env: "dev" | "prod"
@@ -1592,6 +1869,8 @@ replicas: $$.replicas
 ```
 
 With a context of `{env: prod}` that renders as:
+
+**Expected output** <!-- example: context-schema output app.yak -->
 
 ```yaml
 env: prod
@@ -1612,6 +1891,8 @@ yak: app.yak:1:9: field "env" of the context expects "dev" or "prod", found "qa"
 The schemas at the top of a module are there for whoever imports it. Save
 this as `lib/k8s.yakl`:
 
+**Library: `lib/k8s.yakl`** <!-- example: module-schema library lib/k8s.yakl -->
+
 ```yaml
 schema Metadata =
   name: string
@@ -1625,6 +1906,8 @@ schema Deployment =
 
 and tag with the module's name in front:
 
+**Template: `app.yak`** <!-- example: module-schema template app.yak -->
+
 ```yaml
 import lib.k8s
 
@@ -1634,6 +1917,8 @@ web: !k8s.Deployment
 ```
 
 which renders as:
+
+**Expected output** <!-- example: module-schema output app.yak -->
 
 ```yaml
 web:
@@ -1653,6 +1938,8 @@ a value is checked.
 `match` picks a value by the type of another. Each `case` names a type, and
 the first one the value matches gives the answer. `as` names what was
 matched, and so may each item of a tuple:
+
+**Template: `app.yak`** <!-- example: match template app.yak -->
 
 ```yaml
 schema Service =
@@ -1674,6 +1961,8 @@ targets:
 
 renders as:
 
+**Expected output** <!-- example: match output app.yak -->
+
 ```yaml
 targets:
   - web.example.com:80
@@ -1691,6 +1980,8 @@ Without an `else`, a value that no case matches gives `null`.
 A directory with a `yak.pkg` at its root is a package, which is how
 libraries such as `lib/k8s.yakl` are shared. `yak package init` makes the current
 directory one, with a `yak.pkg` like this:
+
+**Package file: `yak.pkg`** <!-- example: package-init package yak.pkg -->
 
 ```yaml
 package:
@@ -1727,6 +2018,8 @@ A dependency is only imported, unless it is written with `render`. Then its
 templates are rendered along with the package's, beneath a directory named
 for it, or where its rules send them. `yak add --render` adds one so:
 
+**Package file: `yak.pkg`** <!-- example: render-dependency package yak.pkg -->
+
 ```yaml
 package:
   name: platform
@@ -1750,6 +2043,8 @@ its `values.yaml`. `package.context` names a template that is evaluated
 against the `-c` files, and what it renders is the `$$` of every template in
 the package:
 
+**Package file: `yak.pkg`** <!-- example: package-context package yak.pkg -->
+
 ```yaml
 package:
   name: web
@@ -1759,6 +2054,14 @@ package:
 `context.yak` is yak like any template, so it can fill in defaults, choose
 them by what the context says, and check the context with a schema once for
 the whole package:
+
+**Context file: `prod.yaml`** <!-- example: package-context context prod.yaml -->
+
+```yaml
+env: prod
+```
+
+**Template: `context.yak`** <!-- example: package-context template context.yak -->
 
 ```yaml
 schema* $$ =
@@ -1770,12 +2073,16 @@ replicas: if $$.env == "prod" then 5 else 1
 
 A template in the package reads the result:
 
+**Template: `app.yak`** <!-- example: package-context template app.yak -->
+
 ```yaml
 replicas: $$.replicas
 env: $$.env
 ```
 
 rendered with `-c prod.yaml`, where `prod.yaml` holds `{env: prod}`:
+
+**Expected output** <!-- example: package-context output app.yak -->
 
 ```yaml
 replicas: 5
@@ -1793,6 +2100,8 @@ one, or else the name of the output file or the template does:
 `app.toml.yak` renders TOML. Comments reach every format with room for them.
 The template from [section 9](#9-comments), rendered with `-f jsonc`:
 
+**Expected output** <!-- example: comments output-jsonc app.yak -->
+
 ```jsonc
 {
   // The public face of the service.
@@ -1806,6 +2115,8 @@ The template from [section 9](#9-comments), rendered with `-f jsonc`:
 ```
 
 and with `-f toml`:
+
+**Expected output** <!-- example: comments output-toml app.yak -->
 
 ```toml
 # Where everything lands.
@@ -1821,11 +2132,15 @@ A template can tell which format it is rendering from `$yak.format`, which
 is always the format's own name: `-f hujson` gives `jwcc`, and an output
 file ending in `.yml` gives `yaml`.
 
+**Template: `format.yak`** <!-- example: format template format.yak -->
+
 ```yaml
 note: "rendered as \($yak.format)"
 ```
 
 rendered with `-f hujson`:
+
+**Expected output** <!-- example: format output-jwcc format.yak -->
 
 ```jsonc
 {
@@ -1843,6 +2158,8 @@ lists every format and the flags for writing output to files.
 rather than the document. `$filepath`, `$workdir` and the rest of `$yak` are
 others, which is enough for a provenance note:
 
+**Template: `app.yak`** <!-- example: provenance template app.yak -->
+
 ```yaml
 note: "rendered from \($filepath) by yak \($yak.version)"
 ```
@@ -1853,6 +2170,8 @@ note: "rendered from \($filepath) by yak \($yak.version)"
 
 Here is a Deployment and a Service for Kubernetes, rendered from two layered
 context files. The base file, `base.yaml`, describes the application:
+
+**Context file: `base.yaml`** <!-- example: deployment context base.yaml -->
 
 ```yaml
 app: shop
@@ -1874,6 +2193,8 @@ resources:
 
 and `prod.yaml` overrides what production changes:
 
+**Context file: `prod.yaml`** <!-- example: deployment context prod.yaml -->
+
 ```yaml
 env: prod
 replicas: 5
@@ -1892,6 +2213,8 @@ annotations:
 ```
 
 The template, `deployment.yak`, uses most of what this tour covered:
+
+**Template: `app.yak`** <!-- example: deployment template app.yak -->
 
 ```yaml
 ## Render with:
@@ -1964,6 +2287,8 @@ $ yak render deployment.yak -c base.yaml -c prod.yaml
 ```
 
 renders as:
+
+**Expected output** <!-- example: deployment output app.yak -->
 
 ```yaml
 # Rendered by yak. Edit the template rather than this file.
@@ -2048,6 +2373,8 @@ A release often renders several packages, each against its own context and
 into its own place. Rather than a script of `yak render` commands, a spec
 file, named `NAME.yakspec`, says it in one place. `yak spec init` writes
 `release.yakspec` to start from. Next to two packages, `web` and `db`:
+
+**Spec file (requires the packages described below): `release.yakspec`** <!-- example: release spec release.yakspec -->
 
 ```yaml
 import std.env

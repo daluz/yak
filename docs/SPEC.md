@@ -1734,17 +1734,19 @@ comments, while a bare `##` is the marker with nothing written on it.
 
 ## Output
 
-A document renders in the order it was written, with its comments. Hidden
-fields are dropped, and so are `:?` entries whose value is null. A document
-that evaluates to `null`, whether it holds only bindings, nothing at all, or a
+A document renders in the order it was written, with its comments, except
+that TOML groups plain keys before sub-tables. Hidden fields are dropped, and
+so are `:?` entries whose value is null. A document that evaluates to `null`,
+whether it holds only bindings, nothing at all, or a
 body written as `null`, renders nothing. A file of several documents renders
 each in turn, and a section written with [`---:`](#the-documents-key)
 renders each item of its sequence as a document in its place.
 
 [CLI.md](CLI.md#output-formats) lists the output formats and how one is
-chosen. Every format preserves key order, drops hidden fields, writes nothing
-unless every document renders successfully, and carries comments wherever it
-has a place for them. A value the format cannot hold is an error, not an
+chosen. Every format preserves key order within the groups its syntax
+requires, drops hidden fields, writes nothing unless every document renders
+successfully, and carries comments wherever it has a place for them.
+A value the format cannot hold is an error, not an
 approximation. No format can hold a function; TOML, which has no null, refuses
 the most.
 

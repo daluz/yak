@@ -320,16 +320,36 @@ import std.files
 motd: files.read("files/motd.txt")
 ```
 
-`read(path)` answers the text of the file at `path` as it is, with no
-interpolation. A relative path is relative to the directory of the file that
-calls `read`, as an `import` resolves, so a module reads from beside itself
-rather than beside the template importing it. A missing file, or one that is
-not UTF-8 text, is an error.
+| Call | Answer |
+| --- | --- |
+| `read(path)` | The text of the file at `path` as it is, with no interpolation. A missing file, or one that is not UTF-8 text, is an error. |
+| `list(path, onlyFiles = false)` | The names of the entries in the directory `path`, sorted, hidden ones included, or only of its regular files when `onlyFiles` is `true`. A missing directory is an error. |
+| `glob(pattern, onlyFiles = false)` | The paths that match `pattern`, sorted and written as `pattern` writes them, so each can be handed to `read`; `[]` when nothing matches. `onlyFiles` keeps only regular files. |
+| `isDir(path)` | Whether `path` names a directory; `false` when nothing is there. |
+| `exists(path)` | Whether anything is at `path`. |
 
-In [strict mode](SPEC.md#strict-mode), `path` must stay beneath that
-directory: an absolute path, one that climbs out with `..`, and a symbolic
-link that leads out are errors. With strict mode off, `path` may name any
-file.
+A relative path is relative to the directory of the file that calls the
+function, as an `import` resolves, so a module reads from beside itself
+rather than beside the template importing it. With `onlyFiles`, a symbolic
+link counts when it leads to a regular file.
+
+A `glob` pattern is a path whose segments are matched as by
+[`path.Match`](https://pkg.go.dev/path#Match): `*` matches any run of
+characters but `/`, hidden names included, `?` any one character, and
+`[...]` one character of a class. A segment of `**` matches any number of
+directories, none included, without following a symbolic link to one; at
+the end of a pattern it matches everything beneath.
+
+```yaml
+import { std.files, std.yaml }
+
+configs: [yaml.decode(files.read(p)) for p in files.glob("conf/**/*.yaml")]
+```
+
+In [strict mode](SPEC.md#strict-mode), `path` and `pattern` must stay beneath
+that directory: an absolute path, one that climbs out with `..`, and a
+symbolic link that leads out are errors, except that `onlyFiles` leaves such
+a link out. With strict mode off, they may name any file.
 
 ### `std.gotemplate`
 

@@ -1,0 +1,40 @@
+list:
+  all:
+    - .hidden
+    - a.txt
+    - sub
+  onlyFiles:
+    - .hidden
+    - a.txt
+glob:
+  top:
+    - files/listing/.hidden
+    - files/listing/a.txt
+    - files/listing/sub
+  topFiles:
+    - files/listing/.hidden
+    - files/listing/a.txt
+  deep:
+    - files/listing/a.txt
+    - files/listing/sub/b.txt
+    - files/listing/sub/deeper/c.txt
+  under:
+    - files/listing/.hidden
+    - files/listing/a.txt
+    - files/listing/sub
+    - files/listing/sub/b.txt
+    - files/listing/sub/deeper
+    - files/listing/sub/deeper/c.txt
+  readable:
+    - |
+      b
+  none: []
+isDir:
+  sub: true
+  file: false
+  missing: false
+exists:
+  file: true
+  dir: true
+  missing: false
+  underFile: false

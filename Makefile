@@ -1,12 +1,15 @@
 BIN := yak
 
-.PHONY: build test update fmt vet check install clean
+.PHONY: build test test-docs update fmt vet check install clean
 
 build:
 	go build -o $(BIN) ./cmd/yak
 
 test:
 	go test ./...
+
+test-docs:
+	go test ./internal/engine -run '^TestDocExamples$$' -count=1
 
 # Rewrite the golden files under testdata/ from current behavior. Only the
 # engine, schemaimport and yakfmt tests read them, and only their test
