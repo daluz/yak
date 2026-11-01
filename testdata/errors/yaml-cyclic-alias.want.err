@@ -1,0 +1,1 @@
+yaml-cyclic-alias.yak:2:16: "decode" cannot decode its value: YAML:1:1: cyclic YAML alias

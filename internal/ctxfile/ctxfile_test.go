@@ -227,6 +227,18 @@ func TestDecodeAnchors(t *testing.T) {
 	}
 }
 
+func TestDecodeRejectsCyclicAliases(t *testing.T) {
+	for _, src := range []string{
+		"a: &a [*a]\n",
+		"a: &a {self: *a}\n",
+		"a: &a {<<: *a}\n",
+	} {
+		if _, err := ctxfile.Decode("context.yaml", []byte(src)); err == nil || !strings.Contains(err.Error(), "cyclic YAML alias") {
+			t.Errorf("%q: error = %v, want a cyclic alias error", src, err)
+		}
+	}
+}
+
 func TestDecodeEmpty(t *testing.T) {
 	for _, src := range []string{"", "---\n", "~\n", "---\n---\n"} {
 		if obj := decode(t, src); obj.Len() != 0 {

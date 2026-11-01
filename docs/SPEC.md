@@ -1638,7 +1638,8 @@ template. It is shared by every document, and when the template's
 Context data is plain YAML or JSON, not yak: a `\(` in a context string is a
 `\(`, and an unquoted scalar is the string YAML reads it as. Several sources
 merge into one mapping, a later one winning; [CLI.md](CLI.md#context-files)
-describes how. Since what a context carries varies between runs, a template
+describes how, including YAML merge keys and the rejection of cyclic
+aliases. Since what a context carries varies between runs, a template
 usually reads it with the [missing value](#missing-values) operators:
 
 ```yaml

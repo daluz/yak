@@ -15,6 +15,9 @@ round:
   half: math.round(2.5)
   negativeHalf: math.round(-2.5)
   digits: math.round(3.14159, 2)
+  zeroHugeDigits: math.round(0.0, 309)
+  negativeZeroHugeDigits: math.round(-0.0, 9223372036854775807)
+  tinyHugeDigits: math.round(1e-300, 309)
   integerDigits: math.round(7, 2)
 
 ## Rounding answers an integer, so it can count replicas.

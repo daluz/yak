@@ -1,0 +1,46 @@
+context:
+  base:
+    port: 80
+    nested:
+      cpu: 1
+      memory: 2
+  fallback:
+    port: 90
+    host: localhost
+  before:
+    port: 443
+    nested:
+      cpu: 3
+    host: localhost
+  after:
+    port: 8080
+    nested:
+      cpu: 1
+      memory: 2
+  nested:
+    extra: true
+    port: 80
+    nested:
+      cpu: 1
+      memory: 2
+  reuse:
+    extra: true
+    port: 80
+    nested:
+      cpu: 1
+      memory: 2
+  quoted:
+    "<<":
+      port: 80
+      nested:
+        cpu: 1
+        memory: 2
+decoded:
+  nested:
+    y: 2
+  a: 1
+  b: 3
+quoted:
+  "<<":
+    a: 1
+empty: {}

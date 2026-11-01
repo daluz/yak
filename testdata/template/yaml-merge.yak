@@ -1,0 +1,5 @@
+import std.yaml
+context: $$
+decoded: yaml.decode("{<<: [{a: 1, nested: {x: 1}}, {a: 2, b: 3}], nested: {y: 2}}")
+quoted: yaml.decode('{"<<": {a: 1}}')
+empty: yaml.decode("{<<: []}")

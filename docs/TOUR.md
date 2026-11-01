@@ -341,6 +341,9 @@ replicas: 3
 Several `-c` files merge into one context, later files winning, which layers
 an environment's overrides on a base configuration. The context is plain
 YAML, not yak: it needs no quotes, and nothing in it is interpolated.
+YAML anchors and `<<` merge keys work in context files. A merge is shallow:
+explicit fields always win, and earlier mappings in a merge list win over
+later ones. Cyclic aliases are an error.
 
 ### Values that may be missing
 

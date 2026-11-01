@@ -81,7 +81,7 @@ func ValueYAML(name string, data []byte) (eval.Value, error) {
 	} else if !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("parsing %s: %w", src.what, err)
 	}
-	return convert(&doc, src)
+	return convert(&doc, src, make(map[*yaml.Node]bool))
 }
 
 // ValueJSON reads the one JSON value data holds, which may be of any type.
@@ -118,7 +118,7 @@ func decodeYAML(src source) (*eval.Object, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", src.what, err)
 		}
-		v, err := convert(&doc, src)
+		v, err := convert(&doc, src, make(map[*yaml.Node]bool))
 		if err != nil {
 			return nil, err
 		}
@@ -288,37 +288,78 @@ func position(data []byte, offset int64) (int, int) {
 	return line, col
 }
 
-func convert(n *yaml.Node, src source) (eval.Value, error) {
+func convert(n *yaml.Node, src source, active map[*yaml.Node]bool) (eval.Value, error) {
+	if active[n] {
+		return nil, fmt.Errorf("%s:%d:%d: cyclic YAML alias", src.name, n.Line, n.Column)
+	}
+	active[n] = true
+	defer delete(active, n)
 	switch n.Kind {
 	case yaml.DocumentNode:
 		if len(n.Content) == 0 {
 			return eval.Null{}, nil
 		}
-		return convert(n.Content[0], src)
+		return convert(n.Content[0], src, active)
 
 	case yaml.AliasNode:
-		return convert(n.Alias, src)
+		return convert(n.Alias, src, active)
 
 	case yaml.MappingNode:
 		obj := eval.NewObject()
+		var merges []*yaml.Node
 		for i := 0; i+1 < len(n.Content); i += 2 {
 			keyNode, valNode := n.Content[i], n.Content[i+1]
+			if keyNode.Tag == "!!merge" {
+				merges = append(merges, valNode)
+				continue
+			}
 			var key string
 			if err := keyNode.Decode(&key); err != nil {
 				return nil, fmt.Errorf("%s:%d:%d: mapping keys must be strings", src.name, keyNode.Line, keyNode.Column)
 			}
-			val, err := convert(valNode, src)
+			val, err := convert(valNode, src, active)
 			if err != nil {
 				return nil, err
 			}
 			obj.Set(key, false, eval.Done(val))
+		}
+		// Explicit entries win wherever the merge was written. Within a
+		// merge sequence, earlier mappings win; merges are shallow.
+		for _, node := range merges {
+			v, err := convert(node, src, active)
+			if err != nil {
+				return nil, err
+			}
+			values := []eval.Value{v}
+			if a, ok := v.(*eval.Array); ok {
+				values = nil
+				for _, item := range a.Items() {
+					value, err := item.Value.Value()
+					if err != nil {
+						return nil, err
+					}
+					values = append(values, value)
+				}
+			}
+			for _, value := range values {
+				mapping, ok := value.(*eval.Object)
+				if !ok {
+					return nil, fmt.Errorf("%s:%d:%d: YAML merge needs a mapping or a sequence of mappings", src.name, node.Line, node.Column)
+				}
+				for _, name := range mapping.Names() {
+					if _, exists := obj.Lookup(name); !exists {
+						field, _ := mapping.Lookup(name)
+						obj.Set(name, false, field.Value)
+					}
+				}
+			}
 		}
 		return obj, nil
 
 	case yaml.SequenceNode:
 		items := make([]*eval.Elem, 0, len(n.Content))
 		for _, c := range n.Content {
-			v, err := convert(c, src)
+			v, err := convert(c, src, active)
 			if err != nil {
 				return nil, err
 			}

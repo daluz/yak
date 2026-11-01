@@ -167,8 +167,8 @@ that answers a sequence orders by several things at once:
 a tier. Sorting is stable, and
 of several least or greatest items `min` and `max` answer the first. `min`
 and `max` of `[]` are an error. `unique` compares items with `==`, so they
-must be scalars. `sum` answers an integer unless a float is among the
-numbers, as `+` does.
+must be scalars, including when there is only one item. `sum` answers an
+integer unless a float is among the numbers, as `+` does.
 
 A negative position in `slice` counts from the end, as an
 [index](SPEC.md#references) does, so `slice(values, 0, 2)` is the first two
@@ -409,7 +409,8 @@ replicas: math.ceil($$.nodes / 2)
 integer with halves away from zero, and answer an integer; an integer is
 answered as it is. `round(value, digits = null)` with `digits` rounds to that
 many decimal places, so `round(3.14159, 2)` is `3.14`; an integer is again
-answered as it is.
+answered as it is. A decimal precision beyond what a float can represent
+leaves the float unchanged, including zero.
 
 ### `std.path`
 

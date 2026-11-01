@@ -1,0 +1,19 @@
+base: &base
+  port: 80
+  nested: {cpu: 1, memory: 2}
+fallback: &fallback
+  port: 90
+  host: localhost
+before:
+  port: 443
+  <<: [*base, *fallback]
+  nested: {cpu: 3}
+after:
+  <<: *base
+  port: 8080
+nested:
+  <<: &combined
+    <<: *base
+    extra: true
+reuse: *combined
+quoted: {"<<": *base}

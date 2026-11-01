@@ -111,6 +111,9 @@ func unique(c call) (eval.Value, error) {
 	var items []*eval.Elem
 	var kept []eval.Value
 	for i, v := range values {
+		if _, err := eval.Equal(v, v); err != nil {
+			return nil, c.errorf(0, "cannot compare item %d: %s", i, err.Error())
+		}
 		seen, err := contains(kept, v)
 		if err != nil {
 			return nil, c.errorf(0, "cannot compare item %d: %s", i, err.Error())

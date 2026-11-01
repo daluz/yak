@@ -40,7 +40,7 @@ func round(c call) (eval.Value, error) {
 	}
 	if f, ok := v.(eval.Float); ok {
 		scale := math.Pow(10, float64(digits))
-		if math.IsInf(float64(f)*scale, 0) {
+		if math.IsInf(scale, 0) || math.IsInf(float64(f)*scale, 0) {
 			return f, nil
 		}
 		return eval.Float(math.Round(float64(f)*scale) / scale), nil

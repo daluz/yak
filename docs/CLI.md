@@ -164,8 +164,12 @@ region: $$?.region ?? "us-east-1"
 ```
 
 Context files are plain YAML or JSON, not yak, so they may use anchors and
-unquoted strings, and nothing in them interpolates. Each must hold a mapping
-at the top level. Several YAML documents, or several JSON values, in one file
+unquoted strings, and nothing in them interpolates. Cyclic aliases are an
+error. An unquoted `<<` merges a mapping or a sequence of mappings shallowly:
+explicit entries always win, and earlier mappings in a merge sequence win
+over later ones. Explicit keys retain their order, followed by inherited
+keys in merge order. A quoted `"<<"` is an ordinary key. Each context file
+must hold a mapping at the top level. Several YAML documents, or several JSON values, in one file
 merge in order as separate files do.
 
 A `.json` file is read by the JSON parser, which accepts all of JSON,
