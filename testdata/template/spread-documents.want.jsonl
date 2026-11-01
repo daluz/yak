@@ -1,0 +1,4 @@
+{"kind":"Namespace","name":"argocd"}
+{"apiVersion":"argoproj.io/v1alpha1","kind":"AppProject","metadata":{"name":"platform","namespace":"argocd"},"spec":{"sourceRepos":["*"]}}
+{"apiVersion":"argoproj.io/v1alpha1","kind":"AppProject","metadata":{"name":"payments","namespace":"argocd"},"spec":{"sourceRepos":["*"]}}
+[80,443]

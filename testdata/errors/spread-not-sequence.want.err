@@ -1,0 +1,1 @@
+spread-not-sequence.yak:1:6: "---:" writes one document per item of a sequence, found mapping; write "---: [value]" for a single document

@@ -137,11 +137,20 @@ func (p *parser) parseStream() (*ast.Stream, error) {
 			}
 			continue
 		}
-		body, err := p.parseDocumentBody()
+		spread, err := p.spreads()
 		if err != nil {
 			return nil, err
 		}
-		st.Docs = append(st.Docs, &ast.Document{Base: ast.At(pos), Body: body})
+		var body ast.Node
+		if spread {
+			body, err = p.parseDocuments()
+		} else {
+			body, err = p.parseDocumentBody()
+		}
+		if err != nil {
+			return nil, err
+		}
+		st.Docs = append(st.Docs, &ast.Document{Base: ast.At(pos), Body: body, Spread: spread})
 		if !p.atDocBoundary() {
 			return nil, p.errorf(p.cur().Pos, "unexpected %s at document level", p.cur())
 		}
@@ -184,6 +193,72 @@ func (p *parser) parseDocumentBody() (ast.Node, error) {
 		return p.parseLetScope(p.cur().Col(), true)
 	}
 	return p.parseBlockNode()
+}
+
+// spreads reports whether the section starting at the current token writes
+// its documents with a "---:", which only the top of a section may hold.
+func (p *parser) spreads() (bool, error) {
+	for _, t := range p.toks[p.i:] {
+		switch t.Kind {
+		case token.EOF, token.DocStart, token.DocEnd:
+			return false, nil
+		case token.Documents:
+			if t.Col() != 1 {
+				return false, p.errorf(t.Pos, "%q is written at column 1, at the top of a section", "---:")
+			}
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// parseDocuments parses a section written with "---:": the value whose
+// items are the documents it writes, and the statements beside it, which
+// cover that value wherever they are written.
+func (p *parser) parseDocuments() (ast.Node, error) {
+	pos := p.cur().Pos
+	var binds []*ast.Binding
+	var value ast.Node
+	for !p.atDocBoundary() {
+		t := p.cur()
+		switch {
+		case t.Col() != 1:
+			return nil, p.errorf(t.Pos, "unexpected indentation: expected a statement or %q at column 1", "---:")
+		case p.atStatement():
+			declared, err := p.parseStatement(1)
+			if err != nil {
+				return nil, err
+			}
+			binds = append(binds, declared...)
+		case t.Kind == token.Documents:
+			if value != nil {
+				return nil, p.errorf(t.Pos, "a section holds one %q; write every document it writes in that one sequence", "---:")
+			}
+			p.next()
+			switch p.cur().Kind {
+			case token.DoubleColon:
+				return nil, p.errorf(t.Pos, "%q cannot be hidden: the documents it writes are what its section renders", "---::")
+			case token.ColonQuestion:
+				return nil, p.errorf(t.Pos, "%q cannot be optional; write %q to write no documents when the value is null",
+					"---:?", "---: value ?? []")
+			}
+			v, err := p.parseEntryValue(1, p.next())
+			if err != nil {
+				return nil, err
+			}
+			value = v
+		default:
+			return nil, p.errorf(t.Pos, "a section that writes its documents with %q holds nothing else but %q, %q and %q statements; found %s",
+				"---:", token.KeywordLet, token.KeywordImport, token.KeywordSchema, t)
+		}
+	}
+	if len(binds) == 0 {
+		return value, nil
+	}
+	if err := checkStatements(binds); err != nil {
+		return nil, err
+	}
+	return &ast.Let{Base: ast.At(pos), Binds: binds, Body: value}, nil
 }
 
 // parseBlockNode parses a node in block context. The node's own extent is

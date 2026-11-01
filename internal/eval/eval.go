@@ -23,6 +23,9 @@ type docState struct {
 	session *Session
 	// module records a document read by an import rather than rendered.
 	module bool
+	// spread records a section written with "---:", which writes several
+	// documents and so has no one root for "$" to name.
+	spread bool
 	// schemas are the ones declared at the top of the document, which are
 	// what a module offers to the files that import it.
 	schemas map[string]*schema
@@ -264,15 +267,43 @@ func yakMapping(run Run) *Object {
 	return o
 }
 
-// Document evaluates a single document against the given context value and
+// Documents evaluates a single section against the given context value and
 // the description of the run behind "$yak", reaching modules through mods.
-// The returned value is fully constructed but its leaves are still lazy; use
-// Force to resolve them.
-func Document(doc *ast.Document, context Value, run Run, mods Modules) (Value, error) {
+// It answers the one document the section holds, or each item of the
+// sequence a "---:" section writes. The values are fully constructed but
+// their leaves are still lazy; use Force to resolve them.
+func Documents(doc *ast.Document, context Value, run Run, mods Modules) ([]Value, error) {
 	if context == nil {
 		context = NewObject()
 	}
-	return newSession(context, run, mods).document(doc, run.FilePath, false).Value()
+	v, err := newSession(context, run, mods).document(doc, run.FilePath, false).Value()
+	if err != nil {
+		return nil, err
+	}
+	if !doc.Spread {
+		return []Value{v}, nil
+	}
+	arr, ok := v.(*Array)
+	if !ok {
+		return nil, errorf(spreadValue(doc).Pos(),
+			"%q writes one document per item of a sequence, found %s; write %q for a single document",
+			"---:", v.TypeName(), "---: [value]")
+	}
+	docs := make([]Value, arr.Len())
+	for i, item := range arr.Items() {
+		if docs[i], err = item.Value.Value(); err != nil {
+			return nil, err
+		}
+	}
+	return docs, nil
+}
+
+// spreadValue answers the value written after the "---:" of doc.
+func spreadValue(doc *ast.Document) ast.Node {
+	if l, ok := doc.Body.(*ast.Let); ok {
+		return l.Body
+	}
+	return doc.Body
 }
 
 func newSession(context Value, run Run, mods Modules) *Session {
@@ -294,7 +325,7 @@ func (s *Session) Document(doc *ast.Document, file string) *Thunk {
 func (s *Session) document(doc *ast.Document, file string, module bool) *Thunk {
 	run := s.run
 	run.FilePath = file
-	ds := &docState{yak: yakMapping(run), run: run, session: s, module: module}
+	ds := &docState{yak: yakMapping(run), run: run, session: s, module: module, spread: doc.Spread}
 	ds.root = &Thunk{node: doc.Body, env: &Env{doc: ds}, pos: doc.Pos()}
 	return ds.root
 }
@@ -318,6 +349,11 @@ func evalNode(n ast.Node, env *Env) (Value, error) {
 	case *ast.Self:
 		return evalSelf(node, env)
 	case *ast.Root:
+		if env.doc.spread {
+			return nil, errorf(node.Pos(),
+				"%q names the document, and a section written with %q writes several; read the enclosing mapping with %q and the context with %q",
+				"$", "---:", ".", "$$")
+		}
 		return env.doc.root.Value()
 	case *ast.Context:
 		return env.doc.session.context, nil
@@ -691,10 +727,35 @@ func evalLet(node *ast.Let, env *Env) (Value, error) {
 		return nil, err
 	}
 	if s := binds.schemas[ast.SchemaRoot]; root && s != nil {
+		if env.doc.spread {
+			return applyEach(s, v, binds.last()), nil
+		}
 		_, fresh := node.Body.(*ast.Mapping)
 		return s.apply(v, node.Body.Pos(), fresh)
 	}
 	return v, nil
+}
+
+// applyEach checks every document a "---:" section writes against the
+// schema its section declares for "$", leaving the null ones, which render
+// nothing, as they are. A value that is no sequence is left for Documents
+// to refuse.
+func applyEach(s *schema, v Value, env *Env) Value {
+	arr, ok := v.(*Array)
+	if !ok {
+		return v
+	}
+	items := make([]*Elem, arr.Len())
+	for i, item := range arr.Items() {
+		items[i] = &Elem{Comments: item.Comments, Value: &Thunk{env: env, pos: item.Value.pos, fn: func() (Value, error) {
+			iv, err := item.Value.Value()
+			if _, null := iv.(Null); err != nil || null {
+				return iv, err
+			}
+			return s.apply(iv, item.Value.pos, false)
+		}}}
+	}
+	return NewArray(items)
 }
 
 // yamlBooleans are the extra boolean spellings YAML accepts and yak does not.

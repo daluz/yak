@@ -1,0 +1,1 @@
+spread-null.yak:2:6: "---:" writes one document per item of a sequence, found null; write "---: [value]" for a single document

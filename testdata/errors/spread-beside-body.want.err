@@ -1,0 +1,1 @@
+spread-beside-body.yak:1:1: a section that writes its documents with "---:" holds nothing else but "let", "import" and "schema" statements; found "kind"

@@ -1,0 +1,7 @@
+# "schema $" in a "---:" section checks each document it writes, and fills
+# in the defaults of each one. The null ones are left out unchecked.
+schema $ =
+  kind: string
+  replicas: integer = 1
+
+---: [{kind: "Deployment"}, null, {kind: "StatefulSet", replicas: 3}]

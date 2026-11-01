@@ -1,0 +1,1 @@
+import-spread.yak:1:8: module "lib.spread" writes its documents with "---:"; a module holds exactly one

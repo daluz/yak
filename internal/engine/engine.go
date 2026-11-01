@@ -123,11 +123,11 @@ func Render(run eval.Run, src []byte, context eval.Value, w io.Writer, opts rend
 	}
 	docs := make([]eval.Value, 0, len(stream.Docs))
 	for _, doc := range stream.Docs {
-		v, err := eval.Document(doc, context, run, module.NewLoader(run.Strict()))
+		vs, err := eval.Documents(doc, context, run, module.NewLoader(run.Strict()))
 		if err != nil {
 			return err
 		}
-		docs = append(docs, v)
+		docs = append(docs, vs...)
 	}
 	return render.Documents(w, docs, opts)
 }

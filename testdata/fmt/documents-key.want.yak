@@ -1,0 +1,6 @@
+let items = [1, 2]
+---: [x for x in items] # each item is a document
+---
+---:
+  - a: 1
+  - [80, 443]

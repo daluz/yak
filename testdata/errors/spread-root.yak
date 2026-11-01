@@ -1,0 +1,2 @@
+let kind(n) = "\($.prefix)-\(n)"
+---: [{kind: kind(1)}]

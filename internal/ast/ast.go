@@ -34,6 +34,9 @@ type Stream struct {
 type Document struct {
 	Base
 	Body Node
+	// Spread records a section written with "---:", whose Body is the
+	// sequence of documents it writes in its place.
+	Spread bool
 }
 
 // Mapping is a collection of key/value entries, written either in block form

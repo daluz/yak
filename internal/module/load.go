@@ -145,6 +145,9 @@ func (l *Loader) load(s *eval.Session, node *ast.Import, name, file string) (*ev
 	if n := len(stream.Docs); n != 1 {
 		return nil, eval.Errorf(node.Pos(), "module %q holds %d documents; a module holds exactly one", name, n)
 	}
+	if stream.Docs[0].Spread {
+		return nil, eval.Errorf(node.Pos(), "module %q writes its documents with %q; a module holds exactly one", name, "---:")
+	}
 	root := s.Document(stream.Docs[0], file)
 	l.loaded[key] = root
 	return root, nil

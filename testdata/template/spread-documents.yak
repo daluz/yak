@@ -1,0 +1,25 @@
+# A "---:" section writes one document per item of its sequence, after the
+# document above it and before the one below.
+kind: "Namespace"
+name: $$.namespace
+---
+let project(name) =
+  apiVersion: "argoproj.io/v1alpha1"
+  kind: "AppProject"
+  metadata:
+    name: name
+    namespace: namespace
+  spec:
+    sourceRepos: ["*"]
+
+---: [project(p) for p in $$.projects]
+
+let namespace = $$.namespace
+---
+## A null item is dropped as a null document is, a sequence item is one
+## document holding that sequence, and an absent list writes nothing.
+---:
+  - if $$.debug then {debug: true}
+  - [80, 443]
+---
+---: $$?.extra ?? []

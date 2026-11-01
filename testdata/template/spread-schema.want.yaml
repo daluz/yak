@@ -1,0 +1,5 @@
+kind: Deployment
+replicas: 1
+---
+kind: StatefulSet
+replicas: 3

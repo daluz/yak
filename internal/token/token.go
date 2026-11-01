@@ -35,6 +35,10 @@ const (
 	EOF Kind = iota
 	DocStart
 	DocEnd
+	// Documents is the "---" of a "---:" written at the start of a line,
+	// whose value is the sequence of documents its section writes. The
+	// separator after it is a token of its own.
+	Documents
 	Ident
 	DollarIdent
 	Int
@@ -101,6 +105,7 @@ const (
 var spelling = map[Kind]string{
 	DocStart:      "---",
 	DocEnd:        "...",
+	Documents:     "---",
 	Colon:         ":",
 	DoubleColon:   "::",
 	ColonQuestion: ":?",

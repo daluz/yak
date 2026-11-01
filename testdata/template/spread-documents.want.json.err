@@ -1,0 +1,1 @@
+json holds one document, but the template produced 4; use yaml, kyaml or jsonl for a stream

@@ -1,0 +1,4 @@
+schema $ =
+  kind: string
+
+---: [{kind: "Deployment"}, {kind: 1}]

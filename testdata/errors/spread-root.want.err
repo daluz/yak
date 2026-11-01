@@ -1,0 +1,1 @@
+spread-root.yak:1:18: "$" names the document, and a section written with "---:" writes several; read the enclosing mapping with "." and the context with "$$"

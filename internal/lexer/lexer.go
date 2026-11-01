@@ -7,6 +7,7 @@
 package lexer
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -206,6 +207,15 @@ func (l *lexer) scanToken() error {
 	start := l.pos()
 	c := l.peek()
 
+	// A "---:" is lexed wherever a line starts with one, so the parser can
+	// say that it belongs at column 1 rather than read it as dashes.
+	if l.block && l.bol && bytes.HasPrefix(l.src[l.off:], []byte("---:")) {
+		l.advance()
+		l.advance()
+		l.advance()
+		l.emit(token.Token{Kind: token.Documents, Lit: "---", Pos: start})
+		return nil
+	}
 	if l.block && l.bol && l.col == 1 {
 		if marker, ok := l.docMarker(); ok {
 			kind := token.DocStart
