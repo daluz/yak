@@ -37,7 +37,7 @@ $ yak render FILE.yak|DIR|REMOTE [-c context.yaml|context.json]... [-f FORMAT]
                                    [-o FILE | -O] [--output-dir DIR]
                                    [--keep-null-documents] [--strict=false]
                                    [--skip-schema-checks] [--skip-package-context]
-                                   [--plain-http]
+                                   [--skip-render-deps] [--plain-http]
 ```
 
 | Flag | Meaning |
@@ -51,6 +51,7 @@ $ yak render FILE.yak|DIR|REMOTE [-c context.yaml|context.json]... [-f FORMAT]
 | `--keep-null-documents` | Write the documents that evaluated to `null`. |
 | `--strict=false` | Turn [strict mode](#strict-mode) off. |
 | `--skip-schema-checks` | Fill in the defaults [schemas](SPEC.md#schemas) declare without checking any value against them. |
+| `--skip-render-deps` | Render only the package's own templates, not the [dependencies it renders](#rendering-dependencies). |
 | `--plain-http` | Fetch an `oci://` package over HTTP rather than HTTPS. |
 
 `-o` and `-O` cannot be given together.
@@ -85,6 +86,40 @@ $ yak render deploy -O
 Two templates that would write the same file, such as `app.yak` and
 `app.yaml.yak`, are an error. Nothing is written unless every template
 renders.
+
+### Rendering dependencies
+
+A directory that is a package, one with a `yak.pkg` of its own, also renders
+the dependencies its `yak.pkg` marks with
+[`render`](SPEC.md#rendering-dependencies), so it needs `--output-dir`.
+Without a rule, a dependency's templates go beneath a directory named for it,
+laid out as its own directory would be, and the dependencies it renders in
+turn go beneath that one; with one, they go where the rule sends them. Each
+dependency's templates read the same `-c` files, through the context file of
+their own package. A dependency beneath the directory is rendered as a
+dependency only, not as part of the directory too.
+
+```yaml
+package:
+  name: platform
+dependencies:
+  web:
+    source: git+https://github.com/acme/web.git@v2
+    render:
+      rules:
+        "/": "manifests/web/"
+        "tests/": null
+      transitive: [db]
+```
+
+```console
+$ yak render . --output-dir build
+```
+
+renders the package's own templates beneath `build/`, `web`'s beneath
+`build/manifests/web/` but for its tests, and `web`'s dependency `db`
+beneath `build/web/db/`. `--skip-render-deps` renders the package's own
+templates alone.
 
 ### Rendering a remote package
 
@@ -344,7 +379,7 @@ an identifier unless `--name` is given.
 ### `yak add`
 
 ```console
-$ yak add SOURCE [--name NAME]
+$ yak add SOURCE [--name NAME] [--render]
 ```
 
 Adds a dependency to `yak.pkg`, keeping the rest of the file, comments
@@ -355,9 +390,23 @@ the package, as its own `yak.pkg` names it, or after the module's file, unless
 relative to `yak.pkg`. The package is then synced, as by `yak sync`, so a
 remote package is vendored and pinned in `yak.lock` at once.
 
+`--render` writes the dependency as a mapping with `render: true`, so that
+[rendering the package](#rendering-dependencies) renders it too; a library
+cannot be added so.
+
 ```console
 $ yak add git+https://github.com/acme/lib.git@v1.2.0   # named as its yak.pkg names it
 $ yak add ../shared --name common
+$ yak add --render git+https://github.com/acme/web.git@v2
+```
+
+```yaml
+dependencies:
+  lib: git+https://github.com/acme/lib.git@v1.2.0
+  common: ../shared
+  web:
+    source: git+https://github.com/acme/web.git@v2
+    render: true
 ```
 
 ### `yak remove`
@@ -645,7 +694,7 @@ packages:
     context:
       replicas: 4
     rules:
-      "./": "manifests/"
+      "/": "manifests/"
       "deploy/app.toml.yak": "config/web.toml"
   - source: "db"
 ```
@@ -674,6 +723,7 @@ otherwise. It takes these keys:
 | `keepNullDocuments` | As `--keep-null-documents`. | `false` |
 | `skipSchemaChecks` | As `--skip-schema-checks`. | `false` |
 | `skipPackageContext` | As `--skip-package-context`. | `false` |
+| `skipRenderDeps` | As `--skip-render-deps`. | `false` |
 | `plainHttp` | As `--plain-http`. | `false` |
 
 Each entry of `packages` is a mapping. Its `source` is a package's directory,
@@ -696,17 +746,22 @@ go, relative to `output`:
 | --- | --- |
 | `"service.yak"` | That template. |
 | `"deploy/"` | Every template beneath the directory. |
-| `"./"` | Every template of the package. |
+| `"/"` | Every template of the package. |
 
 | Value | Sends them |
 | --- | --- |
 | `"config/web.toml"` | To that file, which only a template's key can be sent to. Its extension chooses the format, as `-o` does. |
 | `"manifests/"` | Beneath that directory, each at its path beneath the key, named as `-O` names it. |
+| `"/"` | Beneath `output` itself, as a directory sends them. |
 | `null` | Nowhere: they are not rendered. |
 
-The longest key that covers a template decides where it goes, so a template's
-key overrides its directory's, and `"deploy/"` overrides `"./"`. The keys and
-values are quoted, since they are not identifiers. The spec above writes:
+A key or a value may begin with `/`, which changes nothing: `"/deploy/"`
+covers what `"deploy/"` does, and `"/manifests/"` sends where `"manifests/"`
+does. The longest key that covers a template decides where it goes, so a
+template's key overrides its directory's, and `"deploy/"` overrides `"/"`. The
+keys and values are quoted, since they are not identifiers. A package's
+[`yak.pkg`](SPEC.md#rendering-dependencies) writes the rules of the
+dependencies it renders the same way. The spec above writes:
 
 ```text
 build/manifests/service.yaml
@@ -721,6 +776,12 @@ one package that would write the same file are an error; when templates of
 two packages would, the package later in `packages` wins, so a package can
 overlay what an earlier one writes. Nothing is written unless every template
 renders.
+
+A package also renders the dependencies its `yak.pkg` marks with `render`,
+unless `skipRenderDeps` is `true`. They go where
+[rendering the package as a directory](#rendering-dependencies) would send
+them, with the directory named for the package, such as `build/web/`, as its
+`--output-dir`. The spec's rules cover the package's own templates alone.
 
 ## Diagnostics
 

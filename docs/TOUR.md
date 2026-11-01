@@ -1720,6 +1720,28 @@ leaves the libraries out:
 $ yak render . --output-dir build
 ```
 
+A dependency is only imported, unless it is written with `render`. Then its
+templates are rendered along with the package's, beneath a directory named
+for it, or where its rules send them. `yak add --render` adds one so:
+
+```yaml
+package:
+  name: platform
+dependencies:
+  web:
+    source: ../web
+    render:
+      rules:
+        "/": "manifests/web/"
+        "tests/": null
+```
+
+With `../web` holding `service.yak` and `tests/smoke.yak`, rendering
+`platform` with `--output-dir build` writes `build/manifests/web/service.yaml`
+and leaves the tests out. `transitive` under `render` renders the
+dependency's own dependencies too, and `--skip-render-deps` renders the
+package's own templates alone.
+
 A package can shape the context its templates read, as a Helm chart carries
 its `values.yaml`. `package.context` names a template that is evaluated
 against the `-c` files, and what it renders is the `$$` of every template in
@@ -2042,7 +2064,7 @@ packages:
     context:
       replicas: 4
     rules:
-      "./": "manifests/"
+      "/": "manifests/"
       "deploy/app.toml.yak": "config/web.toml"
   - source: "db"
 ```
@@ -2055,11 +2077,13 @@ over it, so `web` reads `replicas: 4` and `db` reads `replicas: 2`. A
 like the ones `yak add` takes.
 
 `rules` say where the outputs go, beneath `output`, which defaults to
-`build`. A key names a template, a directory ending in `/`, or `./` for the
+`build`. A key names a template, a directory ending in `/`, or `/` for the
 whole package, and the longest key that covers a template decides. Its value
 is a file, whose extension chooses the format, a directory ending in `/`, or
 `null` to leave the templates out. A package's own rules apply to it alone,
 and without a rule its outputs go beneath a directory named for the package.
+The dependencies a package [renders](#20-packages) go beneath that
+directory too.
 
 ```console
 $ DEPLOY_ENV=prod yak spec render release.yakspec

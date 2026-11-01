@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -34,9 +33,6 @@ const (
 	Version = "yakspec/v1"
 )
 
-// rootDir is the key of a rule that covers the whole package.
-const rootDir = "./"
-
 // Spec is a spec file as it was read.
 type Spec struct {
 	// Path is the spec file.
@@ -47,11 +43,12 @@ type Spec struct {
 	KeepNullDocuments  bool
 	SkipSchemaChecks   bool
 	SkipPackageContext bool
+	SkipRenderDeps     bool
 	NonStrict          bool
 	PlainHTTP          bool
 	Packages           []*Package
 	// rules are the top-level ones, which every package shares.
-	rules []*Rule
+	rules []*module.Rule
 }
 
 // Package is one entry of packages.
@@ -63,76 +60,24 @@ type Package struct {
 	// merged over the top-level one.
 	Context *eval.Object
 	// own are the rules the package's entry gives.
-	own []*Rule
+	own []*module.Rule
 	// rules are own followed by the top-level ones it does not override.
-	rules []*Rule
+	rules []*module.Rule
 	label string
 }
 
-// Rule is one entry of rules: a template, a directory ending in "/", or
-// "./" for the whole package, and where what it covers goes.
-type Rule struct {
-	key  string
-	to   string
-	drop bool
-	used bool
-}
-
-// covers reports whether the rule covers the template at rel, a slash
-// path relative to the package root.
-func (r *Rule) covers(rel string) bool {
-	if strings.HasSuffix(r.key, "/") {
-		return strings.HasPrefix(rel, r.prefix())
-	}
-	return rel == r.key
-}
-
-// prefix is the part of a template's path the rule covers.
-func (r *Rule) prefix() string {
-	if r.key == rootDir {
-		return ""
-	}
-	return r.key
-}
-
-// Target is where one template's output goes.
-type Target struct {
-	// Drop leaves the template out.
-	Drop bool
-	// Path is the output file, a slash path relative to Output, when File
-	// is set; otherwise the directory the output goes beneath, at Rest.
-	Path string
-	File bool
-	// Rest is the template's path beneath Path, which its output is named
-	// after as a directory names it.
-	Rest string
-}
+// Target is where one template's output goes, with its Path relative to
+// Output.
+type Target = module.Target
 
 // Target answers where the template at rel, a slash path relative to the
 // root of the package called name, goes. The longest rule that covers it
 // decides; without one it goes beneath a directory named for the package.
 func (p *Package) Target(name, rel string) Target {
-	var best *Rule
-	for _, r := range p.rules {
-		if r.covers(rel) && (best == nil || len(r.prefix()) > len(best.prefix())) {
-			best = r
-		}
+	if t, ok := module.Place(p.rules, rel); ok {
+		return t
 	}
-	if best == nil {
-		return Target{Path: name, Rest: rel}
-	}
-	best.used = true
-	switch {
-	case best.drop:
-		return Target{Drop: true}
-	case !strings.HasSuffix(best.to, "/"):
-		return Target{Path: best.to, File: true}
-	}
-	rest := strings.TrimPrefix(rel, best.prefix())
-	if !strings.HasSuffix(best.key, "/") {
-		rest = path.Base(rel)
-	}
-	return Target{Path: strings.TrimSuffix(best.to, "/"), Rest: rest}
+	return Target{Path: name, Rest: rel}
 }
 
 // CheckRules refuses a rule that covered no template, once every template
@@ -140,14 +85,14 @@ func (p *Package) Target(name, rel string) Target {
 // package, and a package's own rule one in that package.
 func (s *Spec) CheckRules() error {
 	for _, r := range s.rules {
-		if !r.used {
-			return fmt.Errorf("%s: rules: %s covers no template in any package, or every package overrides it", s.Path, r.key)
+		if !r.Used() {
+			return fmt.Errorf("%s: rules: %s covers no template in any package, or every package overrides it", s.Path, r.Key)
 		}
 	}
 	for _, p := range s.Packages {
 		for _, r := range p.own {
-			if !r.used {
-				return fmt.Errorf("%s: %s.rules: %s covers no template of %s", s.Path, p.label, r.key, p.Source)
+			if !r.Used() {
+				return fmt.Errorf("%s: %s.rules: %s covers no template of %s", s.Path, p.label, r.Key, p.Source)
 			}
 		}
 	}
@@ -289,6 +234,8 @@ func decode(file string, v eval.Value) (*Spec, error) {
 			s.SkipSchemaChecks, err = d.boolean(name, v)
 		case "skipPackageContext":
 			s.SkipPackageContext, err = d.boolean(name, v)
+		case "skipRenderDeps":
+			s.SkipRenderDeps, err = d.boolean(name, v)
 		case "plainHttp":
 			s.PlainHTTP, err = d.boolean(name, v)
 		case "strict":
@@ -303,7 +250,7 @@ func decode(file string, v eval.Value) (*Spec, error) {
 			s.Packages, err = d.packages(name, v)
 		default:
 			return nil, d.errorf(name, "is not a key of a spec file; it takes spec, output, format, strict, "+
-				"keepNullDocuments, skipSchemaChecks, skipPackageContext, plainHttp, context, rules and packages")
+				"keepNullDocuments, skipSchemaChecks, skipPackageContext, skipRenderDeps, plainHttp, context, rules and packages")
 		}
 		if err != nil {
 			return nil, err
@@ -324,9 +271,9 @@ func decode(file string, v eval.Value) (*Spec, error) {
 		if p.Context, err = eval.Merge(context, p.Context); err != nil {
 			return nil, err
 		}
-		p.rules = append([]*Rule(nil), p.own...)
+		p.rules = append([]*module.Rule(nil), p.own...)
 		for _, r := range s.rules {
-			if !slices.ContainsFunc(p.own, func(o *Rule) bool { return o.key == r.key }) {
+			if !slices.ContainsFunc(p.own, func(o *module.Rule) bool { return o.Key == r.Key }) {
 				p.rules = append(p.rules, r)
 			}
 		}
@@ -382,73 +329,31 @@ func (d decoder) packages(key string, v eval.Value) ([]*Package, error) {
 	return pkgs, nil
 }
 
-func (d decoder) rules(key string, v eval.Value) ([]*Rule, error) {
+func (d decoder) rules(key string, v eval.Value) ([]*module.Rule, error) {
 	o, err := d.mapping(key, v)
 	if err != nil {
 		return nil, err
 	}
-	var rules []*Rule
+	var rules []*module.Rule
 	for _, f := range o.Fields() {
 		v, err := f.Value.Value()
 		if err != nil {
 			return nil, err
 		}
 		k := key + ": " + f.Name
-		if err := d.ruleKey(k, f.Name); err != nil {
-			return nil, err
-		}
-		r := &Rule{key: f.Name}
+		var r *module.Rule
 		switch to := v.(type) {
 		case eval.Null:
-			r.drop = true
+			r, err = module.NewRule(f.Name, "", true)
 		case eval.String:
-			r.to = string(to)
-			if err := d.ruleTarget(k, f.Name, r.to); err != nil {
-				return nil, err
-			}
+			r, err = module.NewRule(f.Name, string(to), false)
 		default:
 			return nil, d.errorf(k, "must be sent to a path or to null, found %s", to.TypeName())
+		}
+		if err != nil {
+			return nil, d.errorf(k, "%v", err)
 		}
 		rules = append(rules, r)
 	}
 	return rules, nil
-}
-
-// ruleKey checks what a rule covers: "./", a directory beneath the package
-// root ending in "/", or a template.
-func (d decoder) ruleKey(k, key string) error {
-	if key == rootDir {
-		return nil
-	}
-	if !isLocal(strings.TrimSuffix(key, "/")) {
-		return d.errorf(k, "is not a path beneath the package root")
-	}
-	switch {
-	case strings.HasSuffix(key, "/"):
-		return nil
-	case strings.HasSuffix(key, module.ExtLibrary):
-		return d.errorf(k, "is a library, which can be imported but not rendered")
-	case !strings.HasSuffix(key, module.Ext):
-		return d.errorf(k, "names no template; a rule covers a %s template, or a directory written with a trailing /", module.Ext)
-	}
-	return nil
-}
-
-// ruleTarget checks where a rule sends what it covers: a file, or a
-// directory ending in "/", beneath output. A directory can only be sent to
-// a directory.
-func (d decoder) ruleTarget(k, key, to string) error {
-	if to != rootDir && !isLocal(strings.TrimSuffix(to, "/")) {
-		return d.errorf(k, "sends it to %q, which is not a path beneath output", to)
-	}
-	if strings.HasSuffix(key, "/") && !strings.HasSuffix(to, "/") {
-		return d.errorf(k, "names a directory, so it must be sent to one, written with a trailing /")
-	}
-	return nil
-}
-
-// isLocal reports whether p is a clean slash path beneath the directory it
-// is relative to, and not that directory itself.
-func isLocal(p string) bool {
-	return p != "." && path.Clean(p) == p && filepath.IsLocal(filepath.FromSlash(p))
 }

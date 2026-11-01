@@ -25,8 +25,9 @@ context:
   env: "dev"
 
 # Where the outputs go. A key covers a template, a directory ending in "/",
-# or "./" for the whole package; its value is a file, a directory ending in
-# "/", or null to leave them out. The longest key that covers a template
+# or "/" for the whole package; its value is a file, a directory ending in
+# "/", "/" for output itself, or null to leave them out. A leading "/" is
+# optional on both. The longest key that covers a template
 # decides, and a package's own rules replace the ones here with its keys.
 # Without a rule, a package's outputs go beneath a directory named for it.
 #
@@ -39,7 +40,7 @@ packages:
     # context:
     #   replicas: 2
     # rules:
-    #   "./": "manifests/"
+    #   "/": "manifests/"
 `
 
 // Init writes an example spec file at path, which must end in Ext and not

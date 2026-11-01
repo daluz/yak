@@ -51,7 +51,7 @@ func TestBuildPushAndAddFromARegistry(t *testing.T) {
 
 	app := project(t, "package:\n  name: app\n")
 	ref := "oci://" + host + "/acme/lib:1.0.0"
-	if err := deps.Add(app, ref, "", deps.Options{PlainHTTP: true}); err != nil {
+	if err := deps.Add(app, ref, "", false, deps.Options{PlainHTTP: true}); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, app.Path); !strings.Contains(got, "lib: "+ref) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -32,6 +33,7 @@ func newRenderCommand() *cobra.Command {
 		strict     bool
 		skipChecks bool
 		skipCtx    bool
+		skipDeps   bool
 		plainHTTP  bool
 	)
 
@@ -59,6 +61,9 @@ func newRenderCommand() *cobra.Command {
 			"--automatic-output: the files go beside their templates, or into the same\n" +
 			"tree beneath --output-dir. Hidden files and directories are skipped, and\n" +
 			"nothing is written unless every template renders.\n\n" +
+			"A directory or a remote package that is a package also renders the\n" +
+			"dependencies its yak.pkg marks with render, beneath --output-dir, unless\n" +
+			"--skip-render-deps is given.\n\n" +
 			"A document that evaluates to null, such as one holding nothing but\n" +
 			"bindings, is left out unless --keep-null-documents is given.\n\n" +
 			"Rendering is strict unless --strict=false is given: the same template and\n" +
@@ -74,7 +79,7 @@ func newRenderCommand() *cobra.Command {
 				return fmt.Errorf("%s is a spec file; render it with yak spec render", args[0])
 			}
 			req := renderRequest{contexts: contexts, format: format, keepNull: keepNull, nonStrict: !strict,
-				skipChecks: skipChecks, skipCtx: skipCtx}
+				skipChecks: skipChecks, skipCtx: skipCtx, skipDeps: skipDeps}
 			if module.IsRemote(args[0]) {
 				fetch := deps.Options{Log: cmd.ErrOrStderr(), PlainHTTP: plainHTTP}
 				return renderRemote(args[0], req, output, automatic, outputDir, fetch)
@@ -106,6 +111,8 @@ func newRenderCommand() *cobra.Command {
 		"YAML or JSON file to merge into $context (repeatable; later files win)")
 	cmd.Flags().BoolVar(&skipCtx, "skip-package-context", false,
 		"read the context files as they are, without the context file of the template's package")
+	cmd.Flags().BoolVar(&skipDeps, "skip-render-deps", false,
+		"render only the package's own templates, not the dependencies its yak.pkg renders")
 	cmd.Flags().StringVarP(&output, "output", "o", "",
 		"write the rendered output to this file instead of standard output, which - names")
 	cmd.Flags().BoolVarP(&automatic, "automatic-output", "O", false,
@@ -208,6 +215,7 @@ type renderRequest struct {
 	nonStrict  bool
 	skipChecks bool
 	skipCtx    bool
+	skipDeps   bool
 }
 
 func (r renderRequest) options(template, output string) (render.Options, error) {
@@ -234,8 +242,9 @@ func (r renderRequest) render(template string, opts render.Options) ([]byte, err
 }
 
 // renderDir renders every template beneath dir, writing each beside its
-// template, or at the same place beneath outputDir when it is given. Nothing
-// is written until every template has rendered.
+// template, or at the same place beneath outputDir when it is given, and
+// when dir is a package the dependencies it renders. Nothing is written
+// until every template has rendered.
 func renderDir(dir string, req renderRequest, output string, automatic bool, outputDir string) error {
 	if output != "" {
 		return fmt.Errorf("--output names one file, but the directory %s writes one per template; use --output-dir or --automatic-output", dir)
@@ -251,29 +260,188 @@ func renderDir(dir string, req renderRequest, output string, automatic bool, out
 	if outputDir != "" {
 		base = outputDir
 	}
-	var all []rendered
-	writers := map[string]string{}
-	for _, template := range templates {
-		opts, err := req.options(template, "")
-		if err != nil {
+	pkg, err := module.ReadPackage(dir)
+	if err != nil {
+		return err
+	}
+	var deps []job
+	if pkg != nil && len(pkg.Render) > 0 && !req.skipDeps {
+		if outputDir == "" {
+			return fmt.Errorf("the package %s renders its dependencies, which need --output-dir; or give --skip-render-deps", dir)
+		}
+		var claimed []string
+		if deps, claimed, err = dependencyJobs(pkg, pkg.Render, base, base, nil); err != nil {
 			return err
 		}
+		templates = outside(templates, claimed)
+	}
+	var jobs []job
+	for _, template := range templates {
 		rel, err := filepath.Rel(dir, template)
 		if err != nil {
 			return err
 		}
-		dest := filepath.Join(base, outputName(templateStem(rel), opts.Format))
-		if other, ok := writers[dest]; ok {
-			return fmt.Errorf("%s and %s would both write %s", other, template, dest)
-		}
-		writers[dest] = template
-		out, err := req.render(template, opts)
+		jobs = append(jobs, job{template: template, dir: base, rest: rel})
+	}
+	if len(jobs)+len(deps) == 0 {
+		return fmt.Errorf("no %s templates beneath %s", module.Ext, dir)
+	}
+	all, err := req.renderJobs(append(jobs, deps...), map[string]string{})
+	if err != nil {
+		return err
+	}
+	return writeAll(all)
+}
+
+// job is a template to render and where its output goes: to output, a file
+// whose extension chooses the format, or else beneath dir, named after the
+// template's path rest as a directory names it.
+type job struct {
+	template  string
+	output    string
+	dir, rest string
+}
+
+// renderJobs renders every job into memory. writers holds the files written
+// so far, by the template that writes each, and two templates writing one
+// file are refused.
+func (r renderRequest) renderJobs(jobs []job, writers map[string]string) ([]rendered, error) {
+	var all []rendered
+	for _, j := range jobs {
+		opts, err := r.options(j.template, j.output)
 		if err != nil {
-			return err
+			return nil, err
+		}
+		dest := j.output
+		if dest == "" {
+			dest = filepath.Join(j.dir, outputName(templateStem(filepath.FromSlash(j.rest)), opts.Format))
+		}
+		if other, ok := writers[dest]; ok {
+			return nil, fmt.Errorf("%s and %s would both write %s", other, j.template, dest)
+		}
+		writers[dest] = j.template
+		out, err := r.render(j.template, opts)
+		if err != nil {
+			return nil, err
 		}
 		all = append(all, rendered{dest, out})
 	}
-	return writeAll(all)
+	return all, nil
+}
+
+// dependencyJobs answers the jobs of the dependencies of pkg that entries
+// render, and of the ones they render in turn, and the packages and modules
+// they render from, which the package that depends on them leaves out of its
+// own templates. A dependency goes beneath base joined to its name unless its
+// rules send it elsewhere, relative to rulesDir, the output directory of the
+// package whose yak.pkg writes them. stack holds the packages rendering it,
+// so that one that would render itself is refused.
+func dependencyJobs(pkg *module.Package, entries map[string]*module.Render, rulesDir, base string, stack []string) ([]job, []string, error) {
+	root, err := filepath.Abs(pkg.Root())
+	if err != nil {
+		return nil, nil, err
+	}
+	if i := slices.Index(stack, root); i >= 0 {
+		return nil, nil, fmt.Errorf("%s renders itself through its dependencies: %s", pkg.Path,
+			strings.Join(append(stack[i:], root), " renders "))
+	}
+	stack = append(stack, root)
+	var jobs []job
+	var claimed []string
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
+		r := entries[name]
+		if r == nil {
+			continue
+		}
+		loc, err := pkg.Locate(name)
+		if err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", r.Label, err)
+		}
+		dir := filepath.Join(base, name)
+		var templates []string
+		var sub []job
+		from := filepath.Dir(loc)
+		switch {
+		case strings.HasSuffix(loc, module.ExtLibrary):
+			return nil, nil, fmt.Errorf("%s: %s is a library, which can be imported but not rendered", r.Label, loc)
+		case strings.HasSuffix(loc, module.Ext):
+			if r.All || r.Deps != nil {
+				return nil, nil, fmt.Errorf("%s.transitive: %s is a module, which has no dependencies", r.Label, loc)
+			}
+			templates = []string{loc}
+		default:
+			dep, err := module.ReadPackage(loc)
+			if err == nil {
+				templates, err = templatesIn(loc)
+			}
+			if err != nil {
+				return nil, nil, err
+			}
+			children, subRules := r.Deps, rulesDir
+			if r.All {
+				children, subRules = dep.Render, dir
+			}
+			var subClaimed []string
+			if sub, subClaimed, err = dependencyJobs(dep, children, subRules, dir, stack); err != nil {
+				return nil, nil, err
+			}
+			templates = outside(templates, subClaimed)
+			claimed = append(claimed, subClaimed...)
+			from = loc
+		}
+		claimed = append(claimed, loc)
+		if len(templates)+len(sub) == 0 {
+			return nil, nil, fmt.Errorf("%s: %s renders no %s template", r.Label, loc, module.Ext)
+		}
+		for _, template := range templates {
+			rel, err := filepath.Rel(from, template)
+			if err != nil {
+				return nil, nil, err
+			}
+			rel = filepath.ToSlash(rel)
+			t, ok := module.Place(r.Rules, rel)
+			switch {
+			case !ok:
+				jobs = append(jobs, job{template: template, dir: dir, rest: rel})
+			case t.Drop:
+			case t.File:
+				jobs = append(jobs, job{template: template, output: filepath.Join(rulesDir, filepath.FromSlash(t.Path))})
+			default:
+				jobs = append(jobs, job{template: template, dir: filepath.Join(rulesDir, filepath.FromSlash(t.Path)), rest: t.Rest})
+			}
+		}
+		for _, rule := range r.Rules {
+			if !rule.Used() {
+				return nil, nil, fmt.Errorf("%s.rules: %s covers no template of %s", r.Label, rule.Key, loc)
+			}
+		}
+		jobs = append(jobs, sub...)
+	}
+	return jobs, claimed, nil
+}
+
+// outside answers the templates that lie in none of claimed, the packages
+// and modules that render as dependencies.
+func outside(templates, claimed []string) []string {
+	var kept []string
+	for _, t := range templates {
+		abs, err := filepath.Abs(t)
+		if err != nil {
+			kept = append(kept, t)
+			continue
+		}
+		if !slices.ContainsFunc(claimed, func(c string) bool {
+			c, err := filepath.Abs(c)
+			if err != nil {
+				return false
+			}
+			rel, err := filepath.Rel(c, abs)
+			return err == nil && (rel == "." || filepath.IsLocal(rel))
+		}) {
+			kept = append(kept, t)
+		}
+	}
+	return kept
 }
 
 // rendered is the output of one template and the file it goes to.
@@ -297,14 +465,7 @@ func templatesIn(dir string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	templates, err = withoutContextFiles(templates)
-	if err != nil {
-		return nil, err
-	}
-	if len(templates) == 0 {
-		return nil, fmt.Errorf("no %s templates beneath %s", module.Ext, dir)
-	}
-	return templates, nil
+	return withoutContextFiles(templates)
 }
 
 // renderRemote fetches the remote package ref names, with what it depends

@@ -35,7 +35,10 @@ func newSpecRenderCommand() *cobra.Command {
 			"The spec file is evaluated outside strict mode against an empty context;\n" +
 			"the packages render in strict mode unless it sets strict: false. When two\n" +
 			"packages would write the same file, the later one in packages wins, and\n" +
-			"nothing is written unless every template renders.",
+			"nothing is written unless every template renders.\n\n" +
+			"A package also renders the dependencies its yak.pkg marks with render,\n" +
+			"beneath the directory named for it, unless the spec file sets\n" +
+			"skipRenderDeps: true.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return renderSpec(args[0], cmd.ErrOrStderr())
@@ -95,40 +98,40 @@ func renderSpec(path string, log io.Writer) error {
 		if err != nil {
 			return err
 		}
-		req.context = p.Context
-		writers := map[string]string{}
+		var deps []job
+		if len(pkg.Render) > 0 && !spec.SkipRenderDeps {
+			base := filepath.Join(spec.Output, pkg.Name)
+			var claimed []string
+			if deps, claimed, err = dependencyJobs(pkg, pkg.Render, base, base, nil); err != nil {
+				return err
+			}
+			templates = outside(templates, claimed)
+		}
+		var jobs []job
 		for _, template := range templates {
 			rel, err := filepath.Rel(dir, template)
 			if err != nil {
 				return err
 			}
 			target := p.Target(pkg.Name, filepath.ToSlash(rel))
-			if target.Drop {
-				continue
+			switch {
+			case target.Drop:
+			case target.File:
+				jobs = append(jobs, job{template: template, output: filepath.Join(spec.Output, filepath.FromSlash(target.Path))})
+			default:
+				jobs = append(jobs, job{template: template, dir: filepath.Join(spec.Output, filepath.FromSlash(target.Path)), rest: target.Rest})
 			}
-			output := ""
-			if target.File {
-				output = target.Path
-			}
-			opts, err := req.options(template, output)
-			if err != nil {
-				return err
-			}
-			dest := filepath.Join(spec.Output, filepath.FromSlash(target.Path))
-			if !target.File {
-				dest = filepath.Join(dest, outputName(templateStem(filepath.FromSlash(target.Rest)), opts.Format))
-			}
-			if other, ok := writers[dest]; ok {
-				return fmt.Errorf("%s and %s would both write %s", other, template, dest)
-			}
-			writers[dest] = template
-			out, err := req.render(template, opts)
-			if err != nil {
-				return err
-			}
-			// Written in order, a later package's file replaces an earlier one's.
-			all = append(all, rendered{dest, out})
 		}
+		if len(templates)+len(deps) == 0 {
+			return fmt.Errorf("no %s templates beneath %s", module.Ext, dir)
+		}
+		req.context = p.Context
+		out, err := req.renderJobs(append(jobs, deps...), map[string]string{})
+		if err != nil {
+			return err
+		}
+		// Written in order, a later package's file replaces an earlier one's.
+		all = append(all, out...)
 	}
 	if err := spec.CheckRules(); err != nil {
 		return err

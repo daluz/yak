@@ -261,15 +261,15 @@ func TestAddAndRemove(t *testing.T) {
 		"../one.yakl":       "",
 	})
 
-	if err := deps.Add(pkg, source(lib, ""), "", deps.Options{}); err != nil {
+	if err := deps.Add(pkg, source(lib, ""), "", false, deps.Options{}); err != nil {
 		t.Fatal(err)
 	}
 	pkg = readPackage(t, pkg.Root())
-	if err := deps.Add(pkg, filepath.Join(pkg.Root(), "..", "shared"), "", deps.Options{}); err != nil {
+	if err := deps.Add(pkg, filepath.Join(pkg.Root(), "..", "shared"), "", false, deps.Options{}); err != nil {
 		t.Fatal(err)
 	}
 	pkg = readPackage(t, pkg.Root())
-	if err := deps.Add(pkg, filepath.Join(pkg.Root(), "..", "one.yakl"), "first", deps.Options{}); err != nil {
+	if err := deps.Add(pkg, filepath.Join(pkg.Root(), "..", "one.yakl"), "first", false, deps.Options{}); err != nil {
 		t.Fatal(err)
 	}
 	want := "# The app.\npackage:\n  name: app # its name\ndependencies:\n" +
@@ -282,7 +282,7 @@ func TestAddAndRemove(t *testing.T) {
 	}
 
 	pkg = readPackage(t, pkg.Root())
-	if err := deps.Add(pkg, filepath.Join(pkg.Root(), "..", "shared"), "", deps.Options{}); err == nil ||
+	if err := deps.Add(pkg, filepath.Join(pkg.Root(), "..", "shared"), "", false, deps.Options{}); err == nil ||
 		!strings.Contains(err.Error(), `already has a dependency "shared"`) {
 		t.Errorf("adding shared twice: error = %v, want a complaint", err)
 	}
@@ -306,7 +306,7 @@ func TestAddLeavesYakPkgAloneOnFailure(t *testing.T) {
 	const pkgfile = "package:\n  name: app\n"
 	pkg := project(t, pkgfile)
 
-	err := deps.Add(pkg, source(plain, ""), "plain", deps.Options{})
+	err := deps.Add(pkg, source(plain, ""), "plain", false, deps.Options{})
 	if err == nil || !strings.Contains(err.Error(), "is not a package") {
 		t.Errorf("error = %v, want the repository refused", err)
 	}

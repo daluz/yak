@@ -31,8 +31,10 @@ func TestLoadRefuses(t *testing.T) {
 		{"a context schema", "schema $$ = {}\npackages: [{source: \"web\"}]\n", "cannot declare a schema for it"},
 		{"a library rule", "rules: {\"lib/x.yakl\": \"x.yaml\"}\npackages: [{source: \"web\"}]\n", "is a library"},
 		{"a rule naming no template", "rules: {\"README.md\": \"x.yaml\"}\npackages: [{source: \"web\"}]\n", "names no template"},
-		{"a rule climbing out", "rules: {\"app.yak\": \"../app.yaml\"}\npackages: [{source: \"web\"}]\n", "not a path beneath output"},
-		{"a template sent to output itself", "rules: {\"app.yak\": \".\"}\npackages: [{source: \"web\"}]\n", "not a path beneath output"},
+		{"a rule climbing out", "rules: {\"app.yak\": \"../app.yaml\"}\npackages: [{source: \"web\"}]\n", "not a path beneath the output"},
+		{"a template sent to output itself", "rules: {\"app.yak\": \".\"}\npackages: [{source: \"web\"}]\n", "not a path beneath the output"},
+		{"the package written ./", "rules: {\"./\": \"k8s/\"}\npackages: [{source: \"web\"}]\n", `write "/" for the whole package`},
+		{"the output written ./", "rules: {\"deploy/\": \"./\"}\npackages: [{source: \"web\"}]\n", `write "/" for the root of the output`},
 		{"a rule climbing out of the package", "rules: {\"../app.yak\": \"app.yaml\"}\npackages: [{source: \"web\"}]\n", "not a path beneath the package root"},
 		{"a directory sent to a file", "rules: {\"deploy/\": \"k8s\"}\npackages: [{source: \"web\"}]\n", "must be sent to one"},
 		{"a rule sent to a number", "rules: {\"app.yak\": 1}\npackages: [{source: \"web\"}]\n", "must be sent to a path or to null"},
@@ -81,25 +83,28 @@ func TestLoadImportsAFilePath(t *testing.T) {
 
 func TestTarget(t *testing.T) {
 	s, err := load(t, `rules:
-  "./": "manifests/"
+  "/": "manifests/"
   "tests/": null
 packages:
   - source: "web"
     rules:
-      "deploy/": "k8s/"
-      "deploy/app.toml.yak": "config/web.toml"
+      "/deploy/": "k8s/"
+      "deploy/app.toml.yak": "/config/web.toml"
       "tests/keep.yak": "kept/"
   - source: "db"
     rules:
-      "./": "databases/"
+      "/": "databases/"
   - source: "cache"
     rules:
       "tests/": "tests/"
+  - source: "flat"
+    rules:
+      "/": "/"
 `)
 	if err != nil {
 		t.Fatal(err)
 	}
-	web, db, cache := s.Packages[0], s.Packages[1], s.Packages[2]
+	web, db, cache, flat := s.Packages[0], s.Packages[1], s.Packages[2], s.Packages[3]
 	for _, tc := range []struct {
 		p    *Package
 		rel  string
@@ -113,6 +118,7 @@ packages:
 		{db, "db.yak", Target{Path: "databases", Rest: "db.yak"}},
 		{db, "tests/db.yak", Target{Drop: true}},
 		{cache, "tests/cache.yak", Target{Path: "tests", Rest: "cache.yak"}},
+		{flat, "deploy/flat.yak", Target{Path: "", Rest: "deploy/flat.yak"}},
 	} {
 		if got := tc.p.Target("pkg", tc.rel); got != tc.want {
 			t.Errorf("%s: Target(%s) = %+v, want %+v", tc.p.label, tc.rel, got, tc.want)

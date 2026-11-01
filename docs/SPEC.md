@@ -41,6 +41,7 @@ made explicit, and a small expression language is added on top.
     - [Packages](#packages)
     - [Resolution](#resolution)
     - [Remote packages](#remote-packages)
+    - [Rendering dependencies](#rendering-dependencies)
 - [Schemas](#schemas)
     - [Declaring a schema](#declaring-a-schema)
     - [Types](#types)
@@ -825,7 +826,14 @@ dependencies:
   shared: ../shared            # a package: shared.x.y is ../shared/x/y.yak
   base: third_party/base.yak   # a module: base is third_party/base.yak
   acme: git+https://github.com/acme/lib.git@v1.2.0
+  db:                          # also rendered with the package
+    source: ../db
+    render: true
 ```
+
+A dependency is its location, or a mapping of `source`, the location, and
+[`render`](#rendering-dependencies), which says whether and how it renders
+along with the package.
 
 A file belongs to the package of the nearest `yak.pkg` in its directory or
 above. A file in no package is a module all the same.
@@ -947,6 +955,65 @@ that `yak package build` writes: a manifest of artifact type
 `application/vnd.yak.package.layer.v1.tar+gzip`, holding the package's files
 but for hidden ones and its `vendor/`. Its `yak.lock` travels with it, so a
 package that depends on it vendors the same dependencies it was built with.
+
+### Rendering dependencies
+
+A dependency is only imported unless its `render` says otherwise. `render`
+is `false`, the default; `true`, which renders the dependency's templates
+along with the package's whenever the package is rendered as a
+[directory](CLI.md#rendering-dependencies); or a mapping that does so too,
+with two optional keys:
+
+```yaml
+dependencies:
+  web:
+    source: git+https://github.com/acme/web.git@v2
+    render:
+      rules:
+        "/": "manifests/web/"
+        "tests/": null
+      transitive:
+        db: true
+        cache:
+          rules: {"/": "manifests/cache/"}
+          transitive: [redis]
+```
+
+`rules` say where the dependency's templates go, as the rules of a
+[spec file](CLI.md#yak-spec-render) do: a key covers a template, a directory
+ending in `/` or `"/"` for the whole dependency, relative to its root, and
+its value is a file, a directory ending in `/`, `"/"` for the root of the
+output, or `null` to leave the templates out. A leading `/` changes nothing,
+so `"/tests/"` is `"tests/"`. A template no rule covers goes beneath a
+directory named for the dependency's key, at its path beneath the
+dependency's root. A rule that covers no template is an error.
+
+`transitive` says which of the dependency's own dependencies render along
+with it:
+
+| Value | Renders |
+| --- | --- |
+| `false`, the default | None of them. |
+| `true` | What the dependency's own `yak.pkg` renders, as it renders it. |
+| `[db, cache]` | Those of its dependencies, each as `render: true` would. |
+| `{db: RENDER}` | Those of its dependencies, each as its `render` value says. |
+
+Without a rule, a dependency's dependencies go beneath its directory, so
+`db` above goes beneath `web/db/`. Rules resolve from the output directory of
+the package whose `yak.pkg` writes them: the root of the output for the
+package being rendered, and the directory of a dependency for the rules its
+own `yak.pkg` gives when `transitive` is `true`. So `cache` above goes
+beneath `manifests/cache/` and `redis` beneath `web/cache/redis/`.
+
+Every rendered package's templates are evaluated against the same context,
+through the [context file](#packages) of their own package. A dependency
+that is a module renders that one template and has no `transitive`; a
+library cannot render. A dependency the package's own directory holds
+renders as a dependency only. A package that renders itself through its
+dependencies, and two templates that would write the same file, are errors.
+Only the package being rendered decides what renders: a dependency's
+`render` values apply only when it is the package being rendered, or when
+`transitive: true` asks for them.
 
 ## Schemas
 

@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"bytes"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -706,6 +707,166 @@ func TestRenderDirectorySkipsTheVendorDirectory(t *testing.T) {
 	}
 }
 
+// renderingPackages writes, beneath a fresh directory, the package app and
+// the packages it depends on, and answers the directory. app renders web,
+// which renders db as its own yak.pkg says, the module base, and local,
+// which lies beneath app; it only imports shared. db renders x, which web
+// does not ask for.
+func renderingPackages(t *testing.T, appPkg string) string {
+	t.Helper()
+	dir := t.TempDir()
+	write(t, dir, "app/yak.pkg", appPkg)
+	write(t, dir, "app/app.yak", "app: true\n")
+	write(t, dir, "app/local/yak.pkg", "package:\n  name: local\n")
+	write(t, dir, "app/local/l.yak", "local: true\n")
+	write(t, dir, "shared/yak.pkg", "package:\n  name: shared\n")
+	write(t, dir, "shared/s.yak", "shared: true\n")
+	write(t, dir, "base.yak", "base: true\n")
+	write(t, dir, "web/yak.pkg", `package:
+  name: web
+  context: context.yak
+dependencies:
+  db:
+    source: ../db
+    render:
+      rules:
+        "/": "databases/"
+`)
+	write(t, dir, "web/context.yak", "<<: $$\nfullname: \"web-\\($$.env)\"\n")
+	write(t, dir, "web/service.yak", "name: $$.fullname\n")
+	write(t, dir, "web/tests/smoke.yak", "smoke: true\n")
+	write(t, dir, "db/yak.pkg", "package:\n  name: db\ndependencies:\n  x:\n    source: ../x\n    render: true\n")
+	write(t, dir, "db/db.yak", "db: $$.env\n")
+	write(t, dir, "x/yak.pkg", "package:\n  name: x\n")
+	write(t, dir, "x/x.yak", "x: true\n")
+	write(t, dir, "prod.yaml", "env: prod\n")
+	return dir
+}
+
+const appRendersItsDependencies = `package:
+  name: app
+dependencies:
+  shared: ../shared
+  web:
+    source: ../web
+    render:
+      rules:
+        "/": "manifests/web/"
+        "/tests/": null
+      transitive: true
+  base:
+    source: ../base.yak
+    render: true
+  local:
+    source: local
+    render: true
+`
+
+func TestRenderDependencies(t *testing.T) {
+	dir := renderingPackages(t, appRendersItsDependencies)
+	out := filepath.Join(dir, "out")
+
+	if _, err := run(t, "render", filepath.Join(dir, "app"), "--output-dir", out, "-c", filepath.Join(dir, "prod.yaml")); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	want := map[string]string{
+		"app.yaml":                   "app: true\n",
+		"manifests/web/service.yaml": "name: web-prod\n",
+		"web/databases/db.yaml":      "db: prod\n",
+		"base/base.yaml":             "base: true\n",
+		"local/l.yaml":               "local: true\n",
+	}
+	if got := readAll(t, out); !maps.Equal(got, want) {
+		t.Errorf("wrote %v, want %v", got, want)
+	}
+}
+
+func TestRenderDependenciesAsTheRootSays(t *testing.T) {
+	dir := renderingPackages(t, `package:
+  name: app
+dependencies:
+  web:
+    source: ../web
+    render:
+      transitive:
+        db:
+          rules: {"/": "dbs/"}
+          transitive: [x]
+`)
+	out := filepath.Join(dir, "out")
+
+	if _, err := run(t, "render", filepath.Join(dir, "app"), "--output-dir", out, "-c", filepath.Join(dir, "prod.yaml")); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	want := map[string]string{
+		"app.yaml":             "app: true\n",
+		"local/l.yaml":         "local: true\n",
+		"web/service.yaml":     "name: web-prod\n",
+		"web/tests/smoke.yaml": "smoke: true\n",
+		"dbs/db.yaml":          "db: prod\n",
+		"web/db/x/x.yaml":      "x: true\n",
+	}
+	if got := readAll(t, out); !maps.Equal(got, want) {
+		t.Errorf("wrote %v, want %v", got, want)
+	}
+}
+
+func TestRenderSkipsDependencies(t *testing.T) {
+	dir := renderingPackages(t, appRendersItsDependencies)
+	app, out := filepath.Join(dir, "app"), filepath.Join(dir, "out")
+
+	if _, err := run(t, "render", app, "-O"); err == nil || !strings.Contains(err.Error(), "need --output-dir; or give --skip-render-deps") {
+		t.Errorf("render -O: error = %v, want --output-dir asked for", err)
+	}
+	if _, err := run(t, "render", app, "--output-dir", out, "--skip-render-deps"); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	want := map[string]string{"app.yaml": "app: true\n", "local/l.yaml": "local: true\n"}
+	if got := readAll(t, out); !maps.Equal(got, want) {
+		t.Errorf("wrote %v, want %v", got, want)
+	}
+}
+
+func TestRenderDependenciesRefuses(t *testing.T) {
+	const pkg = "package:\n  name: app\ndependencies:\n"
+	for _, tc := range []struct {
+		name, deps, want string
+	}{
+		{"a dependency that renders the package", "  web:\n    source: ../web\n    render: {transitive: true}\n",
+			"renders itself through its dependencies"},
+		{"two dependencies writing one file",
+			"  db:\n    source: ../db\n    render: {rules: {\"/\": \"/\"}}\n  x:\n    source: ../x\n    render: {rules: {\"x.yak\": \"db.yaml\"}}\n",
+			"would both write"},
+		{"a rule that covers nothing", "  db:\n    source: ../db\n    render: {rules: {\"deploy/\": \"k8s/\"}}\n",
+			"dependencies.db.render.rules: deploy/ covers no template of"},
+		{"a transitive dependency that is not one", "  db:\n    source: ../db\n    render: {transitive: [nope]}\n",
+			`has no dependency "nope"`},
+		{"a library", "  lib:\n    source: ../lib.yakl\n    render: true\n", "is a library, which can be imported but not rendered"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, "app/yak.pkg", pkg+tc.deps)
+			write(t, dir, "app/app.yak", "app: true\n")
+			write(t, dir, "web/yak.pkg", "package:\n  name: web\ndependencies:\n  app:\n    source: ../app\n    render: {transitive: true}\n")
+			write(t, dir, "web/web.yak", "web: true\n")
+			write(t, dir, "db/yak.pkg", "package:\n  name: db\n")
+			write(t, dir, "db/db.yak", "db: true\n")
+			write(t, dir, "x/yak.pkg", "package:\n  name: x\n")
+			write(t, dir, "x/x.yak", "x: true\n")
+			write(t, dir, "lib.yakl", "a: 1\n")
+			out := filepath.Join(dir, "out")
+
+			_, err := run(t, "render", filepath.Join(dir, "app"), "--output-dir", out)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to mention %q", err, tc.want)
+			}
+			if _, err := os.Stat(out); err == nil {
+				t.Error("an output was written")
+			}
+		})
+	}
+}
+
 // contextPackage writes a package whose context file layers defaults.yaml and,
 // for production, prod.yaml beneath the context files the rendering is given.
 func contextPackage(t *testing.T) string {
@@ -844,6 +1005,27 @@ func TestPackageAddAndRemove(t *testing.T) {
 	}
 }
 
+func TestPackageAddRender(t *testing.T) {
+	dir := project(t)
+	write(t, dir, "../shared/yak.pkg", "package:\n  name: shared\n")
+	write(t, dir, "../lib.yakl", "a: 1\n")
+	t.Chdir(dir)
+
+	if _, err := run(t, "add", "--render", "../shared"); err != nil {
+		t.Fatalf("yak add --render: %v", err)
+	}
+	want := "package:\n  name: web\ndependencies:\n  shared:\n    source: ../shared\n    render: true\n"
+	if got, _ := os.ReadFile(filepath.Join(dir, "yak.pkg")); string(got) != want {
+		t.Errorf("yak.pkg = %q, want %q", got, want)
+	}
+	if _, err := run(t, "add", "--render", "../lib.yakl"); err == nil || !strings.Contains(err.Error(), "is a library") {
+		t.Errorf("error = %v, want the library refused", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "yak.pkg")); string(got) != want {
+		t.Errorf("yak.pkg = %q after a refused add, want it left alone", got)
+	}
+}
+
 func TestPackageCommandsNeedAPackage(t *testing.T) {
 	t.Chdir(t.TempDir())
 	for _, args := range [][]string{{"sync"}, {"add", "x"}, {"pkg", "remove", "x"}} {
@@ -950,7 +1132,7 @@ packages:
     context:
       replicas: 4
     rules:
-      "./": "manifests/"
+      "/": "manifests/"
       "deploy/app.toml.yak": "config/web.json"
   - source: "db"
 `)
@@ -972,6 +1154,40 @@ packages:
 		if got[name] != w {
 			t.Errorf("%s = %q, want %q", name, got[name], w)
 		}
+	}
+}
+
+func TestRenderSpecRendersDependencies(t *testing.T) {
+	dir := renderingPackages(t, appRendersItsDependencies)
+	spec := write(t, dir, "release.yakspec", `context: {env: "prod"}
+packages:
+  - source: "app"
+    rules: {"/": "top/"}
+`)
+	skip := write(t, dir, "skip.yakspec", "skipRenderDeps: true\npackages: [{source: \"app\"}]\n")
+
+	if _, err := run(t, "spec", "render", spec); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	want := map[string]string{
+		"top/app.yaml":                   "app: true\n",
+		"app/manifests/web/service.yaml": "name: web-prod\n",
+		"app/web/databases/db.yaml":      "db: prod\n",
+		"app/base/base.yaml":             "base: true\n",
+		"app/local/l.yaml":               "local: true\n",
+	}
+	if got := readAll(t, filepath.Join(dir, "build")); !maps.Equal(got, want) {
+		t.Errorf("wrote %v, want %v", got, want)
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "build")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, "spec", "render", skip); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	want = map[string]string{"app/app.yaml": "app: true\n", "app/local/l.yaml": "local: true\n"}
+	if got := readAll(t, filepath.Join(dir, "build")); !maps.Equal(got, want) {
+		t.Errorf("with skipRenderDeps, wrote %v, want %v", got, want)
 	}
 }
 
@@ -997,7 +1213,7 @@ func TestRenderSpecLetsTheLastPackageWin(t *testing.T) {
 	write(t, dir, "base/only.yak", "only: \"base\"\n")
 	write(t, dir, "overlay/yak.pkg", "package:\n  name: overlay\n")
 	write(t, dir, "overlay/service.yak", "from: \"overlay\"\n")
-	spec := write(t, dir, "release.yakspec", "rules: {\"./\": \"out/\"}\npackages: [{source: \"base\"}, {source: \"overlay\"}]\n")
+	spec := write(t, dir, "release.yakspec", "rules: {\"/\": \"out/\"}\npackages: [{source: \"base\"}, {source: \"overlay\"}]\n")
 
 	if _, err := run(t, "spec", "render", spec); err != nil {
 		t.Fatalf("render returned error: %v", err)

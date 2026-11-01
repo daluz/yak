@@ -127,6 +127,25 @@ type Package struct {
 	// Dependencies maps a dotted module path onto the location it was
 	// written as.
 	Dependencies map[string]string
+	// Render maps the dependencies that render along with the package onto
+	// how they render.
+	Render map[string]*Render
+}
+
+// Render is how a dependency renders when the package that depends on it is
+// rendered.
+type Render struct {
+	// Rules send the dependency's templates where they go, relative to the
+	// output directory of the package whose yak.pkg writes them.
+	Rules []*Rule
+	// All renders what the dependency's own yak.pkg renders, as it renders
+	// it.
+	All bool
+	// Deps, when All is not set, maps the dependency's own dependencies that
+	// render along with it onto how they render.
+	Deps map[string]*Render
+	// Label names the yak.pkg and the key it is written at.
+	Label string
 }
 
 // Root is the directory of the package.
@@ -195,7 +214,7 @@ func ParsePackage(path string, src []byte) (*Package, error) {
 			Description string    `yaml:"description"`
 			Context     yaml.Node `yaml:"context"`
 		} `yaml:"package"`
-		Dependencies map[string]string `yaml:"dependencies"`
+		Dependencies map[string]yaml.Node `yaml:"dependencies"`
 	}
 	dec := yaml.NewDecoder(bytes.NewReader(src))
 	dec.KnownFields(true)
@@ -212,22 +231,187 @@ func ParsePackage(path string, src []byte) (*Package, error) {
 	if err != nil {
 		return nil, err
 	}
-	for key, target := range doc.Dependencies {
-		segs := strings.Split(key, ".")
-		for _, s := range segs {
-			if !IsName(s) {
-				return nil, fmt.Errorf("%s: %q is not a module path", path, key)
-			}
+	pkg := &Package{Path: path, Name: doc.Package.Name, Version: doc.Package.Version, Context: context,
+		Dependencies: map[string]string{}, Render: map[string]*Render{}}
+	for key, n := range doc.Dependencies {
+		if err := modulePath(key); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
 		}
-		if segs[0] == Std {
+		if strings.Split(key, ".")[0] == Std {
 			return nil, fmt.Errorf("%s: %q is reserved for the standard library and cannot be mapped", path, key)
 		}
-		if target == "" {
-			return nil, fmt.Errorf("%s: %q maps to nothing", path, key)
+		target, render, err := dependency(path, key, &n)
+		if err != nil {
+			return nil, err
+		}
+		pkg.Dependencies[key] = target
+		if render != nil {
+			pkg.Render[key] = render
 		}
 	}
-	return &Package{Path: path, Name: doc.Package.Name, Version: doc.Package.Version, Context: context,
-		Dependencies: doc.Dependencies}, nil
+	return pkg, nil
+}
+
+func modulePath(key string) error {
+	for _, s := range strings.Split(key, ".") {
+		if !IsName(s) {
+			return fmt.Errorf("%q is not a module path", key)
+		}
+	}
+	return nil
+}
+
+// dependency reads the dependency key of the yak.pkg at path: the location
+// it is written as, alone or as the source of a mapping that also says how
+// it renders.
+func dependency(path, key string, n *yaml.Node) (string, *Render, error) {
+	label := "dependencies." + key
+	if n.Kind == yaml.ScalarNode {
+		if n.Tag == "!!null" || n.Value == "" {
+			return "", nil, fmt.Errorf("%s: %q maps to nothing", path, key)
+		}
+		if n.Tag != "!!str" {
+			return "", nil, fmt.Errorf("%s: %s must name a path or a remote package", path, label)
+		}
+		return n.Value, nil, nil
+	}
+	if n.Kind != yaml.MappingNode {
+		return "", nil, fmt.Errorf("%s: %s must name a path or a remote package, or be a mapping of source and render", path, label)
+	}
+	var target string
+	var render *Render
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		k, v := n.Content[i].Value, n.Content[i+1]
+		var err error
+		switch k {
+		case "source":
+			if v.Kind != yaml.ScalarNode || v.Tag != "!!str" {
+				return "", nil, fmt.Errorf("%s: %s.source must name a path or a remote package", path, label)
+			}
+			target = v.Value
+		case "render":
+			render, err = renderValue(path, label+".render", v)
+		default:
+			err = fmt.Errorf("%s: %s.%s is not a key of a dependency; it takes source and render", path, label, k)
+		}
+		if err != nil {
+			return "", nil, err
+		}
+	}
+	if target == "" {
+		return "", nil, fmt.Errorf("%s: %s has no source; name a path or a remote package", path, label)
+	}
+	switch {
+	case render == nil:
+	case strings.HasSuffix(target, ExtLibrary):
+		return "", nil, fmt.Errorf("%s: %s: %s is a library, which can be imported but not rendered", path, label, target)
+	case strings.HasSuffix(target, Ext) && (render.All || render.Deps != nil):
+		return "", nil, fmt.Errorf("%s: %s.render.transitive: %s is a module, which has no dependencies", path, label, target)
+	}
+	return target, render, nil
+}
+
+// renderValue reads how a dependency renders, written at label: true,
+// false, which answers nil, or a mapping of rules and transitive.
+func renderValue(path, label string, n *yaml.Node) (*Render, error) {
+	if n.Kind == yaml.ScalarNode && n.Tag == "!!bool" {
+		var on bool
+		if err := n.Decode(&on); err != nil || !on {
+			return nil, err
+		}
+		return &Render{Label: path + ": " + label}, nil
+	}
+	if n.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("%s: %s must be true, false or a mapping of rules and transitive", path, label)
+	}
+	r := &Render{Label: path + ": " + label}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		k, v := n.Content[i].Value, n.Content[i+1]
+		var err error
+		switch k {
+		case "rules":
+			r.Rules, err = rules(path, label+".rules", v)
+		case "transitive":
+			err = transitive(path, label+".transitive", v, r)
+		default:
+			err = fmt.Errorf("%s: %s.%s is not a key of render; it takes rules and transitive", path, label, k)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return r, nil
+}
+
+// transitive reads which of a dependency's own dependencies render along
+// with it into r: true for what its yak.pkg renders, false for none, or a
+// sequence or a mapping of their names, a mapping saying how each renders.
+func transitive(path, label string, n *yaml.Node, r *Render) error {
+	name := func(n *yaml.Node) (string, error) {
+		if n.Kind != yaml.ScalarNode || n.Tag != "!!str" {
+			return "", fmt.Errorf("%s: %s must name dependencies", path, label)
+		}
+		if err := modulePath(n.Value); err != nil {
+			return "", fmt.Errorf("%s: %s: %w", path, label, err)
+		}
+		if _, ok := r.Deps[n.Value]; ok {
+			return "", fmt.Errorf("%s: %s names %s twice", path, label, n.Value)
+		}
+		return n.Value, nil
+	}
+	switch {
+	case n.Kind == yaml.ScalarNode && n.Tag == "!!bool":
+		return n.Decode(&r.All)
+	case n.Kind == yaml.SequenceNode:
+		r.Deps = map[string]*Render{}
+		for _, item := range n.Content {
+			dep, err := name(item)
+			if err != nil {
+				return err
+			}
+			r.Deps[dep] = &Render{Label: path + ": " + label + "." + dep}
+		}
+		return nil
+	case n.Kind == yaml.MappingNode:
+		r.Deps = map[string]*Render{}
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			dep, err := name(n.Content[i])
+			if err != nil {
+				return err
+			}
+			if r.Deps[dep], err = renderValue(path, label+"."+dep, n.Content[i+1]); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return fmt.Errorf("%s: %s must be true, false, a sequence of dependencies or a mapping of them onto how they render", path, label)
+}
+
+// rules reads the rules written at label.
+func rules(path, label string, n *yaml.Node) ([]*Rule, error) {
+	if n.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("%s: %s must be a mapping", path, label)
+	}
+	var rules []*Rule
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		k, v := n.Content[i].Value, n.Content[i+1]
+		var r *Rule
+		var err error
+		switch {
+		case v.Kind == yaml.ScalarNode && v.Tag == "!!null":
+			r, err = NewRule(k, "", true)
+		case v.Kind == yaml.ScalarNode && v.Tag == "!!str":
+			r, err = NewRule(k, v.Value, false)
+		default:
+			err = errors.New("must be sent to a path or to null")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s: %s: %s %w", path, label, k, err)
+		}
+		rules = append(rules, r)
+	}
+	return rules, nil
 }
 
 // contextFile reads package.context from the yak.pkg at path, which names a
@@ -273,54 +457,67 @@ func IsName(s string) bool {
 // always does.
 func (p *Package) resolve(path []string) (string, []string, error) {
 	var key []string
-	var target string
-	for k, t := range p.Dependencies {
+	for k := range p.Dependencies {
 		segs := strings.Split(k, ".")
 		if len(segs) > len(path) || len(segs) <= len(key) {
 			continue
 		}
 		if strings.Join(path[:len(segs)], ".") == k {
-			key, target = segs, t
+			key = segs
 		}
 	}
 	if key == nil {
 		return "", nil, nil
 	}
 	name := strings.Join(key, ".")
+	rest := path[len(key):]
+	target, err := p.Locate(name)
+	if err != nil {
+		return "", nil, err
+	}
+	if isModule(target) && len(rest) > 0 {
+		return "", nil, fmt.Errorf("%s maps %q to the module %s, so %q is not inside a package",
+			p.Path, name, target, strings.Join(path, "."))
+	}
+	if !isModule(target) && len(rest) == 0 {
+		return "", nil, fmt.Errorf("%s maps %q to the package %s; import one of the modules in it",
+			p.Path, name, target)
+	}
+	return target, rest, nil
+}
+
+// Locate answers the module's file or the package's directory that the
+// dependency name of p maps to, in the vendor directory when it is remote.
+func (p *Package) Locate(name string) (string, error) {
+	target, ok := p.Dependencies[name]
+	if !ok {
+		return "", fmt.Errorf("%s has no dependency %q", p.Path, name)
+	}
 	if IsRemote(target) {
 		src, err := ParseSource(target)
 		if err != nil {
-			return "", nil, fmt.Errorf("%s maps %q to %w", p.Path, name, err)
+			return "", fmt.Errorf("%s maps %q to %w", p.Path, name, err)
 		}
 		vendor, dir, ok := vendored(p.Root(), src.Key)
 		if !ok {
-			return "", nil, fmt.Errorf("%s maps %q to %s, which is not vendored; run yak sync", p.Path, name, target)
+			return "", fmt.Errorf("%s maps %q to %s, which is not vendored; run yak sync", p.Path, name, target)
 		}
 		if err := checkVendored(vendor, src, target); err != nil {
-			return "", nil, fmt.Errorf("%s maps %q to %s, but %w", p.Path, name, target, err)
+			return "", fmt.Errorf("%s maps %q to %s, but %w", p.Path, name, target, err)
 		}
 		target = filepath.Join(dir, filepath.FromSlash(src.Dir))
 	} else if !filepath.IsAbs(target) {
 		target = filepath.Join(p.Root(), target)
 	}
-	rest := path[len(key):]
 	if isModule(target) {
-		if len(rest) > 0 {
-			return "", nil, fmt.Errorf("%s maps %q to the module %s, so %q is not inside a package",
-				p.Path, name, target, strings.Join(path, "."))
-		}
 		if _, err := os.Stat(target); err != nil {
-			return "", nil, fmt.Errorf("%s maps %q to %s, which does not exist", p.Path, name, target)
+			return "", fmt.Errorf("%s maps %q to %s, which does not exist", p.Path, name, target)
 		}
-		return target, nil, nil
+		return target, nil
 	}
 	if _, err := os.Stat(filepath.Join(target, PkgFile)); err != nil {
-		return "", nil, fmt.Errorf("%s maps %q to %s, which is not a package: it holds no %s",
+		return "", fmt.Errorf("%s maps %q to %s, which is not a package: it holds no %s",
 			p.Path, name, target, PkgFile)
 	}
-	if len(rest) == 0 {
-		return "", nil, fmt.Errorf("%s maps %q to the package %s; import one of the modules in it",
-			p.Path, name, target)
-	}
-	return target, rest, nil
+	return target, nil
 }

@@ -27,7 +27,7 @@ func tree(t *testing.T, files map[string]string) string {
 
 func TestResolve(t *testing.T) {
 	dir := tree(t, map[string]string{
-		"yak.pkg":           "package:\n  name: app\ndependencies:\n  a: one\n  a.b: two\n  m: one/m.yak\n  l: one/l.yakl\n",
+		"yak.pkg":           "package:\n  name: app\ndependencies:\n  a: one\n  a.b: {source: two, render: {transitive: true}}\n  m: one/m.yak\n  l: one/l.yakl\n",
 		"one/yak.pkg":       "package:\n  name: one\n",
 		"one/b/c.yak":       "",
 		"one/m.yak":         "",
@@ -204,6 +204,15 @@ func TestResolveErrors(t *testing.T) {
 		{"a context file that is no template", pkg + "  context: ctx.yaml\n", "q", `the context file "ctx.yaml" is not a .yak template`},
 		{"a list of context files", pkg + "  context: [ctx.yaml]\n", "q", "names one .yak template that answers the context, not a list"},
 		{"a context that is no path", pkg + "  context: 1\n", "q", "package.context must name a .yak template"},
+		{"a dependency without a source", pkg + "dependencies:\n  p: {render: true}\n", "q", "dependencies.p has no source"},
+		{"an unknown dependency key", pkg + "dependencies:\n  p: {source: lib, renders: true}\n", "q", "dependencies.p.renders is not a key of a dependency"},
+		{"a render that is no mapping", pkg + "dependencies:\n  p: {source: lib, render: [a]}\n", "q", "render must be true, false or a mapping"},
+		{"an unknown render key", pkg + "dependencies:\n  p: {source: lib, render: {rule: {}}}\n", "q", "render.rule is not a key of render"},
+		{"a rule sent to a number", pkg + "dependencies:\n  p: {source: lib, render: {rules: {\"/\": 1}}}\n", "q", "rules: / must be sent to a path or to null"},
+		{"a transitive dependency named twice", pkg + "dependencies:\n  p: {source: lib, render: {transitive: [a, a]}}\n", "q", "names a twice"},
+		{"a transitive name that is no path", pkg + "dependencies:\n  p: {source: lib, render: {transitive: [a-b]}}\n", "q", `"a-b" is not a module path`},
+		{"a rendered library", pkg + "dependencies:\n  l: {source: l.yakl, render: true}\n", "q", "is a library, which can be imported but not rendered"},
+		{"a module with transitive dependencies", pkg + "dependencies:\n  m: {source: m.yak, render: {transitive: true}}\n", "q", "is a module, which has no dependencies"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -48,8 +48,8 @@ func Sync(pkg *module.Package, opts Options) error {
 
 // Add adds source, a path or a remote package, to the dependencies of pkg
 // under name, or else under the name the dependency's own yak.pkg gives it,
-// and syncs pkg.
-func Add(pkg *module.Package, source, name string, opts Options) error {
+// and syncs pkg. With render, the dependency renders along with pkg.
+func Add(pkg *module.Package, source, name string, render bool, opts Options) error {
 	if !module.IsRemote(source) {
 		abs, err := filepath.Abs(source)
 		if err != nil {
@@ -69,7 +69,7 @@ func Add(pkg *module.Package, source, name string, opts Options) error {
 		if err != nil {
 			return err
 		}
-		updated, content, err := addDependency(pkg, name, filepath.ToSlash(rel))
+		updated, content, err := addDependency(pkg, name, filepath.ToSlash(rel), render)
 		if err != nil {
 			return err
 		}
@@ -95,7 +95,7 @@ func Add(pkg *module.Package, source, name string, opts Options) error {
 	var updated *module.Package
 	var content []byte
 	if err == nil {
-		updated, content, err = addDependency(pkg, name, source)
+		updated, content, err = addDependency(pkg, name, source, render)
 	}
 	if err != nil {
 		if _, kept := s.locked[src.Key]; !kept {
@@ -408,16 +408,21 @@ func dependencyName(path, source, name string) (string, error) {
 }
 
 // addDependency answers pkg, and the yak.pkg that describes it, with name
-// added to its dependencies.
-func addDependency(pkg *module.Package, name, target string) (*module.Package, []byte, error) {
+// added to its dependencies, as rendering along with pkg when render is set.
+func addDependency(pkg *module.Package, name, target string, render bool) (*module.Package, []byte, error) {
 	if _, ok := pkg.Dependencies[name]; ok {
 		return nil, nil, fmt.Errorf("%s already has a dependency %q; remove it first, or add this one with --name", pkg.Path, name)
 	}
+	value := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: target}
+	if render {
+		value = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "source"}, value,
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "render"}, {Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"},
+		}}
+	}
 	return editDependencies(pkg, func(deps *yaml.Node) {
 		deps.Style = 0
-		deps.Content = append(deps.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name},
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: target})
+		deps.Content = append(deps.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name}, value)
 	})
 }
 

@@ -122,7 +122,7 @@ func currentPackage() (*module.Package, error) {
 
 func newAddCommand() *cobra.Command {
 	var name string
-	var plainHTTP bool
+	var render, plainHTTP bool
 	cmd := &cobra.Command{
 		Use:   "add SOURCE",
 		Short: "Add a dependency to the package",
@@ -132,17 +132,20 @@ func newAddCommand() *cobra.Command {
 			"git+file://, or as oci://REGISTRY/REPOSITORY:TAG. The dependency is named\n" +
 			"after the package, or after the module's file, unless --name gives it a\n" +
 			"name. The package is then synced, so a remote package is vendored and\n" +
-			"pinned in yak.lock at once.",
+			"pinned in yak.lock at once.\n\n" +
+			"--render writes the dependency with render: true, so that rendering the\n" +
+			"package renders the dependency's templates too.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pkg, err := currentPackage()
 			if err != nil {
 				return err
 			}
-			return deps.Add(pkg, args[0], name, deps.Options{Log: cmd.ErrOrStderr(), PlainHTTP: plainHTTP})
+			return deps.Add(pkg, args[0], name, render, deps.Options{Log: cmd.ErrOrStderr(), PlainHTTP: plainHTTP})
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "import path to add the dependency under")
+	cmd.Flags().BoolVar(&render, "render", false, "render the dependency's templates along with the package")
 	plainHTTPFlag(cmd, &plainHTTP)
 	return cmd
 }
