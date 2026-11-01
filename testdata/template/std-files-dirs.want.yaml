@@ -3,17 +3,16 @@ list:
     - .hidden
     - a.txt
     - sub
-  onlyFiles:
+  files:
     - .hidden
     - a.txt
+  dirs:
+    - sub
 glob:
   top:
     - files/listing/.hidden
     - files/listing/a.txt
     - files/listing/sub
-  topFiles:
-    - files/listing/.hidden
-    - files/listing/a.txt
   deep:
     - files/listing/a.txt
     - files/listing/sub/b.txt

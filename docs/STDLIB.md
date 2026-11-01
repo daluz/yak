@@ -323,15 +323,17 @@ motd: files.read("files/motd.txt")
 | Call | Answer |
 | --- | --- |
 | `read(path)` | The text of the file at `path` as it is, with no interpolation. A missing file, or one that is not UTF-8 text, is an error. |
-| `list(path, onlyFiles = false)` | The names of the entries in the directory `path`, sorted, hidden ones included, or only of its regular files when `onlyFiles` is `true`. A missing directory is an error. |
-| `glob(pattern, onlyFiles = false)` | The paths that match `pattern`, sorted and written as `pattern` writes them, so each can be handed to `read`; `[]` when nothing matches. `onlyFiles` keeps only regular files. |
+| `list(path)` | The names of the files and directories in the directory `path`, sorted, hidden ones included. A missing directory is an error. |
+| `listFiles(path)` | As `list`, but only the regular files. |
+| `listDirs(path)` | As `list`, but only the directories. |
+| `glob(pattern)` | The paths of the files and directories that match `pattern`, sorted and written as `pattern` writes them, so each can be handed to `read`; `[]` when nothing matches. |
 | `isDir(path)` | Whether `path` names a directory; `false` when nothing is there. |
 | `exists(path)` | Whether anything is at `path`. |
 
 A relative path is relative to the directory of the file that calls the
 function, as an `import` resolves, so a module reads from beside itself
-rather than beside the template importing it. With `onlyFiles`, a symbolic
-link counts when it leads to a regular file.
+rather than beside the template importing it. For `listFiles` and
+`listDirs`, a symbolic link counts as what it leads to.
 
 A `glob` pattern is a path whose segments are matched as by
 [`path.Match`](https://pkg.go.dev/path#Match): `*` matches any run of
@@ -348,8 +350,8 @@ configs: [yaml.decode(files.read(p)) for p in files.glob("conf/**/*.yaml")]
 
 In [strict mode](SPEC.md#strict-mode), `path` and `pattern` must stay beneath
 that directory: an absolute path, one that climbs out with `..`, and a
-symbolic link that leads out are errors, except that `onlyFiles` leaves such
-a link out. With strict mode off, they may name any file.
+symbolic link that leads out are errors, except that `list` names such a
+link and `listFiles`, `listDirs` and `glob` leave it out. With strict mode off, they may name any file.
 
 ### `std.gotemplate`
 

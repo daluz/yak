@@ -275,7 +275,7 @@ func TestFilesStrictRefusesEscapingSymlink(t *testing.T) {
 	}
 }
 
-func TestFilesOnlyFilesFollowsSymlinks(t *testing.T) {
+func TestFilesFollowsSymlinks(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "outside.txt"), []byte("outside"), 0o600); err != nil {
 		t.Fatal(err)
@@ -293,8 +293,8 @@ func TestFilesOnlyFilesFollowsSymlinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, src := range []string{
-		"import std.files\nv: files.list(\"d\", onlyFiles = true)\n",
-		"import { std.files, std.strings }\nv: [strings.trimPrefix(s, \"d/\") for s in files.glob(\"d/*\", onlyFiles = true)]\n",
+		"import std.files\nv: files.listFiles(\"d\")\n",
+		"import { std.files, std.strings }\nv: [strings.trimPrefix(s, \"d/\") for s in files.glob(\"d/*\")]\n",
 	} {
 		if got, err := renderFile(t, dir, "sub/t.yak", src, false); err != nil || got != "v:\n  - in.txt\n  - inside.txt\n" {
 			t.Errorf("strict got %q, %v, want the escaping link left out", got, err)

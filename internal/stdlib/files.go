@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"unicode/utf8"
 
-	"github.com/daluz/yak/internal/ast"
 	"github.com/daluz/yak/internal/eval"
 	"github.com/daluz/yak/internal/module"
 )
@@ -28,11 +27,12 @@ func init() {
 }
 
 func filesBuiltins(strict bool) []*eval.Builtin {
-	onlyFiles := optional("onlyFiles", &ast.Bool{Value: false})
 	return []*eval.Builtin{
 		builtin("read", params("path"), readFile(strict)),
-		builtin("list", append(params("path"), onlyFiles), listFiles(strict)),
-		builtin("glob", append(params("pattern"), onlyFiles), globFiles(strict)),
+		builtin("list", params("path"), listDir(strict, nil)),
+		builtin("listFiles", params("path"), listDir(strict, func(fi fs.FileInfo) bool { return fi.Mode().IsRegular() })),
+		builtin("listDirs", params("path"), listDir(strict, fs.FileInfo.IsDir)),
+		builtin("glob", params("pattern"), globFiles(strict)),
 		builtin("isDir", params("path"), statPath(strict, func(fi fs.FileInfo) bool { return fi.IsDir() })),
 		builtin("exists", params("path"), statPath(strict, func(fs.FileInfo) bool { return true })),
 	}
@@ -56,28 +56,29 @@ func readFile(strict bool) func(call) (eval.Value, error) {
 	}
 }
 
-// listFiles answers the sorted names of the entries in a directory, or only
-// of its regular files, following symbolic links.
-func listFiles(strict bool) func(call) (eval.Value, error) {
+// listDir answers the sorted names of the entries in a directory, or only of
+// those that keep holds for once symbolic links are followed; a link that
+// cannot be followed is then left out.
+func listDir(strict bool, keep func(fs.FileInfo) bool) func(call) (eval.Value, error) {
 	return func(c call) (eval.Value, error) {
 		p, fsys, err := resolve(c, strict, "list")
 		if err != nil {
 			return nil, err
 		}
 		defer fsys.close()
-		onlyFiles, err := c.boolean(1)
-		if err != nil {
-			return nil, err
-		}
 		entries, err := readDir(fsys, p)
 		if err != nil {
 			return nil, fileError(c, "list", p, err)
 		}
 		var names []string
 		for _, e := range entries {
-			if !onlyFiles || isRegular(fsys, path.Join(p, e.Name())) {
-				names = append(names, e.Name())
+			if keep != nil {
+				fi, err := fsys.Stat(osName(path.Join(p, e.Name())))
+				if err != nil || !keep(fi) {
+					continue
+				}
 			}
+			names = append(names, e.Name())
 		}
 		slices.Sort(names)
 		return strArray(names), nil
@@ -94,17 +95,13 @@ func globFiles(strict bool) func(call) (eval.Value, error) {
 			return nil, err
 		}
 		defer fsys.close()
-		onlyFiles, err := c.boolean(1)
-		if err != nil {
-			return nil, err
-		}
 		segs := strings.Split(p, "/")
 		for _, seg := range segs {
 			if _, err := path.Match(seg, ""); err != nil {
 				return nil, c.errorf(0, "has a malformed pattern %q", p)
 			}
 		}
-		g := globber{fsys: fsys, onlyFiles: onlyFiles, seen: map[string]bool{}}
+		g := globber{fsys: fsys, seen: map[string]bool{}}
 		if path.IsAbs(p) {
 			g.walk("/", segs[1:])
 		} else {
@@ -116,10 +113,9 @@ func globFiles(strict bool) func(call) (eval.Value, error) {
 }
 
 type globber struct {
-	fsys      fileSystem
-	onlyFiles bool
-	seen      map[string]bool
-	matches   []string
+	fsys    fileSystem
+	seen    map[string]bool
+	matches []string
 }
 
 // walk matches segs against what is beneath dir, a path written with
@@ -161,9 +157,6 @@ func (g *globber) add(p string) {
 	if p == "" || g.seen[p] {
 		return
 	}
-	if g.onlyFiles && !isRegular(g.fsys, p) {
-		return
-	}
 	if _, err := g.fsys.Stat(osName(p)); err != nil {
 		return
 	}
@@ -197,13 +190,6 @@ func readDir(fsys fileSystem, p string) ([]fs.DirEntry, error) {
 	}
 	defer f.Close()
 	return f.ReadDir(-1)
-}
-
-// isRegular reports whether p is a regular file once symbolic links are
-// followed; a link that cannot be followed is not.
-func isRegular(fsys fileSystem, p string) bool {
-	fi, err := fsys.Stat(osName(p))
-	return err == nil && fi.Mode().IsRegular()
 }
 
 func strArray(ss []string) *eval.Array {

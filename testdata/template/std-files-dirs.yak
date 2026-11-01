@@ -3,10 +3,10 @@ import std.files
 ## Hidden entries are listed too; "sub" is a directory.
 list:
   all: files.list("files/listing")
-  onlyFiles: files.list("files/listing", onlyFiles = true)
+  files: files.listFiles("files/listing")
+  dirs: files.listDirs("files/listing")
 glob:
   top: files.glob("files/listing/*")
-  topFiles: files.glob("files/listing/*", onlyFiles = true)
   ## "**" matches any number of directories, none included.
   deep: files.glob("files/listing/**/*.txt")
   under: files.glob("files/listing/**")
