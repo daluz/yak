@@ -1,5 +1,9 @@
 # The yak command line
 
+<p align="center">
+  <img src="assets/mascot.png" alt="yak's mascot, a shaggy brown yak" width="240">
+</p>
+
 This describes the tool that renders templates. The language is specified in
 [SPEC.md](SPEC.md).
 

@@ -1,21 +1,26 @@
 # The yak language
 
+<p align="center">
+  <img src="assets/mascot.png" alt="yak's mascot, a shaggy brown yak" width="240">
+</p>
+
 This describes the language as it exists today. The command line tool is
 documented in [CLI.md](CLI.md).
 
 yak is a restricted dialect of YAML: what YAML does ambiguously is removed or
 made explicit, and a small expression language is added on top.
+[YAMLDIFF.md](YAMLDIFF.md) summarizes how it reads differently from YAML.
 
 ## Contents
 
 - [Files](#files)
     - [The documents key](#the-documents-key)
 - [Strict mode](#strict-mode)
-- [What changed from YAML](#what-changed-from-yaml)
-    - [Strings must be quoted](#strings-must-be-quoted)
-    - [Every string interpolates](#every-string-interpolates)
-    - [Only `true` and `false` are booleans](#only-true-and-false-are-booleans)
-    - [Anchors and YAML's tags are gone](#anchors-and-yamls-tags-are-gone)
+- [Values](#values)
+    - [Strings](#strings)
+    - [Interpolation](#interpolation)
+    - [Raw strings](#raw-strings)
+- [Mappings](#mappings)
     - [Keys](#keys)
     - [Hidden fields](#hidden-fields)
     - [Optional fields](#optional-fields)
@@ -134,11 +139,11 @@ that calls it. Every error names strict mode as the reason and says how to turn
 it off. Every other module behaves the same in either mode. A template can
 check if strict-mode is enabled with [`$yak.strict`](#builtin-variables).
 
-## What changed from YAML
+## Values
 
-### Strings must be quoted
-
-An unquoted scalar is never a string. It is an expression:
+A document is laid out as in YAML, with block mappings and sequences, flow
+collections in braces and brackets, and scalars. A scalar left unquoted is
+never a string. It is an expression:
 
 ```yaml
 a: "web"    # the string "web"
@@ -147,8 +152,20 @@ c: .a       # a reference to the sibling field "a"
 d: web      # an error: unknown identifier "web"
 ```
 
-So `name: hello world` is reported as a missing pair of quotes rather than
-accepted. All the YAML quoting forms are available:
+So `name: hello world` is reported as a missing pair of quotes. The literals
+are strings, integers, floats, `null`, and the booleans `true` and `false`,
+which are the only booleans: `yes`, `no`, `on`, `off`, `y` and `n` are errors
+that say to use `true`/`false` or add quotes.
+
+A value is reused through a [reference](#references) or a
+[binding](#let-bindings), so `&anchor`, `*alias` and `!!tag` are errors. A
+`!` written against a name is a [tag](#tags), which checks a value against a
+schema; any other `!` is an error that points to `not`.
+
+### Strings
+
+A string is written double-quoted, single-quoted, or as a literal block
+scalar:
 
 ```yaml
 double: "escapes \t and \u00e9 are processed"
@@ -157,14 +174,14 @@ literal: |
   line breaks are preserved
 ```
 
-YAML's folded block scalar, written `>`, is not available, since `>` is the
-greater-than operator: a `>` where a value begins is an error that points to
-`fold` in [`std.strings`](STDLIB.md#stdstrings), which folds the lines of any
-string, a `|` block included.
+`>` is the greater-than operator, so there is no folded block scalar: a `>`
+where a value begins is an error that points to `fold` in
+[`std.strings`](STDLIB.md#stdstrings), which folds the lines of any string, a
+`|` block included.
 
-Single and double quotes mean the same thing, as in Python: both process the
-backslash escapes of YAML's double-quoted strings, and both interpolate. They
-differ only in which quote has to be escaped:
+Single and double quotes mean the same thing: both process backslash escapes,
+and both [interpolate](#interpolation). They differ only in which quote has
+to be escaped:
 
 ```yaml
 apostrophe: "it's"
@@ -172,8 +189,8 @@ quoted: 'say "hi"'
 both: 'it\'s "quoted"'
 ```
 
-YAML's doubled quote is not an escape: `'it''s'` is an error that says to
-write `\'`. The escapes are:
+A doubled quote is not an escape: `'it''s'` is an error that says to write
+`\'`. The escapes are:
 
 | Escape | Produces |
 | --- | --- |
@@ -188,9 +205,10 @@ Any other backslash sequence, such as `\d`, is an error. Block scalars have no
 escapes, and accept the chomping and indentation indicators `|-`, `|+` and
 `|2`.
 
-### Every string interpolates
+### Interpolation
 
-Any string may contain `\( expression )`:
+Any string but a [raw](#raw-strings) one may contain `\( expression )`, which
+writes the value of the expression in its place:
 
 ```yaml
 name: "web"
@@ -214,6 +232,8 @@ that is the ordinary `\\` escape followed by `(`. In a block scalar it is the
 only sequence a backslash changes: `\\n` there is still two backslashes and an
 `n`. A `\(` that is never closed is an error.
 
+### Raw strings
+
 A string prefixed with `r` is raw: it neither interpolates nor processes
 backslash escapes.
 
@@ -227,18 +247,13 @@ The one escape a raw string keeps is its own quote: `\"` in `r"..."` and `\'`
 in `r'...'` write the quote alone, so `r"say \"\d\""` is `say "\d"`. Any other
 backslash stays as written, and a raw string cannot end in a backslash.
 
-### Only `true` and `false` are booleans
+## Mappings
 
-`yes`, `no`, `on`, `off`, `y` and `n` are errors that say to use
-`true`/`false` or add quotes.
-
-### Anchors and YAML's tags are gone
-
-`&anchor`, `*alias` and `!!tag` are rejected. References and `let` bindings
-replace anchors. A `!` written against a name is a [tag](#tags), which
-checks a value against a schema; any other `!` is an error that points to
-`not`. YAML's `<<` survives as [the merge key](#the-merge-key), and
-merges any mapping an expression can produce.
+An entry of a mapping is a key, a separator and a value. `:` writes the
+entry, [`::`](#hidden-fields) hides it from the output, and
+[`:?`](#optional-fields) hides it when its value is `null`. `<<` in place of
+a key is [the merge key](#the-merge-key), which merges another mapping into
+the one being written.
 
 ### Keys
 
@@ -298,8 +313,8 @@ entry that is left out takes its comments with it.
 
 ### The merge key
 
-`<<` where a key belongs merges a mapping into the one being written, as
-YAML's merge key does, without an anchor:
+`<<` where a key belongs merges a mapping, which any expression may produce,
+into the one being written:
 
 ```yaml
 let defaults = {image: "nginx", limits: {cpu: 1, memory: 256}}
@@ -1028,7 +1043,7 @@ primary: !Endpoint ["web.example.com", 443]
 
 An integer is not a float, so a field that takes either is written
 `integer | float`. A union is written on one line, since a `|` where a value
-begins opens a [block scalar](#strings-must-be-quoted). The function of a
+begins opens a [block scalar](#strings). The function of a
 check is called with the value and has to answer a boolean.
 
 ### Mapping types

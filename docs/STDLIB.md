@@ -1,5 +1,9 @@
 # The yak standard library
 
+<p align="center">
+  <img src="assets/mascot.png" alt="yak's mascot, a shaggy brown yak" width="240">
+</p>
+
 This lists the functions the language comes with; the language itself is
 described in [SPEC.md](SPEC.md). Built-ins are bare names. Everything else
 lives in a module whose path begins with `std` and is reached through an
@@ -102,7 +106,7 @@ schema Service =
   port: integer if (n) => n > 0 and n < 65536 or fail("port must be in 1..65535")
 ```
 
-`message` has to be a string; [interpolation](SPEC.md#every-string-interpolates) builds one
+`message` has to be a string; [interpolation](SPEC.md#interpolation) builds one
 from other values. Like any value, a call to `fail` only stops the render
 when it is [evaluated](SPEC.md#failing).
 

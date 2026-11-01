@@ -1,5 +1,9 @@
 # A tour of yak
 
+<p align="center">
+  <img src="assets/mascot.png" alt="yak's mascot, a shaggy brown yak" width="240">
+</p>
+
 This tour introduces yak one feature at a time, from a file that looks like
 ordinary YAML to a pair of Kubernetes manifests built from layered
 configuration. Every example is a complete template you can render yourself.
