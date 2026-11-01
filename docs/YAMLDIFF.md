@@ -4,8 +4,8 @@
   <img src="assets/mascot.png" alt="yak's mascot, a shaggy brown yak" width="240">
 </p>
 
-yak is laid out as YAML is, but a file that is valid YAML is not always valid
-yak, and one that is may mean something else. This lists the differences;
+At first glace, `yak` looks similar to YAML. But a file that is valid YAML is not always valid
+`yak`. This document lists some of the differences;
 [SPEC.md](SPEC.md) defines the language.
 
 ## Strings must be quoted
@@ -83,10 +83,10 @@ expression in parentheses, and duplicate keys are an error
 
 ## Hidden and optional entries
 
-Two separators join `:`. `::` hides an entry from the output while leaving it
-visible to references ([Hidden fields](SPEC.md#hidden-fields)), and `:?`
-hides it only when its value is `null`
-([Optional fields](SPEC.md#optional-fields)):
+Besides the usual YAML `:` (colon) separator, yak adds two more:
+
+- `::` hides an entry from the output while leaving it visible to references ([Hidden fields](SPEC.md#hidden-fields))
+- `:?` hides it only when its value is `null` ([Optional fields](SPEC.md#optional-fields)):
 
 ```yaml
 defaults::
