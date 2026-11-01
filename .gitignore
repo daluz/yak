@@ -1,6 +1,5 @@
 /yak
 /.scratch/
 /dist/
-/site/
 *.test
 *.out

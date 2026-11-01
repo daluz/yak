@@ -587,7 +587,9 @@ spec:
     name: shop-svc
 ```
 
-A document holding nothing but bindings renders nothing at all.
+A document holding nothing but bindings renders nothing at all. A section can
+also write one document per item of a list, which
+[section 15](#a-document-per-item) shows.
 
 ## 11. Operators
 
@@ -960,6 +962,42 @@ zones:
   - eu-west
   - us-east
 ```
+
+### A document per item
+
+A section written with `---:` writes one document per item of a sequence,
+which is how a file renders as many manifests as a list has items. Given a
+context of `{namespace: argocd, projects: [platform, payments]}`:
+
+```yaml
+let project(name) =
+  kind: "AppProject"
+  metadata:
+    name: name
+    namespace: $$.namespace
+
+---: [project(p) for p in $$.projects]
+```
+
+renders as:
+
+```yaml
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+---
+kind: AppProject
+metadata:
+  name: payments
+  namespace: argocd
+```
+
+`---:` stands at the start of a line and alone in its section, beside nothing
+but bindings, imports and schemas; other documents go in sections of their
+own. Its value must be a sequence, and a `null` item renders nothing, so
+`---: [if $$.debug then {debug: true}]` writes a document only when asked to.
+A section like this writes several documents, so it has no `$`.
 
 ## 16. Built-in functions
 

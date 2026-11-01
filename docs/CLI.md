@@ -228,7 +228,8 @@ TOML cannot hold everything yak can say:
 
 A document that evaluates to `null`, because it holds only bindings, nothing
 at all, or a body written as `null`, is left out unless
-`--keep-null-documents` is given. If every document is dropped, the
+`--keep-null-documents` is given. So is a `null` item of a section written
+with [`---:`](SPEC.md#the-documents-key). If every document is dropped, the
 single-document formats report the empty output as an error.
 
 ## `yak fmt`

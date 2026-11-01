@@ -9,6 +9,7 @@ made explicit, and a small expression language is added on top.
 ## Contents
 
 - [Files](#files)
+    - [The documents key](#the-documents-key)
 - [Strict mode](#strict-mode)
 - [What changed from YAML](#what-changed-from-yaml)
     - [Strings must be quoted](#strings-must-be-quoted)
@@ -69,6 +70,52 @@ yak files use the `.yak` extension and hold one or more documents separated by
 `---`, optionally terminated by `...`, as in YAML. The name may carry the
 extension of an [output format](CLI.md#output-formats) ahead of `.yak`, as
 `app.toml.yak` does, to say what the template renders to.
+
+### The documents key
+
+A section written with `---:` writes one document per item of a sequence, in
+place of the one document it would otherwise hold, so a file can render as
+many documents as a list from the context has items:
+
+```yaml
+let project(name) =
+  kind: "AppProject"
+  metadata:
+    name: name
+
+---: [project(p) for p in $$.projects]
+```
+
+With a context of `{projects: ["platform", "payments"]}` that renders as:
+
+```yaml
+kind: AppProject
+metadata:
+  name: platform
+---
+kind: AppProject
+metadata:
+  name: payments
+```
+
+`---:` is written at column 1 and once in its section, which holds nothing
+else but [statements](#statements); they cover the value wherever they are
+written. Other documents go in sections of their own, before or after it.
+The value must be a sequence. A `null` item is dropped as a
+[null document](#output) is, and an item that is a sequence is one document
+holding it, so `---: [ports]` writes the list `ports` as a single document.
+Anything other than a sequence is an error, `null` included, so a list that
+may be missing is written `---: $$?.items ?? []`, and an item that should
+only sometimes be written is `if cond then item`. `---::` and `---:?` are
+errors.
+
+A section that writes several documents has no one root, so `$` and `$root`
+are errors in it; `.` names the enclosing mapping and `$$` the context as
+anywhere else. [`schema $`](#the-document-and-the-context) checks each
+document. Comments written on the `---:` line or on its items, rather than
+inside an item's value, have no document to come out on and are dropped. A
+[module](#modules) holds one document, so one written with `---:` is an
+error.
 
 ## Strict mode
 
@@ -324,7 +371,9 @@ items:
   - label: ..name   # "root", not the sequence
 ```
 
-Each document has its own `$`; `$context` is shared by all of them.
+Each document has its own `$`; `$context` is shared by all of them. A
+section written with [`---:`](#the-documents-key) writes several documents,
+and has no `$`.
 
 Field and index access chain freely, written without spaces:
 
@@ -1083,6 +1132,29 @@ schema* $$ =
 Only the template being rendered may declare `schema $$`; a module that does
 is an error, since what it filled in would change what the template reads.
 
+In a section written with [`---:`](#the-documents-key), `schema $` checks
+each document the section writes, and fills in its defaults; the `null` ones
+are dropped unchecked. Each document is copied as a
+[tag](#tags) copies a mapping it was not written after.
+
+```yaml
+schema $ =
+  kind: string
+  replicas: integer = 1
+
+---: [{kind: "Deployment"}, {kind: "StatefulSet", replicas: 3}]
+```
+
+renders as:
+
+```yaml
+kind: Deployment
+replicas: 1
+---
+kind: StatefulSet
+replicas: 3
+```
+
 ### When values are checked
 
 Checking is lazy, as evaluation is. The shape of a tagged mapping is checked
@@ -1583,7 +1655,8 @@ A document renders in the order it was written, with its comments. Hidden
 fields are dropped, and so are `:?` entries whose value is null. A document
 that evaluates to `null`, whether it holds only bindings, nothing at all, or a
 body written as `null`, renders nothing. A file of several documents renders
-each in turn.
+each in turn, and a section written with [`---:`](#the-documents-key)
+renders each item of its sequence as a document in its place.
 
 [CLI.md](CLI.md#output-formats) lists the output formats and how one is
 chosen. Every format preserves key order, drops hidden fields, writes nothing
@@ -1596,7 +1669,8 @@ the most.
 
 ```
 stream      := document ("---" document)* "..."?
-document    := node | statement+
+document    := node | statement+ | statement* documents statement*
+documents   := "---:" value                       -- at column 1
 node        := statement* (blockMapping | blockSequence | value)
 blockMapping:= (statement | key sep value)+       -- aligned on one column
 blockSequence := ("-" node)+                      -- aligned on one column

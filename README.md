@@ -9,6 +9,9 @@ JSON, TOML and others). It is similar in spirit to jsonnet, but the surface
 language is closer to YAML, with the ambiguous parts removed and an expression
 language added.
 
+It was initially designed to create templates for Kubernetes manifests, Helm Chart
+values files, and ArgoCD applications.
+
 ```yaml
 # app.yak
 let image = "alpine"
