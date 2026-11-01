@@ -66,33 +66,24 @@ type Package struct {
 	label string
 }
 
-// Target is where one template's output goes, with its Path relative to
-// Output.
-type Target = module.Target
+// Rules answers the rules that send the package's templates and included
+// files where they go, relative to Output: its own, then the top-level ones
+// it does not override. The longest that covers a file decides.
+func (p *Package) Rules() []*module.Rule { return p.rules }
 
-// Target answers where the template at rel, a slash path relative to the
-// root of the package called name, goes. The longest rule that covers it
-// decides; without one it goes beneath a directory named for the package.
-func (p *Package) Target(name, rel string) Target {
-	if t, ok := module.Place(p.rules, rel); ok {
-		return t
-	}
-	return Target{Path: name, Rest: rel}
-}
-
-// CheckRules refuses a rule that covered no template, once every template
-// has been given its Target: a top-level rule must cover one in some
-// package, and a package's own rule one in that package.
+// CheckRules refuses a rule that covered no file, once every file has been
+// placed by Rules: a top-level rule must cover one in some package, and a
+// package's own rule one in that package.
 func (s *Spec) CheckRules() error {
 	for _, r := range s.rules {
 		if !r.Used() {
-			return fmt.Errorf("%s: rules: %s covers no template in any package, or every package overrides it", s.Path, r.Key)
+			return fmt.Errorf("%s: render.rules: %s covers no template or included file in any package, or every package overrides it", s.Path, r.Key)
 		}
 	}
 	for _, p := range s.Packages {
 		for _, r := range p.own {
 			if !r.Used() {
-				return fmt.Errorf("%s: %s.rules: %s covers no template of %s", s.Path, p.label, r.Key, p.Source)
+				return fmt.Errorf("%s: %s.render.rules: %s covers no template or included file of %s", s.Path, p.label, r.Key, p.Source)
 			}
 		}
 	}
@@ -244,13 +235,13 @@ func decode(file string, v eval.Value) (*Spec, error) {
 			s.NonStrict = !strict
 		case "context":
 			context, err = d.mapping(name, v)
-		case "rules":
-			s.rules, err = d.rules(name, v)
+		case "render":
+			s.rules, err = d.render(name, v)
 		case "packages":
 			s.Packages, err = d.packages(name, v)
 		default:
 			return nil, d.errorf(name, "is not a key of a spec file; it takes spec, output, format, strict, "+
-				"keepNullDocuments, skipSchemaChecks, skipPackageContext, skipRenderDeps, plainHttp, context, rules and packages")
+				"keepNullDocuments, skipSchemaChecks, skipPackageContext, skipRenderDeps, plainHttp, context, render and packages")
 		}
 		if err != nil {
 			return nil, err
@@ -312,10 +303,10 @@ func (d decoder) packages(key string, v eval.Value) ([]*Package, error) {
 				}
 			case "context":
 				p.Context, err = d.mapping(k, v)
-			case "rules":
-				p.own, err = d.rules(k, v)
+			case "render":
+				p.own, err = d.render(k, v)
 			default:
-				err = d.errorf(k, "is not a key of a package; it takes source, context and rules")
+				err = d.errorf(k, "is not a key of a package; it takes source, context and render")
 			}
 			if err != nil {
 				return nil, err
@@ -327,6 +318,29 @@ func (d decoder) packages(key string, v eval.Value) ([]*Package, error) {
 		pkgs = append(pkgs, p)
 	}
 	return pkgs, nil
+}
+
+// render reads a render mapping, which takes rules alone.
+func (d decoder) render(key string, v eval.Value) ([]*module.Rule, error) {
+	o, err := d.mapping(key, v)
+	if err != nil {
+		return nil, err
+	}
+	var rules []*module.Rule
+	for _, f := range o.Fields() {
+		v, err := f.Value.Value()
+		if err != nil {
+			return nil, err
+		}
+		k := key + "." + f.Name
+		if f.Name != "rules" {
+			return nil, d.errorf(k, "is not a key of render; it takes rules")
+		}
+		if rules, err = d.rules(k, v); err != nil {
+			return nil, err
+		}
+	}
+	return rules, nil
 }
 
 func (d decoder) rules(key string, v eval.Value) ([]*module.Rule, error) {

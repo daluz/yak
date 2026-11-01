@@ -8,12 +8,12 @@ import (
 	"strings"
 )
 
-// RootDir is the key of a rule that covers every template of a package, and
+// RootDir is the key of a rule that covers every file of a package, and
 // the value of one that sends what it covers to the root of the output.
 const RootDir = "/"
 
-// Rule is one entry of rules: a template, a directory ending in "/", or "/"
-// for the whole package, and where what it covers goes.
+// Rule is one entry of rules: a template or an included file, a directory
+// ending in "/", or "/" for the whole package, and where what it covers goes.
 type Rule struct {
 	Key  string
 	To   string
@@ -45,7 +45,7 @@ func trimRoot(p string) string {
 }
 
 // ruleKey checks what a rule covers: "/", a directory beneath the package
-// root ending in "/", or a template.
+// root ending in "/", or a template or an included file.
 func ruleKey(key string) error {
 	switch {
 	case key == RootDir:
@@ -54,12 +54,8 @@ func ruleKey(key string) error {
 		return fmt.Errorf("names no path; write %q for the whole package", RootDir)
 	case !isLocalPath(strings.TrimSuffix(key, "/")):
 		return errors.New("is not a path beneath the package root")
-	case strings.HasSuffix(key, "/"):
-		return nil
 	case strings.HasSuffix(key, ExtLibrary):
 		return errors.New("is a library, which can be imported but not rendered")
-	case !strings.HasSuffix(key, Ext):
-		return fmt.Errorf("names no template; a rule covers a %s template, or a directory written with a trailing /", Ext)
 	}
 	return nil
 }

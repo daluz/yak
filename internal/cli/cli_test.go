@@ -838,7 +838,7 @@ func TestRenderDependenciesRefuses(t *testing.T) {
 			"  db:\n    source: ../db\n    render: {rules: {\"/\": \"/\"}}\n  x:\n    source: ../x\n    render: {rules: {\"x.yak\": \"db.yaml\"}}\n",
 			"would both write"},
 		{"a rule that covers nothing", "  db:\n    source: ../db\n    render: {rules: {\"deploy/\": \"k8s/\"}}\n",
-			"dependencies.db.render.rules: deploy/ covers no template of"},
+			"dependencies.db.render.rules: deploy/ covers no template or included file of"},
 		{"a transitive dependency that is not one", "  db:\n    source: ../db\n    render: {transitive: [nope]}\n",
 			`has no dependency "nope"`},
 		{"a library", "  lib:\n    source: ../lib.yakl\n    render: true\n", "is a library, which can be imported but not rendered"},
@@ -857,6 +857,114 @@ func TestRenderDependenciesRefuses(t *testing.T) {
 			out := filepath.Join(dir, "out")
 
 			_, err := run(t, "render", filepath.Join(dir, "app"), "--output-dir", out)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to mention %q", err, tc.want)
+			}
+			if _, err := os.Stat(out); err == nil {
+				t.Error("an output was written")
+			}
+		})
+	}
+}
+
+func TestRenderPackageRulesAndIncludes(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "yak.pkg", `package:
+  name: dsx
+render:
+  rules:
+    "/": "manifests/"
+    "tests/": null
+    "crds/": "/crds/"
+    "README.md": "docs/README.md"
+  includes:
+    - crds/
+    - README.md
+    - /static/raw.yak
+`)
+	write(t, dir, "app.yak", "app: true\n")
+	write(t, dir, "tests/smoke.yak", "smoke: true\n")
+	write(t, dir, "crds/a.yaml", "a: {b: 1}\n")
+	write(t, dir, "crds/sub/c.json", "{\"c\": 1}\n")
+	write(t, dir, "crds/.hidden", "hidden\n")
+	write(t, dir, "README.md", "# dsx\n")
+	write(t, dir, "static/raw.yak", "raw: $$.missing\n")
+	out := filepath.Join(dir, "out")
+
+	if _, err := run(t, "render", dir, "-O"); err == nil || !strings.Contains(err.Error(), "has render rules or includes, which need --output-dir") {
+		t.Errorf("render -O: error = %v, want --output-dir asked for", err)
+	}
+	if _, err := run(t, "render", dir, "--output-dir", out); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	want := map[string]string{
+		"manifests/app.yaml":       "app: true\n",
+		"manifests/static/raw.yak": "raw: $$.missing\n",
+		"crds/a.yaml":              "a: {b: 1}\n",
+		"crds/sub/c.json":          "{\"c\": 1}\n",
+		"docs/README.md":           "# dsx\n",
+	}
+	if got := readAll(t, out); !maps.Equal(got, want) {
+		t.Errorf("wrote %v, want %v", got, want)
+	}
+}
+
+func TestRenderDependencyRulesOverThePackagesOwn(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "app/yak.pkg", `package:
+  name: app
+dependencies:
+  web:
+    source: ../web
+    render:
+      rules:
+        "crds/": "web-crds/"
+`)
+	write(t, dir, "app/app.yak", "app: true\n")
+	write(t, dir, "web/yak.pkg", `package:
+  name: web
+render:
+  rules:
+    "/": "manifests/"
+  includes: [crds/]
+`)
+	write(t, dir, "web/service.yak", "service: true\n")
+	write(t, dir, "web/crds/a.yaml", "a: 1\n")
+	out := filepath.Join(dir, "out")
+
+	if _, err := run(t, "render", filepath.Join(dir, "app"), "--output-dir", out); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	want := map[string]string{
+		"app.yaml":                   "app: true\n",
+		"web-crds/a.yaml":            "a: 1\n",
+		"web/manifests/service.yaml": "service: true\n",
+	}
+	if got := readAll(t, out); !maps.Equal(got, want) {
+		t.Errorf("wrote %v, want %v", got, want)
+	}
+}
+
+func TestRenderPackageRulesAndIncludesRefuses(t *testing.T) {
+	for _, tc := range []struct {
+		name, render, want string
+	}{
+		{"a missing include", "  includes: [gone.txt]\n", "render.includes: gone.txt does not exist"},
+		{"a directory written as a file", "  includes: [crds]\n", "crds is a directory; write it with a trailing /"},
+		{"a file written as a directory", "  includes: [app.yaml/]\n", "app.yaml/ is not a directory"},
+		{"an include and a template writing one file", "  includes: [app.yaml]\n", "would both write"},
+		{"a rule that covers nothing", "  rules: {\"deploy/\": \"k8s/\"}\n",
+			"render.rules: deploy/ covers no template or included file of the package"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, "yak.pkg", "package:\n  name: web\nrender:\n"+tc.render)
+			write(t, dir, "app.yak", "app: true\n")
+			write(t, dir, "app.yaml", "app: false\n")
+			write(t, dir, "crds/a.yaml", "a: 1\n")
+			out := filepath.Join(t.TempDir(), "out")
+
+			_, err := run(t, "render", dir, "--output-dir", out)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("error = %v, want it to mention %q", err, tc.want)
 			}
@@ -1125,15 +1233,17 @@ context:
   env: env.get("YAK_TEST_ENV")
   region: "eu"
   replicas: 2
-rules:
-  "tests/": null
+render:
+  rules:
+    "tests/": null
 packages:
   - source: "web"
     context:
       replicas: 4
-    rules:
-      "/": "manifests/"
-      "deploy/app.toml.yak": "config/web.json"
+    render:
+      rules:
+        "/": "manifests/"
+        "deploy/app.toml.yak": "config/web.json"
   - source: "db"
 `)
 
@@ -1162,7 +1272,7 @@ func TestRenderSpecRendersDependencies(t *testing.T) {
 	spec := write(t, dir, "release.yakspec", `context: {env: "prod"}
 packages:
   - source: "app"
-    rules: {"/": "top/"}
+    render: {rules: {"/": "top/"}}
 `)
 	skip := write(t, dir, "skip.yakspec", "skipRenderDeps: true\npackages: [{source: \"app\"}]\n")
 
@@ -1191,6 +1301,28 @@ packages:
 	}
 }
 
+func TestRenderSpecPlacesByItsRulesThenThePackagesOwn(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "web/yak.pkg", `package:
+  name: web
+render:
+  rules:
+    "/": "manifests/"
+  includes: [README.md]
+`)
+	write(t, dir, "web/app.yak", "app: true\n")
+	write(t, dir, "web/README.md", "# web\n")
+	spec := write(t, dir, "release.yakspec", "packages:\n  - source: \"web\"\n    render: {rules: {\"README.md\": \"docs/\"}}\n")
+
+	if _, err := run(t, "spec", "render", spec); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	want := map[string]string{"docs/README.md": "# web\n", "web/manifests/app.yaml": "app: true\n"}
+	if got := readAll(t, filepath.Join(dir, "build")); !maps.Equal(got, want) {
+		t.Errorf("wrote %v, want %v", got, want)
+	}
+}
+
 func TestRenderSpecKeepsThePackagesStrict(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "web/yak.pkg", "package:\n  name: web\n")
@@ -1213,7 +1345,7 @@ func TestRenderSpecLetsTheLastPackageWin(t *testing.T) {
 	write(t, dir, "base/only.yak", "only: \"base\"\n")
 	write(t, dir, "overlay/yak.pkg", "package:\n  name: overlay\n")
 	write(t, dir, "overlay/service.yak", "from: \"overlay\"\n")
-	spec := write(t, dir, "release.yakspec", "rules: {\"/\": \"out/\"}\npackages: [{source: \"base\"}, {source: \"overlay\"}]\n")
+	spec := write(t, dir, "release.yakspec", "render: {rules: {\"/\": \"out/\"}}\npackages: [{source: \"base\"}, {source: \"overlay\"}]\n")
 
 	if _, err := run(t, "spec", "render", spec); err != nil {
 		t.Fatalf("render returned error: %v", err)
@@ -1231,9 +1363,9 @@ func TestRenderSpecRefuses(t *testing.T) {
 	}{
 		{"a flag", "packages: [{source: \"web\"}]\n", "unknown shorthand flag: 'c'", []string{"-c", "ctx.yaml"}},
 		{"two templates of one package writing one file",
-			"packages:\n  - source: \"web\"\n    rules: {\"app.yak\": \"x.yaml\", \"other.yak\": \"x.yaml\"}\n", "would both write", nil},
+			"packages:\n  - source: \"web\"\n    render: {rules: {\"app.yak\": \"x.yaml\", \"other.yak\": \"x.yaml\"}}\n", "would both write", nil},
 		{"a rule that covers nothing",
-			"packages:\n  - source: \"web\"\n    rules: {\"deploy/\": \"k8s/\"}\n", "deploy/ covers no template", nil},
+			"packages:\n  - source: \"web\"\n    render: {rules: {\"deploy/\": \"k8s/\"}}\n", "deploy/ covers no template", nil},
 		{"a source that is no package", "packages: [{source: \"lib\"}]\n", "is not a package", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1258,7 +1390,7 @@ func TestRenderSpecRefuses(t *testing.T) {
 func TestRenderSpecFetchesARemotePackage(t *testing.T) {
 	ref := gitPackage(t, project(t))
 	dir := t.TempDir()
-	spec := write(t, dir, "release.yakspec", "output: \"build\"\npackages:\n  - source: \""+ref+"\"\n    rules: {\"deploy/\": \"svc/\"}\n")
+	spec := write(t, dir, "release.yakspec", "output: \"build\"\npackages:\n  - source: \""+ref+"\"\n    render: {rules: {\"deploy/\": \"svc/\"}}\n")
 
 	if _, err := run(t, "spec", "render", spec); err != nil {
 		t.Fatalf("render returned error: %v", err)

@@ -87,14 +87,39 @@ Two templates that would write the same file, such as `app.yak` and
 `app.yaml.yak`, are an error. Nothing is written unless every template
 renders.
 
+A package's `yak.pkg` can say where its templates go and which of its files
+are copied along with them, with a top-level
+[`render`](SPEC.md#rendering-a-package) of `rules` and `includes`. Such a
+package needs `--output-dir`:
+
+```yaml
+package:
+  name: dsx
+render:
+  rules:
+    "/": "manifests/"
+  includes: [crds/, README.md]
+```
+
+```console
+$ yak render . --output-dir build
+```
+
+renders `app.yak` to `build/manifests/app.yaml`, and copies
+`crds/widgets.yaml` to `build/manifests/crds/widgets.yaml` and `README.md`
+to `build/manifests/README.md` as they are. An included file and a template
+that would write the same file are an error.
+
 ### Rendering dependencies
 
 A directory that is a package, one with a `yak.pkg` of its own, also renders
 the dependencies its `yak.pkg` marks with
 [`render`](SPEC.md#rendering-dependencies), so it needs `--output-dir`.
 Without a rule, a dependency's templates go beneath a directory named for it,
-laid out as its own directory would be, and the dependencies it renders in
-turn go beneath that one; with one, they go where the rule sends them. Each
+laid out as its own directory would be, or as its own `render.rules` lay
+them out, and the dependencies it renders in turn go beneath that one; with
+one, they go where the rule sends them. Its included files are copied the
+same way. Each
 dependency's templates read the same `-c` files, through the context file of
 their own package. A dependency beneath the directory is rendered as a
 dependency only, not as part of the directory too.
@@ -691,16 +716,18 @@ context:
   region: "eu-west-1"
   replicas: 2
 
-rules:
-  "tests/": null
+render:
+  rules:
+    "tests/": null
 
 packages:
   - source: "web"
     context:
       replicas: 4
-    rules:
-      "/": "manifests/"
-      "deploy/app.toml.yak": "config/web.toml"
+    render:
+      rules:
+        "/": "manifests/"
+        "deploy/app.toml.yak": "config/web.toml"
   - source: "db"
 ```
 
@@ -722,7 +749,7 @@ otherwise. It takes these keys:
 | `packages` | The packages to render, in order. Required. | |
 | `output` | The directory every output goes beneath, relative to the spec file. | `"build"` |
 | `context` | The context every package is rendered against. | `{}` |
-| `rules` | Where every package's outputs go. | |
+| `render` | A mapping whose `rules` say where every package's outputs go. | |
 | `format` | As `--format`. | as for a directory |
 | `strict` | `false` renders the packages as `--strict=false` does. | `true` |
 | `keepNullDocuments` | As `--keep-null-documents`. | `false` |
@@ -734,8 +761,8 @@ otherwise. It takes these keys:
 Each entry of `packages` is a mapping. Its `source` is a package's directory,
 relative to the spec file, or a [git or OCI reference](SPEC.md#remote-packages),
 which is fetched as `yak render` fetches one; either way it must hold a
-`yak.pkg` at its root. It may carry `context` and `rules` of its own, which
-apply to that package alone. Its `context` merges over the top-level one as a
+`yak.pkg` at its root. It may carry `context` and `render.rules` of its own,
+which apply to that package alone. Its `context` merges over the top-level one as a
 later `-c` file merges over an earlier one, and the result is what the
 package's [context file](#package-context) reads. Its rules are added to the
 top-level ones, replacing any with the same key. With the spec above, `web`
@@ -743,13 +770,16 @@ reads `replicas: 4` and `db` reads `replicas: 2`.
 
 Without a rule, a package's templates go beneath a directory named for the
 package, laid out as [rendering a directory](#rendering-a-directory) lays
-them out under `--output-dir`. A rule's key says which of the package's
-templates it covers, relative to the package root, and its value where they
-go, relative to `output`:
+them out under `--output-dir`, by the package's own
+[`render.rules`](SPEC.md#rendering-a-package) when it has them. Its included
+files go with them, and the spec's rules cover them as they do templates. A
+rule's key says which of the package's templates it covers, relative to the
+package root, and its value where they go, relative to `output`:
 
 | Key | Covers |
 | --- | --- |
 | `"service.yak"` | That template. |
+| `"README.md"` | That included file. |
 | `"deploy/"` | Every template beneath the directory. |
 | `"/"` | Every template of the package. |
 

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/daluz/yak/internal/module"
 )
 
 func load(t *testing.T, src string) (*Spec, error) {
@@ -29,15 +31,18 @@ func TestLoadRefuses(t *testing.T) {
 		{"an unknown format", "format: \"xml\"\npackages: [{source: \"web\"}]\n", `format unknown output format "xml"`},
 		{"two documents", "packages: []\n---\npackages: []\n", "holds one document, not 2"},
 		{"a context schema", "schema $$ = {}\npackages: [{source: \"web\"}]\n", "cannot declare a schema for it"},
-		{"a library rule", "rules: {\"lib/x.yakl\": \"x.yaml\"}\npackages: [{source: \"web\"}]\n", "is a library"},
-		{"a rule naming no template", "rules: {\"README.md\": \"x.yaml\"}\npackages: [{source: \"web\"}]\n", "names no template"},
-		{"a rule climbing out", "rules: {\"app.yak\": \"../app.yaml\"}\npackages: [{source: \"web\"}]\n", "not a path beneath the output"},
-		{"a template sent to output itself", "rules: {\"app.yak\": \".\"}\npackages: [{source: \"web\"}]\n", "not a path beneath the output"},
-		{"the package written ./", "rules: {\"./\": \"k8s/\"}\npackages: [{source: \"web\"}]\n", `write "/" for the whole package`},
-		{"the output written ./", "rules: {\"deploy/\": \"./\"}\npackages: [{source: \"web\"}]\n", `write "/" for the root of the output`},
-		{"a rule climbing out of the package", "rules: {\"../app.yak\": \"app.yaml\"}\npackages: [{source: \"web\"}]\n", "not a path beneath the package root"},
-		{"a directory sent to a file", "rules: {\"deploy/\": \"k8s\"}\npackages: [{source: \"web\"}]\n", "must be sent to one"},
-		{"a rule sent to a number", "rules: {\"app.yak\": 1}\npackages: [{source: \"web\"}]\n", "must be sent to a path or to null"},
+		{"the rules of version 1 at the top", "rules: {\"/\": \"out/\"}\npackages: [{source: \"web\"}]\n", "rules is not a key of a spec file"},
+		{"the rules of version 1 in a package", "packages: [{source: \"web\", rules: {}}]\n", "packages[0].rules is not a key of a package"},
+		{"an unknown render key", "render: {includes: []}\npackages: [{source: \"web\"}]\n", "render.includes is not a key of render; it takes rules"},
+		{"a render that is no mapping", "packages: [{source: \"web\", render: true}]\n", "packages[0].render must be a mapping"},
+		{"a library rule", "render: {rules: {\"lib/x.yakl\": \"x.yaml\"}}\npackages: [{source: \"web\"}]\n", "is a library"},
+		{"a rule climbing out", "render: {rules: {\"app.yak\": \"../app.yaml\"}}\npackages: [{source: \"web\"}]\n", "not a path beneath the output"},
+		{"a template sent to output itself", "render: {rules: {\"app.yak\": \".\"}}\npackages: [{source: \"web\"}]\n", "not a path beneath the output"},
+		{"the package written ./", "render: {rules: {\"./\": \"k8s/\"}}\npackages: [{source: \"web\"}]\n", `write "/" for the whole package`},
+		{"the output written ./", "render: {rules: {\"deploy/\": \"./\"}}\npackages: [{source: \"web\"}]\n", `write "/" for the root of the output`},
+		{"a rule climbing out of the package", "render: {rules: {\"../app.yak\": \"app.yaml\"}}\npackages: [{source: \"web\"}]\n", "not a path beneath the package root"},
+		{"a directory sent to a file", "render: {rules: {\"deploy/\": \"k8s\"}}\npackages: [{source: \"web\"}]\n", "must be sent to one"},
+		{"a rule sent to a number", "render: {rules: {\"app.yak\": 1}}\npackages: [{source: \"web\"}]\n", "must be sent to a path or to null"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := load(t, tc.src)
@@ -81,25 +86,30 @@ func TestLoadImportsAFilePath(t *testing.T) {
 	}
 }
 
-func TestTarget(t *testing.T) {
-	s, err := load(t, `rules:
-  "/": "manifests/"
-  "tests/": null
+func TestRules(t *testing.T) {
+	s, err := load(t, `render:
+  rules:
+    "/": "manifests/"
+    "tests/": null
 packages:
   - source: "web"
-    rules:
-      "/deploy/": "k8s/"
-      "deploy/app.toml.yak": "/config/web.toml"
-      "tests/keep.yak": "kept/"
+    render:
+      rules:
+        "/deploy/": "k8s/"
+        "deploy/app.toml.yak": "/config/web.toml"
+        "tests/keep.yak": "kept/"
   - source: "db"
-    rules:
-      "/": "databases/"
+    render:
+      rules:
+        "/": "databases/"
   - source: "cache"
-    rules:
-      "tests/": "tests/"
+    render:
+      rules:
+        "tests/": "tests/"
   - source: "flat"
-    rules:
-      "/": "/"
+    render:
+      rules:
+        "/": "/"
 `)
 	if err != nil {
 		t.Fatal(err)
@@ -108,20 +118,20 @@ packages:
 	for _, tc := range []struct {
 		p    *Package
 		rel  string
-		want Target
+		want module.Target
 	}{
-		{web, "service.yak", Target{Path: "manifests", Rest: "service.yak"}},
-		{web, "deploy/app.yak", Target{Path: "k8s", Rest: "app.yak"}},
-		{web, "deploy/app.toml.yak", Target{Path: "config/web.toml", File: true}},
-		{web, "tests/smoke.yak", Target{Drop: true}},
-		{web, "tests/keep.yak", Target{Path: "kept", Rest: "keep.yak"}},
-		{db, "db.yak", Target{Path: "databases", Rest: "db.yak"}},
-		{db, "tests/db.yak", Target{Drop: true}},
-		{cache, "tests/cache.yak", Target{Path: "tests", Rest: "cache.yak"}},
-		{flat, "deploy/flat.yak", Target{Path: "", Rest: "deploy/flat.yak"}},
+		{web, "service.yak", module.Target{Path: "manifests", Rest: "service.yak"}},
+		{web, "deploy/app.yak", module.Target{Path: "k8s", Rest: "app.yak"}},
+		{web, "deploy/app.toml.yak", module.Target{Path: "config/web.toml", File: true}},
+		{web, "tests/smoke.yak", module.Target{Drop: true}},
+		{web, "tests/keep.yak", module.Target{Path: "kept", Rest: "keep.yak"}},
+		{db, "db.yak", module.Target{Path: "databases", Rest: "db.yak"}},
+		{db, "tests/db.yak", module.Target{Drop: true}},
+		{cache, "tests/cache.yak", module.Target{Path: "tests", Rest: "cache.yak"}},
+		{flat, "deploy/flat.yak", module.Target{Path: "", Rest: "deploy/flat.yak"}},
 	} {
-		if got := tc.p.Target("pkg", tc.rel); got != tc.want {
-			t.Errorf("%s: Target(%s) = %+v, want %+v", tc.p.label, tc.rel, got, tc.want)
+		if got, _ := module.Place(tc.p.Rules(), tc.rel); got != tc.want {
+			t.Errorf("%s: Place(%s) = %+v, want %+v", tc.p.label, tc.rel, got, tc.want)
 		}
 	}
 	if err := s.CheckRules(); err != nil {
@@ -130,12 +140,12 @@ packages:
 }
 
 func TestCheckRulesRefusesARuleThatCoversNothing(t *testing.T) {
-	s, err := load(t, "rules: {\"docs/\": null}\npackages:\n  - source: \"web\"\n    rules: {\"app.yak\": \"a.yaml\"}\n")
+	s, err := load(t, "render: {rules: {\"docs/\": null}}\npackages:\n  - source: \"web\"\n    render: {rules: {\"app.yak\": \"a.yaml\"}}\n")
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Packages[0].Target("web", "app.yak")
-	if err := s.CheckRules(); err == nil || !strings.Contains(err.Error(), "rules: docs/ covers no template in any package") {
+	module.Place(s.Packages[0].Rules(), "app.yak")
+	if err := s.CheckRules(); err == nil || !strings.Contains(err.Error(), "render.rules: docs/ covers no template or included file in any package") {
 		t.Errorf("error = %v, want docs/ reported", err)
 	}
 }

@@ -31,16 +31,18 @@ context:
 # decides, and a package's own rules replace the ones here with its keys.
 # Without a rule, a package's outputs go beneath a directory named for it.
 #
-# rules:
-#   "tests/": null
+# render:
+#   rules:
+#     "tests/": null
 
 packages:
   # A directory relative to this file, or a git+https:// or oci:// package.
   - source: "web"
     # context:
     #   replicas: 2
-    # rules:
-    #   "/": "manifests/"
+    # render:
+    #   rules:
+    #     "/": "manifests/"
 `
 
 // Init writes an example spec file at path, which must end in Ext and not

@@ -107,23 +107,16 @@ func renderSpec(path string, log io.Writer) error {
 			}
 			templates = outside(templates, claimed)
 		}
-		var jobs []job
-		for _, template := range templates {
-			rel, err := filepath.Rel(dir, template)
-			if err != nil {
-				return err
-			}
-			target := p.Target(pkg.Name, filepath.ToSlash(rel))
-			switch {
-			case target.Drop:
-			case target.File:
-				jobs = append(jobs, job{template: template, output: filepath.Join(spec.Output, filepath.FromSlash(target.Path))})
-			default:
-				jobs = append(jobs, job{template: template, dir: filepath.Join(spec.Output, filepath.FromSlash(target.Path)), rest: target.Rest})
-			}
+		files, err := packageFiles(pkg, dir, templates)
+		if err != nil {
+			return err
 		}
-		if len(templates)+len(deps) == 0 {
+		if len(files)+len(deps) == 0 {
 			return fmt.Errorf("no %s templates beneath %s", module.Ext, dir)
+		}
+		jobs, err := placeFiles(pkg, files, p.Rules(), spec.Output, filepath.Join(spec.Output, pkg.Name))
+		if err != nil {
+			return err
 		}
 		req.context = p.Context
 		out, err := req.renderJobs(append(jobs, deps...), map[string]string{})

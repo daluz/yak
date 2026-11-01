@@ -130,6 +130,13 @@ type Package struct {
 	// Render maps the dependencies that render along with the package onto
 	// how they render.
 	Render map[string]*Render
+	// Rules send the package's own templates and included files where they
+	// go, relative to the package's output directory.
+	Rules []*Rule
+	// Includes are the files, and the directories ending in "/", that are
+	// copied to the output as they are, as slash paths relative to the
+	// package root.
+	Includes []string
 }
 
 // Render is how a dependency renders when the package that depends on it is
@@ -215,6 +222,7 @@ func ParsePackage(path string, src []byte) (*Package, error) {
 			Context     yaml.Node `yaml:"context"`
 		} `yaml:"package"`
 		Dependencies map[string]yaml.Node `yaml:"dependencies"`
+		Render       yaml.Node            `yaml:"render"`
 	}
 	dec := yaml.NewDecoder(bytes.NewReader(src))
 	dec.KnownFields(true)
@@ -249,7 +257,57 @@ func ParsePackage(path string, src []byte) (*Package, error) {
 			pkg.Render[key] = render
 		}
 	}
+	if err := ownRender(path, &doc.Render, pkg); err != nil {
+		return nil, err
+	}
 	return pkg, nil
+}
+
+// ownRender reads the top-level render of the yak.pkg at path into pkg: a
+// mapping of rules and includes.
+func ownRender(path string, n *yaml.Node, pkg *Package) error {
+	if n.Kind == 0 {
+		return nil
+	}
+	if n.Kind != yaml.MappingNode {
+		return fmt.Errorf("%s: render must be a mapping of rules and includes", path)
+	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		k, v := n.Content[i].Value, n.Content[i+1]
+		var err error
+		switch k {
+		case "rules":
+			pkg.Rules, err = rules(path, "render.rules", v)
+		case "includes":
+			pkg.Includes, err = includes(path, v)
+		default:
+			err = fmt.Errorf("%s: render.%s is not a key of render; it takes rules and includes", path, k)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// includes reads render.includes from the yak.pkg at path: a sequence of
+// files and directories ending in "/" beneath the package root.
+func includes(path string, n *yaml.Node) ([]string, error) {
+	if n.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("%s: render.includes must be a sequence of files and directories", path)
+	}
+	var paths []string
+	for _, item := range n.Content {
+		if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
+			return nil, fmt.Errorf("%s: render.includes must name files and directories", path)
+		}
+		p := trimRoot(item.Value)
+		if !isLocalPath(strings.TrimSuffix(p, "/")) {
+			return nil, fmt.Errorf("%s: render.includes: %q is not a path beneath the package root", path, item.Value)
+		}
+		paths = append(paths, p)
+	}
+	return paths, nil
 }
 
 func modulePath(key string) error {

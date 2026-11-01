@@ -213,6 +213,13 @@ func TestResolveErrors(t *testing.T) {
 		{"a transitive name that is no path", pkg + "dependencies:\n  p: {source: lib, render: {transitive: [a-b]}}\n", "q", `"a-b" is not a module path`},
 		{"a rendered library", pkg + "dependencies:\n  l: {source: l.yakl, render: true}\n", "q", "is a library, which can be imported but not rendered"},
 		{"a module with transitive dependencies", pkg + "dependencies:\n  m: {source: m.yak, render: {transitive: true}}\n", "q", "is a module, which has no dependencies"},
+		{"a package render that is no mapping", pkg + "render: true\n", "q", "render must be a mapping of rules and includes"},
+		{"an unknown package render key", pkg + "render: {transitive: true}\n", "q", "render.transitive is not a key of render; it takes rules and includes"},
+		{"includes that are no sequence", pkg + "render: {includes: crds/}\n", "q", "render.includes must be a sequence"},
+		{"an include that is no path", pkg + "render: {includes: [1]}\n", "q", "render.includes must name files and directories"},
+		{"an include climbing out", pkg + "render: {includes: [../x]}\n", "q", `render.includes: "../x" is not a path beneath the package root`},
+		{"the whole package included", pkg + "render: {includes: [/]}\n", "q", `render.includes: "/" is not a path beneath the package root`},
+		{"a package rule sent to a number", pkg + "render: {rules: {\"/\": 1}}\n", "q", "render.rules: / must be sent to a path or to null"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

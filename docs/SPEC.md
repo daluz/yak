@@ -829,11 +829,16 @@ dependencies:
   db:                          # also rendered with the package
     source: ../db
     render: true
+render:                        # optional; how the package itself renders
+  rules: {"/": "manifests/"}
+  includes: [crds/]
 ```
 
 A dependency is its location, or a mapping of `source`, the location, and
 [`render`](#rendering-dependencies), which says whether and how it renders
-along with the package.
+along with the package. The top-level [`render`](#rendering-a-package) says
+where the package's own templates go and which of its files are copied
+along with them.
 
 A file belongs to the package of the nearest `yak.pkg` in its directory or
 above. A file in no package is a module all the same.
@@ -956,6 +961,43 @@ that `yak package build` writes: a manifest of artifact type
 but for hidden ones and its `vendor/`. Its `yak.lock` travels with it, so a
 package that depends on it vendors the same dependencies it was built with.
 
+### Rendering a package
+
+The top-level `render` of a `yak.pkg` takes two optional keys, which apply
+whenever the package renders as a
+[directory](CLI.md#rendering-a-directory): on its own, as a dependency, or
+from a [spec file](CLI.md#yak-spec-render).
+
+```yaml
+render:
+  rules:
+    "/": "manifests/"
+    "tests/": null
+    "README.md": "docs/README.md"
+  includes:
+    - crds/
+    - README.md
+```
+
+`includes` names files, and directories ending in `/`, beneath the package
+root, that are copied to the output as they are, with nothing evaluated. A
+directory includes every file beneath it but for hidden ones. An included
+file keeps its name, and a template that is included is copied rather than
+rendered. An include that does not exist, or a directory that holds no file,
+is an error.
+
+`rules` say where the package's templates and included files go, as the
+rules of a [dependency](#rendering-dependencies) do, relative to the
+package's output directory. A file no rule covers goes there at its path
+beneath the package root. A rule sending an included file to a file names
+it as written, rather than choosing a format. A rule that covers no template
+or included file is an error.
+
+When the package renders as a dependency, or from a spec file, the rules of
+what renders it decide first, and the package's own rules place what those
+leave uncovered, relative to the directory the package renders beneath. A
+dependency's rules can name its included files as they name its templates.
+
 ### Rendering dependencies
 
 A dependency is only imported unless its `render` says otherwise. `render`
@@ -980,13 +1022,15 @@ dependencies:
 ```
 
 `rules` say where the dependency's templates go, as the rules of a
-[spec file](CLI.md#yak-spec-render) do: a key covers a template, a directory
+[spec file](CLI.md#yak-spec-render) do: a key covers a template or an
+included file, a directory
 ending in `/` or `"/"` for the whole dependency, relative to its root, and
 its value is a file, a directory ending in `/`, `"/"` for the root of the
 output, or `null` to leave the templates out. A leading `/` changes nothing,
-so `"/tests/"` is `"tests/"`. A template no rule covers goes beneath a
-directory named for the dependency's key, at its path beneath the
-dependency's root. A rule that covers no template is an error.
+so `"/tests/"` is `"tests/"`. A template no rule covers goes where the
+dependency's own [`render.rules`](#rendering-a-package) send it, beneath a
+directory named for the dependency's key, or without one at its path beneath
+that directory. A rule that covers no template is an error.
 
 `transitive` says which of the dependency's own dependencies render along
 with it:

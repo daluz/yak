@@ -2038,6 +2038,27 @@ and leaves the tests out. `transitive` under `render` renders the
 dependency's own dependencies too, and `--skip-render-deps` renders the
 package's own templates alone.
 
+A package's own templates can be placed the same way, with a top-level
+`render`, which also names files to copy along with them as they are:
+
+**Package file: `yak.pkg`** <!-- example: render-package package yak.pkg -->
+
+```yaml
+package:
+  name: web
+render:
+  rules:
+    "/": "manifests/"
+  includes:
+    - crds/
+```
+
+Rendering `web` with `--output-dir build` writes `service.yak` to
+`build/manifests/service.yaml` and copies every file in `crds/` beneath
+`build/manifests/crds/`, untouched. A package that renders `web` as a
+dependency can still send its files elsewhere with rules of its own, which
+win over `web`'s.
+
 A package can shape the context its templates read, as a Helm chart carries
 its `values.yaml`. `package.context` names a template that is evaluated
 against the `-c` files, and what it renders is the `$$` of every template in
@@ -2386,16 +2407,18 @@ context:
   region: "eu-west-1"
   replicas: 2
 
-rules:
-  "tests/": null
+render:
+  rules:
+    "tests/": null
 
 packages:
   - source: "web"
     context:
       replicas: 4
-    rules:
-      "/": "manifests/"
-      "deploy/app.toml.yak": "config/web.toml"
+    render:
+      rules:
+        "/": "manifests/"
+        "deploy/app.toml.yak": "config/web.toml"
   - source: "db"
 ```
 
@@ -2406,12 +2429,13 @@ over it, so `web` reads `replicas: 4` and `db` reads `replicas: 2`. A
 `source` is a directory relative to the spec file, or a git or OCI reference
 like the ones `yak add` takes.
 
-`rules` say where the outputs go, beneath `output`, which defaults to
+`render.rules` say where the outputs go, beneath `output`, which defaults to
 `build`. A key names a template, a directory ending in `/`, or `/` for the
 whole package, and the longest key that covers a template decides. Its value
 is a file, whose extension chooses the format, a directory ending in `/`, or
 `null` to leave the templates out. A package's own rules apply to it alone,
-and without a rule its outputs go beneath a directory named for the package.
+and without a rule its outputs go beneath a directory named for the package,
+where its `yak.pkg`'s own `render` lays them out.
 The dependencies a package [renders](#20-packages) go beneath that
 directory too.
 

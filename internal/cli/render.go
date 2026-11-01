@@ -275,16 +275,19 @@ func renderDir(dir string, req renderRequest, output string, automatic bool, out
 		}
 		templates = outside(templates, claimed)
 	}
-	var jobs []job
-	for _, template := range templates {
-		rel, err := filepath.Rel(dir, template)
-		if err != nil {
-			return err
-		}
-		jobs = append(jobs, job{template: template, dir: base, rest: rel})
+	if pkg != nil && (len(pkg.Rules) > 0 || len(pkg.Includes) > 0) && outputDir == "" {
+		return fmt.Errorf("the package %s has render rules or includes, which need --output-dir", dir)
 	}
-	if len(jobs)+len(deps) == 0 {
+	files, err := packageFiles(pkg, dir, templates)
+	if err != nil {
+		return err
+	}
+	if len(files)+len(deps) == 0 {
 		return fmt.Errorf("no %s templates beneath %s", module.Ext, dir)
+	}
+	jobs, err := placeFiles(pkg, files, nil, "", base)
+	if err != nil {
+		return err
 	}
 	all, err := req.renderJobs(append(jobs, deps...), map[string]string{})
 	if err != nil {
@@ -293,13 +296,15 @@ func renderDir(dir string, req renderRequest, output string, automatic bool, out
 	return writeAll(all)
 }
 
-// job is a template to render and where its output goes: to output, a file
-// whose extension chooses the format, or else beneath dir, named after the
-// template's path rest as a directory names it.
+// job is a template to render, or with copy a file to copy as it is, and
+// where its output goes: to output, a file whose extension chooses the
+// format, or else beneath dir, named after the template's path rest as a
+// directory names it, or at rest itself for a copy.
 type job struct {
 	template  string
 	output    string
 	dir, rest string
+	copy      bool
 }
 
 // renderJobs renders every job into memory. writers holds the files written
@@ -308,25 +313,132 @@ type job struct {
 func (r renderRequest) renderJobs(jobs []job, writers map[string]string) ([]rendered, error) {
 	var all []rendered
 	for _, j := range jobs {
-		opts, err := r.options(j.template, j.output)
-		if err != nil {
-			return nil, err
-		}
+		var opts render.Options
 		dest := j.output
-		if dest == "" {
-			dest = filepath.Join(j.dir, outputName(templateStem(filepath.FromSlash(j.rest)), opts.Format))
+		if !j.copy {
+			var err error
+			if opts, err = r.options(j.template, j.output); err != nil {
+				return nil, err
+			}
+			if dest == "" {
+				dest = filepath.Join(j.dir, outputName(templateStem(filepath.FromSlash(j.rest)), opts.Format))
+			}
+		} else if dest == "" {
+			dest = filepath.Join(j.dir, filepath.FromSlash(j.rest))
 		}
 		if other, ok := writers[dest]; ok {
 			return nil, fmt.Errorf("%s and %s would both write %s", other, j.template, dest)
 		}
 		writers[dest] = j.template
-		out, err := r.render(j.template, opts)
+		var out []byte
+		var err error
+		if j.copy {
+			out, err = os.ReadFile(j.template)
+		} else {
+			out, err = r.render(j.template, opts)
+		}
 		if err != nil {
 			return nil, err
 		}
 		all = append(all, rendered{dest, out})
 	}
 	return all, nil
+}
+
+// file is a template of a package, or with copy a file its yak.pkg
+// includes, and rel its slash path beneath the package root.
+type file struct {
+	path, rel string
+	copy      bool
+}
+
+// packageFiles answers the templates beneath root, the root of pkg, and the
+// files pkg includes, which are copied rather than rendered even when they
+// are templates. pkg is nil for a directory that is no package or a
+// dependency that is a module.
+func packageFiles(pkg *module.Package, root string, templates []string) ([]file, error) {
+	included := map[string]bool{}
+	var files []file
+	if pkg != nil {
+		for _, inc := range pkg.Includes {
+			path := filepath.Join(root, filepath.FromSlash(inc))
+			info, err := os.Stat(path)
+			switch {
+			case err != nil:
+				return nil, fmt.Errorf("%s: render.includes: %s does not exist", pkg.Path, inc)
+			case info.IsDir() && !strings.HasSuffix(inc, "/"):
+				return nil, fmt.Errorf("%s: render.includes: %s is a directory; write it with a trailing /", pkg.Path, inc)
+			case !info.IsDir() && strings.HasSuffix(inc, "/"):
+				return nil, fmt.Errorf("%s: render.includes: %s is not a directory", pkg.Path, inc)
+			}
+			paths := []string{path}
+			if info.IsDir() {
+				if paths, err = sourcesIn(path); err != nil {
+					return nil, err
+				}
+				if len(paths) == 0 {
+					return nil, fmt.Errorf("%s: render.includes: %s holds no file", pkg.Path, inc)
+				}
+			}
+			for _, p := range paths {
+				rel, err := filepath.Rel(root, p)
+				if err != nil {
+					return nil, err
+				}
+				if rel = filepath.ToSlash(rel); !included[rel] {
+					included[rel] = true
+					files = append(files, file{path: p, rel: rel, copy: true})
+				}
+			}
+		}
+	}
+	for _, t := range templates {
+		rel, err := filepath.Rel(root, t)
+		if err != nil {
+			return nil, err
+		}
+		if rel = filepath.ToSlash(rel); !included[rel] {
+			files = append(files, file{path: t, rel: rel})
+		}
+	}
+	return files, nil
+}
+
+// placeFiles answers the jobs of the files of pkg. The consumer's rules,
+// relative to consumerDir, decide where each goes, and then the package's
+// own, relative to ownDir; without either it goes beneath ownDir at its
+// path. pkg is nil when the files belong to no package.
+func placeFiles(pkg *module.Package, files []file, consumer []*module.Rule, consumerDir, ownDir string) ([]job, error) {
+	var own []*module.Rule
+	if pkg != nil {
+		own = pkg.Rules
+	}
+	var jobs []job
+	for _, f := range files {
+		t, ok := module.Place(own, f.rel)
+		dir := ownDir
+		if ct, cok := module.Place(consumer, f.rel); cok {
+			t, ok, dir = ct, cok, consumerDir
+		}
+		j := job{template: f.path, copy: f.copy}
+		switch {
+		case !ok:
+			j.dir, j.rest = ownDir, f.rel
+		case t.Drop:
+			continue
+		case t.File:
+			j.output = filepath.Join(dir, filepath.FromSlash(t.Path))
+		default:
+			j.dir, j.rest = filepath.Join(dir, filepath.FromSlash(t.Path)), t.Rest
+		}
+		jobs = append(jobs, j)
+	}
+	for _, rule := range own {
+		if !rule.Used() {
+			return nil, fmt.Errorf("%s: render.rules: %s covers no template or included file of the package", pkg.Path, rule.Key)
+		}
+	}
+	return jobs, nil
 }
 
 // dependencyJobs answers the jobs of the dependencies of pkg that entries
@@ -360,6 +472,7 @@ func dependencyJobs(pkg *module.Package, entries map[string]*module.Render, rule
 		dir := filepath.Join(base, name)
 		var templates []string
 		var sub []job
+		var dep *module.Package
 		from := filepath.Dir(loc)
 		switch {
 		case strings.HasSuffix(loc, module.ExtLibrary):
@@ -370,7 +483,7 @@ func dependencyJobs(pkg *module.Package, entries map[string]*module.Render, rule
 			}
 			templates = []string{loc}
 		default:
-			dep, err := module.ReadPackage(loc)
+			dep, err = module.ReadPackage(loc)
 			if err == nil {
 				templates, err = templatesIn(loc)
 			}
@@ -390,32 +503,23 @@ func dependencyJobs(pkg *module.Package, entries map[string]*module.Render, rule
 			from = loc
 		}
 		claimed = append(claimed, loc)
-		if len(templates)+len(sub) == 0 {
+		files, err := packageFiles(dep, from, templates)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(files)+len(sub) == 0 {
 			return nil, nil, fmt.Errorf("%s: %s renders no %s template", r.Label, loc, module.Ext)
 		}
-		for _, template := range templates {
-			rel, err := filepath.Rel(from, template)
-			if err != nil {
-				return nil, nil, err
-			}
-			rel = filepath.ToSlash(rel)
-			t, ok := module.Place(r.Rules, rel)
-			switch {
-			case !ok:
-				jobs = append(jobs, job{template: template, dir: dir, rest: rel})
-			case t.Drop:
-			case t.File:
-				jobs = append(jobs, job{template: template, output: filepath.Join(rulesDir, filepath.FromSlash(t.Path))})
-			default:
-				jobs = append(jobs, job{template: template, dir: filepath.Join(rulesDir, filepath.FromSlash(t.Path)), rest: t.Rest})
-			}
+		own, err := placeFiles(dep, files, r.Rules, rulesDir, dir)
+		if err != nil {
+			return nil, nil, err
 		}
 		for _, rule := range r.Rules {
 			if !rule.Used() {
-				return nil, nil, fmt.Errorf("%s.rules: %s covers no template of %s", r.Label, rule.Key, loc)
+				return nil, nil, fmt.Errorf("%s.rules: %s covers no template or included file of %s", r.Label, rule.Key, loc)
 			}
 		}
-		jobs = append(jobs, sub...)
+		jobs = append(append(jobs, own...), sub...)
 	}
 	return jobs, claimed, nil
 }
@@ -519,8 +623,9 @@ func withoutContextFiles(templates []string) ([]string, error) {
 	return kept, nil
 }
 
-// sourcesIn lists the files beneath dir that end in one of exts, leaving out
-// whatever is hidden and the vendor directory of a package.
+// sourcesIn lists the files beneath dir that end in one of exts, or every
+// file without exts, leaving out whatever is hidden and the vendor directory
+// of a package.
 func sourcesIn(dir string, exts ...string) ([]string, error) {
 	var files []string
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -538,7 +643,7 @@ func sourcesIn(dir string, exts ...string) ([]string, error) {
 				return filepath.SkipDir
 			}
 		}
-		if !d.IsDir() && slices.ContainsFunc(exts, func(ext string) bool { return strings.HasSuffix(path, ext) }) {
+		if !d.IsDir() && (len(exts) == 0 || slices.ContainsFunc(exts, func(ext string) bool { return strings.HasSuffix(path, ext) })) {
 			files = append(files, path)
 		}
 		return nil
