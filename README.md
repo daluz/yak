@@ -97,16 +97,5 @@ The last command writes `build/app.toml`.
 
 ## Development
 
-[AGENTS.md](AGENTS.md) lists the `make` targets and how the golden-file tests
-under `testdata/` are laid out.
-
-`make test-docs` checks the marked README and tour examples against their
-documented output. Examples use an HTML comment before a code block:
-`<!-- example: NAME ROLE FILE -->`. Blocks with the same `NAME` share a
-directory; `ROLE` is `template`, `context`, `library`, `package`, `output`,
-`error`, `diagnostic`, `snippet`, or `spec`. Context files merge in their
-documented order. Outputs name the template they check; `output-jsonc`,
-`output-toml`, and similar roles select another output format. Error examples
-must match their diagnostic. Snippets and spec files are checked for syntax,
-since their supporting files are not included. Use `template-nonstrict` for
-an example rendered with `--strict=false`.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the repository layout, the `make`
+targets, and how the tests and documentation examples are checked.
